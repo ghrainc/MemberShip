@@ -1,0 +1,265 @@
+.approval-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.approval-dialog {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 500px;
+  width: 100%;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  border-bottom: 1px solid #e0e6ed;
+  position: relative;
+}
+
+.dialog-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.dialog-icon.approve {
+  background: #27ae60;
+}
+
+.dialog-icon.reject {
+  background: #e74c3c;
+}
+
+.dialog-header h2 {
+  color: #2c3e50;
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+  flex: 1;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #7f8c8d;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.close-button:hover:not(:disabled) {
+  background: #f8f9fa;
+  color: #2c3e50;
+}
+
+.close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog-content {
+  padding: 24px;
+}
+
+.application-info {
+  background: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.application-info h3 {
+  color: #2c3e50;
+  font-size: 16px;
+  margin: 0 0 6px 0;
+  font-weight: 600;
+}
+
+.application-info p {
+  color: #7f8c8d;
+  font-size: 13px;
+  margin: 0;
+}
+
+.confirmation-message {
+  color: #2c3e50;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-label {
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.comments-textarea {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  transition: border-color 0.2s;
+  color: #2c3e50;
+}
+
+.comments-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.comments-textarea:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
+  color: #7f8c8d;
+}
+
+.validation-error {
+  color: #e74c3c;
+  font-size: 12px;
+  margin: 0;
+}
+
+.dialog-footer {
+  padding: 20px 24px;
+  border-top: 1px solid #e0e6ed;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.dialog-button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.dialog-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancel-button {
+  background: #f8f9fa;
+  color: #7f8c8d;
+  border: 1px solid #e0e6ed;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #e8eef5;
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.approve-button {
+  background: #27ae60;
+  color: white;
+}
+
+.approve-button:hover:not(:disabled) {
+  background: #229954;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.reject-button {
+  background: #e74c3c;
+  color: white;
+}
+
+.reject-button:hover:not(:disabled) {
+  background: #c0392b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+  .approval-dialog {
+    margin: 20px;
+  }
+
+  .dialog-header {
+    padding: 16px;
+  }
+
+  .dialog-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+
+  .dialog-header h2 {
+    font-size: 16px;
+  }
+
+  .dialog-content {
+    padding: 16px;
+  }
+
+  .dialog-footer {
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .dialog-button {
+    width: 100%;
+  }
+
+  .comments-textarea {
+    font-size: 16px;
+  }
+}

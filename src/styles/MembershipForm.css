@@ -1,0 +1,517 @@
+.membership-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  background: #f5f7fa;
+  min-height: 100vh;
+}
+
+.membership-header {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.membership-logo {
+  max-width: 100px;
+  height: auto;
+  margin-bottom: 12px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.membership-header h1 {
+  color: #2c3e50;
+  font-size: 28px;
+  margin: 0 0 6px 0;
+}
+
+.header-subtitle {
+  color: #7f8c8d;
+  font-size: 14px;
+  margin: 0 0 6px 0;
+}
+
+.applicant-email {
+  color: #667eea;
+  font-size: 13px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.success-card {
+  background: white;
+  padding: 60px 30px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.success-card h1 {
+  color: #27ae60;
+  font-size: 28px;
+  margin: 0 0 20px 0;
+}
+
+.success-card p {
+  color: #2c3e50;
+  font-size: 16px;
+  margin: 10px 0;
+  line-height: 1.6;
+}
+
+.membership-form {
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.membership-form.step-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-content {
+  padding: 40px;
+  flex: 1;
+}
+
+.form-section {
+  padding: 0;
+  border: none;
+  margin: 0 0 30px 0;
+}
+
+.form-section:last-child {
+  margin-bottom: 0;
+}
+
+.form-section legend {
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.form-section-inner {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.form-section-inner .inner-legend {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 15px;
+  display: block;
+}
+
+.section-note {
+  color: #7f8c8d;
+  font-size: 13px;
+  font-style: italic;
+  margin: -10px 0 15px 0;
+}
+
+.section-text {
+  color: #2c3e50;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 15px 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.form-input,
+.form-select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.3s;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-input.input-error {
+  border-color: #e74c3c;
+}
+
+.error-text {
+  color: #e74c3c;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+/* Radio and Checkbox Groups */
+.radio-group,
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-weight: 400;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.radio-label input[type="radio"],
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.checkbox-label.checkbox-large {
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 15px;
+}
+
+.checkbox-label.checkbox-large input {
+  margin-top: 2px;
+}
+
+.checkbox-label.checkbox-large span {
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Owner/Partner Sections */
+.owner-subsection {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.owner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.owner-header h4 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.remove-button {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.remove-button:hover {
+  background: #c0392b;
+}
+
+/* Reference Sections */
+.reference-subsection {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.reference-subsection h4 {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+/* Add Button */
+.add-button {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.add-button:hover {
+  background: #229954;
+}
+
+/* Form Navigation */
+.form-navigation {
+  padding: 30px;
+  background: #f8f9fa;
+  display: flex;
+  gap: 15px;
+  justify-content: space-between;
+  border-top: 1px solid #e0e6ed;
+}
+
+.nav-button {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.nav-button.prev-button,
+.nav-button.next-button {
+  background: #667eea;
+  color: white;
+}
+
+.nav-button.prev-button:hover:not(:disabled),
+.nav-button.next-button:hover:not(:disabled) {
+  background: #764ba2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.nav-button.prev-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  color: #999;
+}
+
+.nav-button.submit-button {
+  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+  color: white;
+}
+
+.nav-button.submit-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.nav-button.cancel-button {
+  background: #f8f9fa;
+  color: #7f8c8d;
+  border: 1px solid #e0e6ed;
+}
+
+.nav-button.cancel-button:hover:not(:disabled) {
+  background: #e74c3c;
+  color: white;
+  border-color: #e74c3c;
+  transform: translateY(-2px);
+}
+
+/* Tables and Lists */
+.rebate-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  background: white;
+  border: 1px solid #ddd;
+}
+
+.rebate-table th,
+.rebate-table td {
+  padding: 12px;
+  text-align: left;
+  border: 1px solid #ddd;
+  color: #2c3e50;
+  font-size: 13px;
+}
+
+.rebate-table th {
+  background: #667eea;
+  color: white;
+  font-weight: 600;
+}
+
+.rebate-table tbody tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+.notice-list,
+.requirements-list,
+.benefits-list,
+.terms-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 15px 0;
+}
+
+.notice-list li,
+.requirements-list li,
+.benefits-list li,
+.terms-list li {
+  padding-left: 25px;
+  margin-bottom: 10px;
+  color: #2c3e50;
+  font-size: 13px;
+  position: relative;
+  line-height: 1.5;
+}
+
+.notice-list li:before,
+.requirements-list li:before,
+.benefits-list li:before,
+.terms-list li:before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.terms-content,
+.requirements-content,
+.financial-terms {
+  background: white;
+  padding: 15px;
+  border-radius: 4px;
+  margin: 15px 0;
+}
+
+.terms-content h5,
+.requirements-content h5,
+.financial-terms h5 {
+  color: #2c3e50;
+  font-size: 13px;
+  margin: 15px 0 10px 0;
+  font-weight: 600;
+}
+
+.form-info-box {
+  background: #fef9e7;
+  border-left: 4px solid #f1c40f;
+  padding: 20px;
+  border-radius: 4px;
+  margin-top: 20px;
+}
+
+.info-title {
+  color: #d68910;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 10px 0;
+}
+
+.notice-text {
+  color: #7f8c8d;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 8px 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .membership-container {
+    padding: 20px;
+  }
+
+  .membership-header {
+    padding: 20px;
+  }
+
+  .membership-header h1 {
+    font-size: 24px;
+  }
+
+  .step-content {
+    padding: 20px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .form-navigation {
+    flex-direction: column;
+    padding: 20px;
+  }
+
+  .nav-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .membership-container {
+    padding: 10px;
+  }
+
+  .membership-header {
+    padding: 15px;
+  }
+
+  .membership-header h1 {
+    font-size: 20px;
+  }
+
+  .step-content {
+    padding: 15px;
+  }
+
+  .form-section legend {
+    font-size: 16px;
+  }
+
+  .form-input,
+  .form-select {
+    font-size: 16px;
+  }
+
+  .form-navigation {
+    padding: 15px;
+    gap: 10px;
+  }
+
+  .nav-button {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
