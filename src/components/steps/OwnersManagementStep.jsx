@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+
 function OwnersManagementStep({
   formData,
   errors,
@@ -6,47 +8,25 @@ function OwnersManagementStep({
   addOwner,
   removeOwner
 }) {
+  // Auto-fill first owner with Authorized Representative data
+  useEffect(() => {
+    if (formData.owners.length > 0 && formData.authorizedRepFirstName) {
+      handleOwnerChange(0, 'firstName', formData.authorizedRepFirstName)
+      handleOwnerChange(0, 'middleInitial', formData.authorizedRepMiddleInitial || '')
+      handleOwnerChange(0, 'lastName', formData.authorizedRepLastName)
+    }
+  }, [formData.authorizedRepFirstName, formData.authorizedRepMiddleInitial, formData.authorizedRepLastName])
+
   return (
     <>
-      <fieldset className="form-section">
-        <legend>Previous Membership</legend>
-
-        <div className="checkbox-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              name="previousMember"
-              checked={formData.previousMember}
-              onChange={handleInputChange}
-            />
-            Was the store previously a member store of GHRA?
-          </label>
-        </div>
-
-        {formData.previousMember && (
-          <div className="form-group">
-            <label htmlFor="previousGhraNumber">Previous GHRA #</label>
-            <input
-              type="text"
-              id="previousGhraNumber"
-              name="previousGhraNumber"
-              value={formData.previousGhraNumber}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Enter previous GHRA number"
-            />
-          </div>
-        )}
-      </fieldset>
-
       <fieldset className="form-section">
         <legend>Member Company Owners/Partners/Stockholders Information</legend>
 
         {formData.owners.map((owner, index) => (
           <div key={index} className="owner-subsection">
             <div className="owner-header">
-              <h4>Owner/Partner {index + 1}</h4>
-              {formData.owners.length > 1 && (
+              <h4>{index === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${index + 1}`}</h4>
+              {formData.owners.length > 1 && index !== 0 && (
                 <button
                   type="button"
                   onClick={() => removeOwner(index)}
@@ -128,51 +108,37 @@ function OwnersManagementStep({
       </fieldset>
 
       <fieldset className="form-section">
-        <legend>Authorized Representative</legend>
-
-        <div className="form-group">
-          <label htmlFor="authorizedRepName">Full Name of Authorized Representative *</label>
-          <input
-            type="text"
-            id="authorizedRepName"
-            name="authorizedRepName"
-            value={formData.authorizedRepName || formData.authorizedRepNameCertification || ''}
-            onChange={handleInputChange}
-            className={`form-input ${errors.authorizedRepName ? 'input-error' : ''}`}
-            placeholder="Full name (auto-populated from Qualifying Business section)"
-          />
-          {errors.authorizedRepName && <span className="error-text">{errors.authorizedRepName}</span>}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="authorizedRepTitle">Title</label>
-          <input
-            type="text"
-            id="authorizedRepTitle"
-            name="authorizedRepTitle"
-            value={formData.authorizedRepTitle}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Title"
-          />
-        </div>
-      </fieldset>
-
-      <fieldset className="form-section">
         <legend>Store Manager</legend>
         <p className="section-note">This person will not be eligible to vote or sign any documents or make any changes</p>
 
-        <div className="form-group">
-          <label htmlFor="storeManagerName">Manager Name</label>
-          <input
-            type="text"
-            id="storeManagerName"
-            name="storeManagerName"
-            value={formData.storeManagerName}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Full name"
-          />
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="storeManagerFirstName">First Name *</label>
+            <input
+              type="text"
+              id="storeManagerFirstName"
+              name="storeManagerFirstName"
+              value={formData.storeManagerFirstName}
+              onChange={handleInputChange}
+              className={`form-input ${errors.storeManagerFirstName ? 'input-error' : ''}`}
+              placeholder="First Name"
+            />
+            {errors.storeManagerFirstName && <span className="error-text">{errors.storeManagerFirstName}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="storeManagerLastName">Last Name *</label>
+            <input
+              type="text"
+              id="storeManagerLastName"
+              name="storeManagerLastName"
+              value={formData.storeManagerLastName}
+              onChange={handleInputChange}
+              className={`form-input ${errors.storeManagerLastName ? 'input-error' : ''}`}
+              placeholder="Last Name"
+            />
+            {errors.storeManagerLastName && <span className="error-text">{errors.storeManagerLastName}</span>}
+          </div>
         </div>
 
         <div className="form-group">

@@ -8,6 +8,7 @@ import OwnersManagementStep from './steps/OwnersManagementStep'
 import ReferencesStep from './steps/ReferencesStep'
 import AchAuthorizationStep from './steps/AchAuthorizationStep'
 import WarehouseApplicationStep from './steps/WarehouseApplicationStep'
+import DonationsStep from './steps/DonationsStep'
 import DocumentUploadStep from './steps/DocumentUploadStep'
 import AgreementsStep from './steps/AgreementsStep'
 
@@ -19,8 +20,9 @@ const STEPS = [
   { id: 5, title: 'References', component: ReferencesStep },
   { id: 6, title: 'ACH Authorization', component: AchAuthorizationStep },
   { id: 7, title: 'Warehouse Application', component: WarehouseApplicationStep },
-  { id: 8, title: 'Documents', component: DocumentUploadStep },
-  { id: 9, title: 'Agreements', component: AgreementsStep }
+  { id: 8, title: 'Donations', component: DonationsStep },
+  { id: 9, title: 'Documents', component: DocumentUploadStep },
+  { id: 10, title: 'Agreements', component: AgreementsStep }
 ]
 
 function MembershipForm({ userEmail, onSubmit, onCancel }) {
@@ -34,7 +36,9 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     storeAddressCertification: '',
     storeCityCertification: '',
     storeZipCertification: '',
-    authorizedRepNameCertification: '',
+    authorizedRepFirstNameCertification: '',
+    authorizedRepMiddleInitialCertification: '',
+    authorizedRepLastNameCertification: '',
     driverLicenseCopies: '',
     salesTaxPermit: '',
     articlesOfIncorporation: '',
@@ -64,8 +68,31 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     salesTaxId: '',
     businessProperty: 'leased',
     storeSize: '',
+    fuelAvailable: '',
+    brandName: '',
+    numberOfTanks: '',
+    tankCapacity: '',
+    estimatedFuelSales: '',
+    currentFuelSupplier: '',
+    tceqNumber: '',
+    scanPOS: '',
+    backOfficeProvider: '',
+    posSystem: '',
+    foodServiceAvailable: '',
+    foodConcept: '',
+    foodServiceBranded: '',
+    foodBrandName: '',
+    bigMardKudosGameday: '',
+    walkInCooler: '',
+    coolerDoors: '',
+    walkInFreezer: '',
+    freezerDoors: '',
+    beerCave: '',
+    storeSpannerBoard: false,
     owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '' }],
-    authorizedRepName: '',
+    authorizedRepFirstName: '',
+    authorizedRepMiddleInitial: '',
+    authorizedRepLastName: '',
     authorizedRepTitle: '',
     reference1Email: '',
     reference1Company: '',
@@ -75,7 +102,8 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     reference2Company: '',
     reference2GhraNumber: '',
     reference2RepName: '',
-    storeManagerName: '',
+    storeManagerFirstName: '',
+    storeManagerLastName: '',
     storeManagerTitle: '',
     storeManagerDriverLicense: '',
     storeManagerMobile: '',
@@ -87,6 +115,12 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     transitAbaNumber: '',
     accountNumber: '',
     achInfoFor: 'corporate',
+    akdnContribute: '',
+    akdnAmount: '',
+    hfbContribute: '',
+    hfbAmount: '',
+    donationAuthRepFirstName: '',
+    donationAuthRepLastName: '',
     acknowledgement: false
   })
 
@@ -143,13 +177,14 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
         if (!formData.ageRequirement) newErrors.ageRequirement = 'Please answer all questions'
         if (!formData.closedSundayAfter9pm) newErrors.closedSundayAfter9pm = 'Please answer all questions'
         if ((formData.storeProductCategories || []).length < 7) newErrors.storeProductCategories = 'Must select minimum 7 product categories'
-        if (!formData.storeNameCertification.trim()) newErrors.storeNameCertification = 'Store Name is required'
         break
 
       case 2: // Business Information
         if (!formData.memberName.trim()) newErrors.memberName = 'Member Name is required'
         if (!formData.ein.trim()) newErrors.ein = 'EIN is required'
         if (!formData.salesTaxId.trim()) newErrors.salesTaxId = 'Sales Tax ID is required'
+        if (!formData.authorizedRepFirstName.trim()) newErrors.authorizedRepFirstName = 'Authorized Representative First Name is required'
+        if (!formData.authorizedRepLastName.trim()) newErrors.authorizedRepLastName = 'Authorized Representative Last Name is required'
         break
 
       case 3: // Store Information
@@ -157,20 +192,54 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
         if (!formData.storeCity.trim()) newErrors.storeCity = 'Store City is required'
         if (!formData.storeZip.trim()) newErrors.storeZip = 'Store Zip Code is required'
         if (!formData.emailAddress.trim()) newErrors.emailAddress = 'Email Address is required'
+
+        // Fuel fields validation
+        if (!formData.fuelAvailable) newErrors.fuelAvailable = 'If with fuel is required'
+        if (!formData.numberOfTanks) newErrors.numberOfTanks = 'Number of Tanks is required'
+        if (!formData.tankCapacity) newErrors.tankCapacity = 'Tank Capacity is required'
+        if (!formData.estimatedFuelSales) newErrors.estimatedFuelSales = 'Estimated Fuels Sales per month is required'
+        if (!formData.currentFuelSupplier.trim()) newErrors.currentFuelSupplier = 'Current Fuel Supplier(s) is required'
+        if (!formData.tceqNumber.trim()) newErrors.tceqNumber = 'TCEQ number is required'
+
+        // POS fields validation
+        if (!formData.scanPOS) newErrors.scanPOS = 'Do you scan your products at the POS? is required'
+        if (!formData.backOfficeProvider.trim()) newErrors.backOfficeProvider = 'Who is back office provider? is required'
+        if (!formData.posSystem) newErrors.posSystem = 'What register system (POS) is being used? is required'
+
+        // Food Service fields validation
+        if (!formData.foodServiceAvailable) newErrors.foodServiceAvailable = 'Do you have food service at store is required'
+        if (formData.foodServiceAvailable === 'yes') {
+          if (!formData.foodConcept) newErrors.foodConcept = 'Food Concept is required'
+          if (!formData.foodServiceBranded) newErrors.foodServiceBranded = 'Is your food service branded is required'
+          if (!formData.bigMardKudosGameday) newErrors.bigMardKudosGameday = 'Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN? is required'
+          if (formData.foodServiceBranded === 'yes' && !formData.foodBrandName.trim()) newErrors.foodBrandName = 'Brand Name is required'
+        }
+
+        // Cooler fields validation
+        if (!formData.walkInCooler) newErrors.walkInCooler = 'Does your store have a walk-in cooler? is required'
+        if (formData.walkInCooler === 'yes' && !formData.coolerDoors) newErrors.coolerDoors = 'Number of cooler doors is required'
+        if (!formData.walkInFreezer) newErrors.walkInFreezer = 'Does your store have a walk-in Freezer? is required'
+        if (formData.walkInFreezer === 'yes' && !formData.freezerDoors) newErrors.freezerDoors = 'Number of freezer doors is required'
+        if (!formData.beerCave) newErrors.beerCave = 'Does your store have a beer cave? is required'
         break
 
       case 4: // Owners & Management
-        if (!formData.authorizedRepName.trim()) newErrors.authorizedRepName = 'Authorized Representative Name is required'
+        if (!formData.storeManagerFirstName.trim()) newErrors.storeManagerFirstName = 'Store Manager First Name is required'
+        if (!formData.storeManagerLastName.trim()) newErrors.storeManagerLastName = 'Store Manager Last Name is required'
         break
 
-      case 8: // Documents
+      case 8: // Donations
+        // Donations step has no required validation
+        break
+
+      case 9: // Documents
         if (!formData.driverLicenseCopies) newErrors.driverLicenseCopies = 'Driver License Copies are required'
         if (!formData.salesTaxPermit) newErrors.salesTaxPermit = 'Sales Tax Permit is required'
         if (!formData.articlesOfIncorporation) newErrors.articlesOfIncorporation = 'Articles of Incorporation/Certificate of Formation is required'
         if (!formData.irsDocument) newErrors.irsDocument = 'IRS Document is required'
         break
 
-      case 9: // Agreements
+      case 10: // Agreements
         if (!formData.acknowledgement) newErrors.acknowledgement = 'You must acknowledge the membership requirements'
         break
 

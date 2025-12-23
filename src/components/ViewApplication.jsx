@@ -12,7 +12,8 @@ const SECTIONS = [
   { id: 4, title: 'Owners & Management' },
   { id: 5, title: 'References' },
   { id: 6, title: 'Financial Information' },
-  { id: 7, title: 'Documents' }
+  { id: 7, title: 'Donations' },
+  { id: 8, title: 'Documents' }
 ]
 
 function ViewApplication({ applicationId, onBack }) {
@@ -100,14 +101,6 @@ function ViewApplication({ applicationId, onBack }) {
               </InfoRow>
             </div>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Store Certification</span>
-              <InfoRow>
-                <InfoField label="Store Name" value={data.storeNameCertification} />
-                <InfoField label="Authorized Representative" value={data.authorizedRepNameCertification} />
-              </InfoRow>
-            </div>
-
             {data.storeProductCategories && data.storeProductCategories.length > 0 && (
               <div className="form-section-inner">
                 <span className="inner-legend">Product Categories</span>
@@ -138,6 +131,33 @@ function ViewApplication({ applicationId, onBack }) {
               <InfoRow>
                 <InfoField label="Ownership Type" value={data.ownershipType} />
                 <InfoField label="Business Type" value={data.businessType} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Store Certification</span>
+              <InfoRow>
+                <InfoField label="Store Name" value={data.storeNameCertification} />
+                <InfoField label="Store Address" value={data.storeAddressCertification} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Store City" value={data.storeCityCertification} />
+                <InfoField label="Store Zip" value={data.storeZipCertification} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Auth Rep First Name" value={data.authorizedRepFirstNameCertification} />
+                <InfoField label="Auth Rep Middle Initial" value={data.authorizedRepMiddleInitialCertification} />
+                <InfoField label="Auth Rep Last Name" value={data.authorizedRepLastNameCertification} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Previous Membership</span>
+              <InfoRow>
+                <InfoField label="Previously a GHRA Member" value={data.previousMember ? 'Yes' : 'No'} />
+                {data.previousMember && (
+                  <InfoField label="Previous GHRA #" value={data.previousGhraNumber} />
+                )}
               </InfoRow>
             </div>
           </fieldset>
@@ -174,6 +194,91 @@ function ViewApplication({ applicationId, onBack }) {
                 <InfoField label="Business Property" value={data.businessProperty} />
               </InfoRow>
             </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Fuel Details</span>
+              <InfoRow>
+                <InfoField label="If with fuel" value={data.fuelAvailable} />
+                {data.fuelAvailable === 'branded' && (
+                  <InfoField label="Brand Name" value={data.brandName} />
+                )}
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Number of Tanks" value={data.numberOfTanks} />
+                <InfoField label="Tank Capacity" value={data.tankCapacity} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
+                <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="TCEQ number" value={data.tceqNumber} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">POS System</span>
+              <InfoRow>
+                <InfoField label="Do you scan your products at the POS?" value={data.scanPOS} />
+                <InfoField label="Who is back office provider?" value={data.backOfficeProvider} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="What register system (POS) is being used?" value={data.posSystem} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Food Service Details</span>
+              <InfoRow>
+                <InfoField label="Do you have food service at store" value={data.foodServiceAvailable} />
+              </InfoRow>
+              {data.foodServiceAvailable === 'yes' && (
+                <>
+                  <InfoRow>
+                    <InfoField label="Food Concept" value={data.foodConcept} />
+                    <InfoField label="Is your food service branded" value={data.foodServiceBranded} />
+                  </InfoRow>
+                  {data.foodServiceBranded === 'yes' && (
+                    <InfoRow>
+                      <InfoField label="Brand Name" value={data.foodBrandName} />
+                    </InfoRow>
+                  )}
+                  <InfoRow>
+                    <InfoField label="Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?" value={data.bigMardKudosGameday} />
+                  </InfoRow>
+                </>
+              )}
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Cooler</span>
+              <InfoRow>
+                <InfoField label="Does your store have a walk-in cooler?" value={data.walkInCooler} />
+              </InfoRow>
+              {data.walkInCooler === 'yes' && (
+                <InfoRow>
+                  <InfoField label="Number of cooler doors" value={data.coolerDoors} />
+                </InfoRow>
+              )}
+              <InfoRow>
+                <InfoField label="Does your store have a walk-in Freezer?" value={data.walkInFreezer} />
+              </InfoRow>
+              {data.walkInFreezer === 'yes' && (
+                <InfoRow>
+                  <InfoField label="Number of freezer doors" value={data.freezerDoors} />
+                </InfoRow>
+              )}
+              <InfoRow>
+                <InfoField label="Does your store have a beer cave?" value={data.beerCave} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Other Facilities</span>
+              <InfoRow>
+                <InfoField label="Spanner Board" value={data.storeSpannerBoard ? 'Yes' : 'No'} />
+              </InfoRow>
+            </div>
           </fieldset>
         )
 
@@ -187,7 +292,7 @@ function ViewApplication({ applicationId, onBack }) {
                 <div className="owners-list">
                   {data.owners.map((owner, idx) => (
                     <div key={idx} className="owner-subsection">
-                      <h4>Owner {idx + 1}</h4>
+                      <h4>{idx === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${idx + 1}`}</h4>
                       <InfoRow>
                         <InfoField label="First Name" value={owner.firstName} />
                         <InfoField label="Middle Initial" value={owner.middleInitial} />
@@ -202,13 +307,6 @@ function ViewApplication({ applicationId, onBack }) {
                 </div>
               </div>
             )}
-            <div className="form-section-inner">
-              <span className="inner-legend">Authorized Representative</span>
-              <InfoRow>
-                <InfoField label="Name" value={data.authorizedRepName} />
-                <InfoField label="Title" value={data.authorizedRepTitle} />
-              </InfoRow>
-            </div>
           </fieldset>
         )
 
@@ -266,6 +364,28 @@ function ViewApplication({ applicationId, onBack }) {
         )
 
       case 7:
+        return (
+          <fieldset className="form-section">
+            <legend>Donations</legend>
+            <div className="form-section-inner">
+              <span className="inner-legend">Sponsorship Contributions</span>
+              <InfoRow>
+                <InfoField label="AKDN Contribution" value={data.akdnContribute === 'yes' ? `Yes - $${data.akdnAmount}` : 'No'} />
+                <InfoField label="Houston Food Bank Contribution" value={data.hfbContribute === 'yes' ? `Yes - $${data.hfbAmount}` : 'No'} />
+              </InfoRow>
+            </div>
+
+            <div className="form-section-inner">
+              <span className="inner-legend">Authorized Representative</span>
+              <InfoRow>
+                <InfoField label="First Name" value={data.donationAuthRepFirstName} />
+                <InfoField label="Last Name" value={data.donationAuthRepLastName} />
+              </InfoRow>
+            </div>
+          </fieldset>
+        )
+
+      case 8:
         return (
           <fieldset className="form-section">
             <legend>Documents</legend>

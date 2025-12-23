@@ -103,7 +103,7 @@ function AuthForm({ onSuccess }) {
             alt="GHRA Logo"
             className="auth-logo"
           />
-          <h1 className="ghra-title">GHRA Membership Portal</h1>
+          <h1 className="ghra-title">GHRA Application Portal</h1>
           <p className="auth-subtitle">
             {isSignup ? 'Create Your Account' : 'Welcome Back'}
           </p>

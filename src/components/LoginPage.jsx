@@ -65,7 +65,7 @@ function LoginPage({ onDesignSelect }) {
               alt="GHRA Logo"
               className="login-logo"
             />
-            <h1>GHRA Membership Portal</h1>
+            <h1>GHRA Application Portal</h1>
             <p className="login-subtitle">
               {isEmployee ? 'Employee Login' : (isSignup ? 'Create Your Account' : 'Welcome Back')}
             </p>
@@ -187,7 +187,7 @@ function LoginPage({ onDesignSelect }) {
           <div className="login-right">
             <div className="login-card">
               <h1>{isSignup ? 'Create Account' : 'Welcome'}</h1>
-              <p className="card-subtitle">{isSignup ? 'Join GHRA Membership Portal' : 'Sign in to your account'}</p>
+              <p className="card-subtitle">{isSignup ? 'Join GHRA Application Portal' : 'Sign in to your account'}</p>
 
               <form onSubmit={handleSubmit} className="login-form">
                 <div className="form-group">

@@ -309,6 +309,52 @@ export const generateApplicationPDF = (application) => {
               <span class="info-value">${data.businessType || '-'}</span>
             </div>
           </div>
+          <div class="info-grid full">
+            <div class="info-item">
+              <span class="info-label">Store Certification - Store Name</span>
+              <span class="info-value">${data.storeNameCertification || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Store Certification - Address</span>
+              <span class="info-value">${data.storeAddressCertification || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">City</span>
+              <span class="info-value">${data.storeCityCertification || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Zip Code</span>
+              <span class="info-value">${data.storeZipCertification || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid three">
+            <div class="info-item">
+              <span class="info-label">Auth Rep First Name</span>
+              <span class="info-value">${data.authorizedRepFirstNameCertification || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Auth Rep Middle Initial</span>
+              <span class="info-value">${data.authorizedRepMiddleInitialCertification || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Auth Rep Last Name</span>
+              <span class="info-value">${data.authorizedRepLastNameCertification || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Previously a GHRA Member</span>
+              <span class="info-value">${data.previousMember ? 'Yes' : 'No'}</span>
+            </div>
+            ${data.previousMember ? `
+            <div class="info-item">
+              <span class="info-label">Previous GHRA #</span>
+              <span class="info-value">${data.previousGhraNumber || '-'}</span>
+            </div>
+            ` : ''}
+          </div>
         </div>
 
         <!-- Section 3: Store Information -->
@@ -352,6 +398,129 @@ export const generateApplicationPDF = (application) => {
               <span class="info-value">${data.businessProperty || '-'}</span>
             </div>
           </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">If with fuel</span>
+              <span class="info-value">${data.fuelAvailable || '-'}</span>
+            </div>
+            ${data.fuelAvailable === 'branded' ? `
+            <div class="info-item">
+              <span class="info-label">Brand Name</span>
+              <span class="info-value">${data.brandName || '-'}</span>
+            </div>
+            ` : ''}
+            <div class="info-item">
+              <span class="info-label">Number of Tanks</span>
+              <span class="info-value">${data.numberOfTanks || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Tank Capacity</span>
+              <span class="info-value">${data.tankCapacity || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Estimated Fuels Sales per month</span>
+              <span class="info-value">${data.estimatedFuelSales || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Current Fuel Supplier(s)</span>
+              <span class="info-value">${data.currentFuelSupplier || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">TCEQ number</span>
+              <span class="info-value">${data.tceqNumber || '-'}</span>
+            </div>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Do you scan your products at the POS?</span>
+              <span class="info-value">${data.scanPOS || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Who is back office provider?</span>
+              <span class="info-value">${data.backOfficeProvider || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">What register system (POS) is being used?</span>
+              <span class="info-value">${data.posSystem || '-'}</span>
+            </div>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Do you have food service at store</span>
+              <span class="info-value">${data.foodServiceAvailable || '-'}</span>
+            </div>
+            ${data.foodServiceAvailable === 'yes' ? `
+            <div class="info-item">
+              <span class="info-label">Food Concept</span>
+              <span class="info-value">${data.foodConcept || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Is your food service branded</span>
+              <span class="info-value">${data.foodServiceBranded || '-'}</span>
+            </div>
+            ` : ''}
+          </div>
+          ${data.foodServiceAvailable === 'yes' && data.foodServiceBranded === 'yes' ? `
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Brand Name</span>
+              <span class="info-value">${data.foodBrandName || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</span>
+              <span class="info-value">${data.bigMardKudosGameday || '-'}</span>
+            </div>
+          </div>
+          ` : data.foodServiceAvailable === 'yes' ? `
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</span>
+              <span class="info-value">${data.bigMardKudosGameday || '-'}</span>
+            </div>
+          </div>
+          ` : ''}
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Does your store have a walk-in cooler?</span>
+              <span class="info-value">${data.walkInCooler || '-'}</span>
+            </div>
+            ${data.walkInCooler === 'yes' ? `
+            <div class="info-item">
+              <span class="info-label">Number of cooler doors</span>
+              <span class="info-value">${data.coolerDoors || '-'}</span>
+            </div>
+            ` : ''}
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Does your store have a walk-in Freezer?</span>
+              <span class="info-value">${data.walkInFreezer || '-'}</span>
+            </div>
+            ${data.walkInFreezer === 'yes' ? `
+            <div class="info-item">
+              <span class="info-label">Number of freezer doors</span>
+              <span class="info-value">${data.freezerDoors || '-'}</span>
+            </div>
+            ` : ''}
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Does your store have a beer cave?</span>
+              <span class="info-value">${data.beerCave || '-'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Spanner Board</span>
+              <span class="info-value">${data.storeSpannerBoard ? 'Yes' : 'No'}</span>
+            </div>
+          </div>
         </div>
 
         <!-- Section 4: Owners & Management -->
@@ -363,7 +532,7 @@ export const generateApplicationPDF = (application) => {
             </div>
             ${data.owners.map((owner, idx) => `
               <div class="owner-block">
-                <h4>Owner ${idx + 1}</h4>
+                <h4>${idx === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${idx + 1}`}</h4>
                 <div class="info-grid three">
                   <div class="info-item">
                     <span class="info-label">First Name</span>
@@ -391,16 +560,6 @@ export const generateApplicationPDF = (application) => {
               </div>
             `).join('')}
           ` : ''}
-          <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Authorized Representative</span>
-              <span class="info-value">${data.authorizedRepName || '-'}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Title</span>
-              <span class="info-value">${data.authorizedRepTitle || '-'}</span>
-            </div>
-          </div>
         </div>
 
         <!-- Section 5: References -->
@@ -477,6 +636,31 @@ export const generateApplicationPDF = (application) => {
             <div class="info-item">
               <span class="info-label">Account Number</span>
               <span class="info-value">${data.accountNumber || '-'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 7: Donations -->
+        <div class="section">
+          <div class="section-title"><span class="section-number">7</span>Donations</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">AKDN Contribution</span>
+              <span class="info-value">${data.akdnContribute === 'yes' ? `Yes - $${data.akdnAmount || '-'}` : 'No'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Houston Food Bank Contribution</span>
+              <span class="info-value">${data.hfbContribute === 'yes' ? `Yes - $${data.hfbAmount || '-'}` : 'No'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Authorized Representative - First Name</span>
+              <span class="info-value">${data.donationAuthRepFirstName || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Authorized Representative - Last Name</span>
+              <span class="info-value">${data.donationAuthRepLastName || '-'}</span>
             </div>
           </div>
         </div>

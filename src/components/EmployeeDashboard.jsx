@@ -35,13 +35,14 @@ function EmployeeDashboard({ onViewApplication, onLogout }) {
 
   const filteredApplications = applications.filter(app => {
     const fullData = app.fullData || {}
-    
+    const authorizedRepFullName = `${fullData.authorizedRepFirstName || ''} ${fullData.authorizedRepMiddleInitial || ''} ${fullData.authorizedRepLastName || ''}`.trim()
+
     return (
       (searchTerms.storeName === '' || app.storeName?.toLowerCase().includes(searchTerms.storeName.toLowerCase())) &&
       (searchTerms.submittedDate === '' || app.submittedDate?.includes(searchTerms.submittedDate)) &&
       (searchTerms.status === '' || app.status === searchTerms.status) &&
       (searchTerms.email === '' || app.email?.toLowerCase().includes(searchTerms.email.toLowerCase())) &&
-      (searchTerms.repName === '' || fullData.authorizedRepName?.toLowerCase().includes(searchTerms.repName.toLowerCase()))
+      (searchTerms.repName === '' || authorizedRepFullName.toLowerCase().includes(searchTerms.repName.toLowerCase()))
     )
   })
 
@@ -66,8 +67,8 @@ function EmployeeDashboard({ onViewApplication, onLogout }) {
         bValue = b.email || ''
         break
       case 'repName':
-        aValue = (a.fullData?.authorizedRepName || '').toLowerCase()
-        bValue = (b.fullData?.authorizedRepName || '').toLowerCase()
+        aValue = `${a.fullData?.authorizedRepFirstName || ''} ${a.fullData?.authorizedRepMiddleInitial || ''} ${a.fullData?.authorizedRepLastName || ''}`.trim().toLowerCase()
+        bValue = `${b.fullData?.authorizedRepFirstName || ''} ${b.fullData?.authorizedRepMiddleInitial || ''} ${b.fullData?.authorizedRepLastName || ''}`.trim().toLowerCase()
         break
       default:
         return 0
@@ -233,11 +234,13 @@ function EmployeeDashboard({ onViewApplication, onLogout }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedApplications.map((app) => (
+                  {sortedApplications.map((app) => {
+                    const repFullName = `${app.fullData?.authorizedRepFirstName || ''} ${app.fullData?.authorizedRepMiddleInitial || ''} ${app.fullData?.authorizedRepLastName || ''}`.trim()
+                    return (
                     <tr key={app.id}>
                       <td>{app.storeName}</td>
                       <td className="email-cell">{app.email}</td>
-                      <td>{app.fullData?.authorizedRepName || 'Not provided'}</td>
+                      <td>{repFullName || 'Not provided'}</td>
                       <td>{formatDate(app.submittedDate)}</td>
                       <td>{getStatusBadge(app.status)}</td>
                       <td className="action-cell">
@@ -249,7 +252,8 @@ function EmployeeDashboard({ onViewApplication, onLogout }) {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

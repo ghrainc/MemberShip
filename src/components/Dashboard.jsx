@@ -38,7 +38,7 @@ function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
               className="dashboard-logo"
             />
             <div className="header-info">
-              <h1>Membership Portal</h1>
+              <h1>Application Portal</h1>
               <p>Manage your GHRA membership applications</p>
             </div>
           </div>
