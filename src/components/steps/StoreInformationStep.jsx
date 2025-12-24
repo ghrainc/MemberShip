@@ -71,7 +71,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>Fuel</legend>
 
-        <div className="form-row">
+        <div className="fuel-row-item">
           <div className="form-group">
             <label htmlFor="fuelAvailable">If with fuel *</label>
             <select
@@ -116,7 +116,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
           </div>
         </div>
 
-        <div className="form-row">
+        <div className="fuel-row-item">
           <div className="form-group">
             <label htmlFor="tankCapacity">Tank Capacity *</label>
             <input
@@ -157,7 +157,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
           </div>
         </div>
 
-        <div className="form-row">
+        <div className="fuel-row-item">
           <div className="form-group">
             <label htmlFor="tceqNumber">TCEQ number *</label>
             <input
@@ -176,7 +176,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>POS System</legend>
 
-        <div className="form-row">
+        <div className="pos-row-item">
           <div className="form-group">
             <label htmlFor="scanPOS">Do you scan your products at the POS? *</label>
             <select
@@ -206,7 +206,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
           </div>
         </div>
 
-        <div className="form-row">
+        <div className="pos-row-item">
           <div className="form-group">
             <label htmlFor="posSystem">What register system (POS) is being used? *</label>
             <select
@@ -229,24 +229,26 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>Food Service</legend>
 
-        <div className="form-group">
-          <label htmlFor="foodServiceAvailable">Do you have food service at store *</label>
-          <select
-            id="foodServiceAvailable"
-            name="foodServiceAvailable"
-            value={formData.foodServiceAvailable || ''}
-            onChange={handleInputChange}
-            className="form-select"
-          >
-            <option value="">Select one option</option>
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
+        <div className="food-service-row-item">
+          <div className="form-group">
+            <label htmlFor="foodServiceAvailable">Do you have food service at store *</label>
+            <select
+              id="foodServiceAvailable"
+              name="foodServiceAvailable"
+              value={formData.foodServiceAvailable || ''}
+              onChange={handleInputChange}
+              className="form-select"
+            >
+              <option value="">Select one option</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </select>
+          </div>
         </div>
 
         {formData.foodServiceAvailable === 'yes' && (
           <>
-            <div className="form-row">
+            <div className="food-service-row-item">
               <div className="form-group">
                 <label htmlFor="foodConcept">Food Concept</label>
                 <select
@@ -283,33 +285,37 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
             </div>
 
             {formData.foodServiceBranded === 'yes' && (
-              <div className="form-group">
-                <label htmlFor="foodBrandName">Brand Name</label>
-                <input
-                  type="text"
-                  id="foodBrandName"
-                  name="foodBrandName"
-                  value={formData.foodBrandName || ''}
-                  onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="Enter brand name"
-                />
+              <div className="food-service-row-item">
+                <div className="form-group">
+                  <label htmlFor="foodBrandName">Brand Name</label>
+                  <input
+                    type="text"
+                    id="foodBrandName"
+                    name="foodBrandName"
+                    value={formData.foodBrandName || ''}
+                    onChange={handleInputChange}
+                    className="form-input"
+                    placeholder="Enter brand name"
+                  />
+                </div>
               </div>
             )}
 
-            <div className="form-group">
-              <label htmlFor="bigMardKudosGameday">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</label>
-              <select
-                id="bigMardKudosGameday"
-                name="bigMardKudosGameday"
-                value={formData.bigMardKudosGameday || ''}
-                onChange={handleInputChange}
-                className="form-select"
-              >
-                <option value="">Select one option</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </select>
+            <div className="food-service-row-item">
+              <div className="form-group">
+                <label htmlFor="bigMardKudosGameday">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</label>
+                <select
+                  id="bigMardKudosGameday"
+                  name="bigMardKudosGameday"
+                  value={formData.bigMardKudosGameday || ''}
+                  onChange={handleInputChange}
+                  className="form-select"
+                >
+                  <option value="">Select one option</option>
+                  <option value="yes">Yes</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
             </div>
           </>
         )}
@@ -418,21 +424,23 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>Store Address</legend>
 
-        <div className="form-group">
-          <label htmlFor="storeAddress">Store Address *</label>
-          <input
-            type="text"
-            id="storeAddress"
-            name="storeAddress"
-            value={formData.storeAddress}
-            onChange={handleInputChange}
-            className={`form-input ${errors.storeAddress ? 'input-error' : ''}`}
-            placeholder="Street address"
-          />
-          {errors.storeAddress && <span className="error-text">{errors.storeAddress}</span>}
+        <div className="store-address-row-item">
+          <div className="form-group">
+            <label htmlFor="storeAddress">Store Address *</label>
+            <input
+              type="text"
+              id="storeAddress"
+              name="storeAddress"
+              value={formData.storeAddress}
+              onChange={handleInputChange}
+              className={`form-input ${errors.storeAddress ? 'input-error' : ''}`}
+              placeholder="Street address"
+            />
+            {errors.storeAddress && <span className="error-text">{errors.storeAddress}</span>}
+          </div>
         </div>
 
-        <div className="form-row">
+        <div className="store-address-row-item">
           <div className="form-group">
             <label htmlFor="storeCity">City *</label>
             <input
@@ -477,20 +485,22 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>Mailing Address</legend>
 
-        <div className="form-group">
-          <label htmlFor="mailingAddress">Mailing Address</label>
-          <input
-            type="text"
-            id="mailingAddress"
-            name="mailingAddress"
-            value={formData.mailingAddress}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Street address"
-          />
+        <div className="mailing-address-row-item">
+          <div className="form-group">
+            <label htmlFor="mailingAddress">Mailing Address</label>
+            <input
+              type="text"
+              id="mailingAddress"
+              name="mailingAddress"
+              value={formData.mailingAddress}
+              onChange={handleInputChange}
+              className="form-input"
+              placeholder="Street address"
+            />
+          </div>
         </div>
 
-        <div className="form-row">
+        <div className="mailing-address-row-item">
           <div className="form-group">
             <label htmlFor="mailingCity">City</label>
             <input
@@ -533,7 +543,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
       <fieldset className="form-section">
         <legend>Contact Information</legend>
 
-        <div className="form-row">
+        <div className="contact-info-row-item">
           <div className="form-group">
             <label htmlFor="storePhone">Store Phone</label>
             <input
@@ -572,18 +582,20 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="emailAddress">Email Address *</label>
-          <input
-            type="email"
-            id="emailAddress"
-            name="emailAddress"
-            value={formData.emailAddress}
-            onChange={handleInputChange}
-            className={`form-input ${errors.emailAddress ? 'input-error' : ''}`}
-            placeholder="business@example.com"
-          />
-          {errors.emailAddress && <span className="error-text">{errors.emailAddress}</span>}
+        <div className="contact-info-row-item">
+          <div className="form-group">
+            <label htmlFor="emailAddress">Email Address *</label>
+            <input
+              type="email"
+              id="emailAddress"
+              name="emailAddress"
+              value={formData.emailAddress}
+              onChange={handleInputChange}
+              className={`form-input ${errors.emailAddress ? 'input-error' : ''}`}
+              placeholder="business@example.com"
+            />
+            {errors.emailAddress && <span className="error-text">{errors.emailAddress}</span>}
+          </div>
         </div>
       </fieldset>
     </>

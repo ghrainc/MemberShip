@@ -37,7 +37,7 @@ function OwnersManagementStep({
               )}
             </div>
 
-            <div className="form-row">
+            <div className="owners-row-item">
               <div className="form-group">
                 <label>First Name</label>
                 <input
@@ -71,7 +71,7 @@ function OwnersManagementStep({
               </div>
             </div>
 
-            <div className="form-row">
+            <div className="owners-row-item">
               <div className="form-group">
                 <label>Title</label>
                 <input
@@ -111,7 +111,7 @@ function OwnersManagementStep({
         <legend>Store Manager</legend>
         <p className="section-note">This person will not be eligible to vote or sign any documents or make any changes</p>
 
-        <div className="form-row">
+        <div className="manager-row-item">
           <div className="form-group">
             <label htmlFor="storeManagerFirstName">First Name *</label>
             <input
@@ -141,20 +141,22 @@ function OwnersManagementStep({
           </div>
         </div>
 
-        <div className="form-group">
-          <label htmlFor="storeManagerTitle">Title</label>
-          <input
-            type="text"
-            id="storeManagerTitle"
-            name="storeManagerTitle"
-            value={formData.storeManagerTitle}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Title"
-          />
+        <div className="manager-row-item">
+          <div className="form-group">
+            <label htmlFor="storeManagerTitle">Title</label>
+            <input
+              type="text"
+              id="storeManagerTitle"
+              name="storeManagerTitle"
+              value={formData.storeManagerTitle}
+              onChange={handleInputChange}
+              className="form-input"
+              placeholder="Title"
+            />
+          </div>
         </div>
 
-        <div className="form-row">
+        <div className="manager-row-item">
           <div className="form-group">
             <label htmlFor="storeManagerDriverLicense">Driver License #</label>
             <input
