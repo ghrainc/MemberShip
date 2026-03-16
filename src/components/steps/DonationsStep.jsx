@@ -116,6 +116,7 @@ function DonationsStep({ formData, handleInputChange }) {
         </p>
 
         <div className="donation-auth-section">
+          <h4 className="auth-rep-heading">Authorized Representative</h4>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="donationAuthRepFirstName">First Name</label>

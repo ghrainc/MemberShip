@@ -12,8 +12,9 @@ const SECTIONS = [
   { id: 4, title: 'Owners & Management' },
   { id: 5, title: 'References' },
   { id: 6, title: 'Financial Information' },
-  { id: 7, title: 'Donations' },
-  { id: 8, title: 'Documents' }
+  { id: 7, title: 'Warehouse Application' },
+  { id: 8, title: 'Donations' },
+  { id: 9, title: 'Documents' }
 ]
 
 function ViewApplication({ applicationId, onBack }) {
@@ -386,6 +387,37 @@ function ViewApplication({ applicationId, onBack }) {
         )
 
       case 8:
+        return (
+          <fieldset className="form-section">
+            <legend>Warehouse Application</legend>
+            <div className="form-section-inner">
+              <span className="inner-legend">Warehouse Information</span>
+              <InfoRow>
+                <InfoField label="Account Setup for Delivery" value={data.warehouseDelivery ? 'Yes' : 'No'} />
+              </InfoRow>
+            </div>
+
+            {data.warehouseDelivery && data.authorizedCardHolders && data.authorizedCardHolders.length > 0 && (
+              <div className="form-section-inner">
+                <span className="inner-legend">Authorized Card Holders</span>
+                {data.authorizedCardHolders.map((holder, idx) => (
+                  <div key={idx} className="card-holder-display">
+                    <div className="card-holder-title">Card Holder {idx + 1}</div>
+                    <InfoRow>
+                      <InfoField label="First Name" value={holder.firstName} />
+                      <InfoField label="Last Name" value={holder.lastName} />
+                    </InfoRow>
+                    <InfoRow>
+                      <InfoField label="Driver License #" value={holder.drivingLicense} />
+                    </InfoRow>
+                  </div>
+                ))}
+              </div>
+            )}
+          </fieldset>
+        )
+
+      case 9:
         return (
           <fieldset className="form-section">
             <legend>Documents</legend>

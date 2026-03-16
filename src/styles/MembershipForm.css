@@ -84,11 +84,11 @@
 .form-section {
   padding: 0;
   border: none;
-  margin: 0 0 30px 0;
+  margin: 0 0 20px 0;
 }
 
 .form-section + .form-section {
-  margin-top: 20px;
+  margin-top: 0;
 }
 
 .form-section:last-child {
@@ -99,8 +99,12 @@
   font-size: 18px;
   font-weight: 600;
   color: #2c3e50;
-  margin: 20px 0 20px 0;
+  margin: 0 0 15px 0;
   display: block;
+}
+
+.form-section + .form-section legend {
+  margin-top: 15px;
 }
 
 .form-section-inner {
@@ -122,7 +126,7 @@
   color: #7f8c8d;
   font-size: 13px;
   font-style: italic;
-  margin: -10px 0 15px 0;
+  margin: 10px 0 15px 0;
 }
 
 .section-text {
@@ -176,6 +180,18 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
+  margin-bottom: -12px;
+}
+
+.form-row:last-child {
+  margin-bottom: 0;
+}
+
+.business-row-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: -12px;
 }
 
 .cooler-row-item {
@@ -234,10 +250,6 @@
   margin-bottom: -12px;
 }
 
-.owners-row-item .form-group {
-  margin-bottom: 0;
-}
-
 .manager-row-item {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -245,30 +257,32 @@
   margin-bottom: -12px;
 }
 
-.manager-row-item .form-group {
-  margin-bottom: 0;
+/* Radio and Checkbox Groups */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* Radio and Checkbox Groups */
-.radio-group,
 .checkbox-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 16px;
 }
 
 .radio-group-row {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 15px;
 }
 
 .checkbox-group-row {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 15px;
 }
 
 .radio-label,
@@ -307,17 +321,39 @@
 
 /* Owner/Partner Sections */
 .owner-subsection {
-  background: #f8f9fa;
-  padding: 20px;
-  border-radius: 6px;
-  margin-bottom: 20px;
+  display: contents;
+}
+
+/* Authorized Card Holder Sections */
+.card-holder-subsection {
+  display: contents;
+}
+
+.card-holder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0 15px 0;
+}
+
+.card-holder-header h4 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.card-holder-row-item {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: -12px;
 }
 
 .owner-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin: 20px 0 15px 0;
 }
 
 .owner-header h4 {
@@ -366,6 +402,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: background 0.2s;
+  margin-bottom: 20px;
 }
 
 .add-button:hover {
@@ -644,6 +681,13 @@
   margin-top: 15px;
 }
 
+.auth-rep-heading {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .org-info-subsection {
   background: #f8f9fa;
   padding: 20px;
@@ -670,6 +714,242 @@
   margin-bottom: 0;
 }
 
+/* ACH Authorization Styles */
+.info-text {
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 15px;
+  font-style: italic;
+}
+
+.ach-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 2px solid #e8eef8;
+  border-left: 4px solid #667eea;
+  transition: all 0.2s ease;
+}
+
+.ach-checkbox-group:hover {
+  border-color: #d0d8f2;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.08);
+}
+
+.ach-checkbox-group .checkbox-label {
+  margin-bottom: 10px;
+  font-weight: 500;
+  color: #2c3e50;
+}
+
+.bank-account-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-left: 28px;
+  padding: 14px;
+  background: #f9fbff;
+  border-radius: 6px;
+  border: 1px solid #dfe7f5;
+}
+
+.bank-select-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d4a67;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.bank-account-selector .form-select {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #2c3e50;
+}
+
+.bank-account-selector .form-select:hover {
+  border-color: #667eea;
+  background-color: #fafbff;
+}
+
+.bank-account-selector .form-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.add-bank-button {
+  padding: 10px 14px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  margin-top: 4px;
+}
+
+.add-bank-button:hover {
+  background: #764ba2;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.warning-message {
+  padding: 11px 14px;
+  background: #fff3cd;
+  border-left: 4px solid #ffc107;
+  color: #856404;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+.info-message {
+  padding: 14px 16px;
+  background: #d1ecf1;
+  border-left: 4px solid #17a2b8;
+  color: #0c5460;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 15px;
+}
+
+.info-message strong {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.bank-info-intro {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f0f7ff;
+  border-left: 4px solid #667eea;
+  border-radius: 8px;
+}
+
+.bank-info-intro h4 {
+  margin: 0 0 8px 0;
+  color: #2c3e50;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.bank-info-intro .section-text {
+  margin: 0;
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+.bank-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 25px;
+}
+
+.ach-bank-block {
+  position: relative;
+  border-left: 4px solid #667eea;
+  background: #f8faff;
+}
+
+.ach-bank-block .inner-legend {
+  color: #667eea;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.ach-bank-block .form-group label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.ach-bank-block input::placeholder {
+  color: #a0a8c0;
+  font-style: italic;
+}
+
+/* Agreements Section */
+.agreements-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.agreement-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e6ed;
+  transition: all 0.2s ease;
+}
+
+.agreement-item:hover {
+  border-color: #667eea;
+  box-shadow: 0 2px 6px rgba(102, 126, 234, 0.1);
+}
+
+.agreement-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  margin: 0;
+  font-weight: 400;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.agreement-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: #667eea;
+}
+
+.agreement-link {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agreement-link:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.agreement-link::after {
+  content: "📥";
+  font-size: 12px;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .membership-container {
@@ -689,6 +969,11 @@
   }
 
   .form-row {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .business-row-item {
     grid-template-columns: 1fr;
     gap: 15px;
   }
@@ -772,6 +1057,11 @@
   .form-input,
   .form-select {
     font-size: 16px;
+  }
+
+  .business-row-item {
+    grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .cooler-row-item {

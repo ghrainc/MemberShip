@@ -95,6 +95,65 @@ function OwnersManagementStep({
                 />
               </div>
             </div>
+
+            <div className="owners-row-item">
+              <div className="form-group">
+                <label>Mobile Phone</label>
+                <input
+                  type="tel"
+                  value={owner.mobilePhone}
+                  onChange={(e) => handleOwnerChange(index, 'mobilePhone', e.target.value)}
+                  className="form-input"
+                  placeholder="(XXX) XXX-XXXX"
+                />
+              </div>
+              <div className="form-group">
+                <label>Home Phone</label>
+                <input
+                  type="tel"
+                  value={owner.homePhone}
+                  onChange={(e) => handleOwnerChange(index, 'homePhone', e.target.value)}
+                  className="form-input"
+                  placeholder="(XXX) XXX-XXXX"
+                />
+              </div>
+            </div>
+
+            <div className="owners-row-item">
+              <div className="form-group">
+                <label>Social Security Number</label>
+                <input
+                  type="text"
+                  value={owner.socialSecurityNumber}
+                  onChange={(e) => handleOwnerChange(index, 'socialSecurityNumber', e.target.value)}
+                  className="form-input"
+                  placeholder="XXX-XX-XXXX"
+                />
+              </div>
+              <div className="form-group">
+                <label>Driver License #</label>
+                <input
+                  type="text"
+                  value={owner.driverLicense}
+                  onChange={(e) => handleOwnerChange(index, 'driverLicense', e.target.value)}
+                  className="form-input"
+                  placeholder="License #"
+                />
+              </div>
+            </div>
+
+            <div className="owners-row-item">
+              <div className="form-group">
+                <label>State Issued</label>
+                <input
+                  type="text"
+                  value={owner.stateIssued}
+                  onChange={(e) => handleOwnerChange(index, 'stateIssued', e.target.value)}
+                  className="form-input"
+                  placeholder="State"
+                />
+              </div>
+            </div>
           </div>
         ))}
 

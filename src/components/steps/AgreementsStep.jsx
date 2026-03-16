@@ -14,45 +14,56 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
         </div>
 
         <div className="form-section-inner">
-          <legend className="inner-legend">Key Membership Requirements:</legend>
+          <legend className="inner-legend">Agreements</legend>
 
-          <div className="requirements-content">
-            <h5>General Requirements:</h5>
-            <ul className="requirements-list">
-              <li>Submit completed GHRA Application with all required documents and membership fees and deposits</li>
-              <li>Comply with all of GHRA's governing documents, rules, regulations, policies, and requirements</li>
-              <li>Display current GHRA Logo Decal with member number at the front door of the store</li>
-              <li>Attend In-Store Membership Orientation (Authorized Representative and/or designee)</li>
-              <li>Not use any harsh or abusive language or actions with GHRA directors, suppliers and employees</li>
-              <li>Comply with all applicable GHRA warehouse policies as amended</li>
-            </ul>
+          <div className="agreements-content">
+            <div className="agreement-item">
+              <label className="agreement-label">
+                <input
+                  type="checkbox"
+                  name="membershipAgreement"
+                  checked={formData.membershipAgreement}
+                  onChange={handleInputChange}
+                />
+                <span>
+                  <a href="/MEMBERSHIP_AGREEMENT_2024_FINAL.pdf" download className="agreement-link">
+                    Membership Agreement
+                  </a>
+                </span>
+              </label>
+            </div>
 
-            <h5>Merchandising Program Requirements:</h5>
-            <ul className="requirements-list">
-              <li>Comply with all supplier agreements negotiated by GHRA on your behalf</li>
-              <li>Purchase approved products from GHRA-approved suppliers</li>
-              <li>Follow GHRA-approved planograms and promotional activities</li>
-              <li>Must purchase the minimum product per quarter for CMA funding eligibility</li>
-              <li>Member option space in walk-in cooler will not exceed 15% of total space</li>
-              <li>Post interior and exterior promotional signage during promotions</li>
-              <li>Support warehouse promotional activity as required</li>
-            </ul>
+            <div className="agreement-item">
+              <label className="agreement-label">
+                <input
+                  type="checkbox"
+                  name="memberRequirements"
+                  checked={formData.memberRequirements}
+                  onChange={handleInputChange}
+                />
+                <span>
+                  <a href="/REQUIREMENTS_TO_BE_A_MEMBER_2025.pdf" download className="agreement-link">
+                    Requirements to be a Member
+                  </a>
+                </span>
+              </label>
+            </div>
 
-            <h5>Benefits to GHRA Members:</h5>
-            <ul className="benefits-list">
-              <li>Access to proprietary programs</li>
-              <li>Support of field staff, chefs and managers</li>
-              <li>Opportunity to take advantage of GHRA Brands</li>
-              <li>Preferred Membership at Warehouse with Rebates (5% for grocery, 3% for non-cigarette tobacco)</li>
-              <li>Receive discounts on eligible purchases</li>
-              <li>Receive supplier rebates where applicable</li>
-              <li>Outdoor signage hardware kit (Spanner Board)</li>
-              <li>Printed marketing materials monthly</li>
-              <li>Automatically enrolled in members benefit program</li>
-              <li>Representation in front of State and Local Government</li>
-              <li>Support in regulatory issues</li>
-              <li>Printed convenience store compliance signage</li>
-            </ul>
+            <div className="agreement-item">
+              <label className="agreement-label">
+                <input
+                  type="checkbox"
+                  name="rebateConsent"
+                  checked={formData.rebateConsent}
+                  onChange={handleInputChange}
+                />
+                <span>
+                  <a href="/FINANCIAL_REBATE_CONSENT_FORM.pdf" download className="agreement-link">
+                    Financial Information & Rebate Consent
+                  </a>
+                </span>
+              </label>
+            </div>
           </div>
         </div>
 

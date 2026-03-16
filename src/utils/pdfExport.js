@@ -640,9 +640,46 @@ export const generateApplicationPDF = (application) => {
           </div>
         </div>
 
-        <!-- Section 7: Donations -->
+        <!-- Section 7: Warehouse Application -->
         <div class="section">
-          <div class="section-title"><span class="section-number">7</span>Donations</div>
+          <div class="section-title"><span class="section-number">7</span>Warehouse Application</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Account Setup for Delivery</span>
+              <span class="info-value">${data.warehouseDelivery ? 'Yes' : 'No'}</span>
+            </div>
+          </div>
+          ${data.warehouseDelivery && data.authorizedCardHolders && data.authorizedCardHolders.length > 0 ? `
+            <div class="info-item">
+              <span class="info-label">Authorized Card Holders</span>
+            </div>
+            ${data.authorizedCardHolders.map((holder, idx) => `
+              <div class="owner-block">
+                <h4>Card Holder ${idx + 1}</h4>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <span class="info-label">First Name</span>
+                    <span class="info-value">${holder.firstName || '-'}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="info-label">Last Name</span>
+                    <span class="info-value">${holder.lastName || '-'}</span>
+                  </div>
+                </div>
+                <div class="info-grid">
+                  <div class="info-item">
+                    <span class="info-label">Driver License #</span>
+                    <span class="info-value">${holder.drivingLicense || '-'}</span>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          ` : ''}
+        </div>
+
+        <!-- Section 8: Donations -->
+        <div class="section">
+          <div class="section-title"><span class="section-number">8</span>Donations</div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">AKDN Contribution</span>

@@ -1,4 +1,36 @@
-function AchAuthorizationStep({ formData, handleInputChange }) {
+function AchAuthorizationStep({
+  formData,
+  handleAchInfoChange,
+  handleAchToBankMapping,
+  handleBankInfoChange,
+  addBankAccount
+}) {
+  const achOptions = [
+    { id: 'corporate', label: 'GHRA Corporate' },
+    { id: 'warehouse', label: 'GHRA Warehouse' },
+    { id: 'fuels', label: 'GHRA Fuels' }
+  ]
+
+  const selectedAchTypes = Object.keys(formData.achInfoFor).filter(key => formData.achInfoFor[key])
+  const maxBankAccountsReached = formData.bankAccounts.length >= 3
+
+  // Get unique bank account IDs that are actually assigned
+  const usedBankAccountIds = new Set(
+    selectedAchTypes.map(type => formData.achToBankMapping[type]).filter(id => id && id !== 'new')
+  )
+  const usedBankAccounts = formData.bankAccounts.filter(account => usedBankAccountIds.has(account.id))
+
+  // Generate friendly name for bank account based on assigned ACH types
+  const generateBankAccountName = (bankId) => {
+    const assignedAchTypes = selectedAchTypes.filter(type => formData.achToBankMapping[type] === bankId)
+    if (assignedAchTypes.length === 0) return 'Unassigned'
+    if (assignedAchTypes.length === 1) {
+      return achOptions.find(o => o.id === assignedAchTypes[0])?.label || 'Bank Account'
+    }
+    const labels = assignedAchTypes.map(type => achOptions.find(o => o.id === type)?.label)
+    return labels.join(' & ')
+  }
+
   return (
     <fieldset className="form-section">
       <legend>Authorization Form for Automatic Deposits (ACH Credits/Debits)</legend>
@@ -13,138 +45,179 @@ function AchAuthorizationStep({ formData, handleInputChange }) {
 
       <fieldset className="form-section-inner">
         <legend className="inner-legend">ACH Information</legend>
+        <p className="section-text info-text">Select which GHRA accounts you want to set up automatic deposits for:</p>
 
-        <div className="radio-group">
-          <label className="radio-label">
-            <input
-              type="radio"
-              name="achInfoFor"
-              value="corporate"
-              checked={formData.achInfoFor === 'corporate'}
-              onChange={handleInputChange}
-            />
-            GHRA Corporate
-          </label>
-          <label className="radio-label">
-            <input
-              type="radio"
-              name="achInfoFor"
-              value="warehouse"
-              checked={formData.achInfoFor === 'warehouse'}
-              onChange={handleInputChange}
-            />
-            GHRA Warehouse
-          </label>
-          <label className="radio-label">
-            <input
-              type="radio"
-              name="achInfoFor"
-              value="both"
-              checked={formData.achInfoFor === 'both'}
-              onChange={handleInputChange}
-            />
-            Both
-          </label>
+        <div className="checkbox-group">
+          {achOptions.map(option => (
+            <div key={option.id} className="ach-checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={formData.achInfoFor[option.id] || false}
+                  onChange={() => handleAchInfoChange(option.id)}
+                />
+                {option.label}
+              </label>
+
+              {formData.achInfoFor[option.id] && (
+                <div className="bank-account-selector">
+                  <label htmlFor={`bank-select-${option.id}`} className="bank-select-label">
+                    Select Bank Account:
+                  </label>
+                  <select
+                    id={`bank-select-${option.id}`}
+                    value={formData.achToBankMapping[option.id] || ''}
+                    onChange={(e) => {
+                      handleAchToBankMapping(option.id, e.target.value)
+                    }}
+                    className="form-select"
+                  >
+                    <option value="">-- Select Bank Account --</option>
+                    {formData.bankAccounts.map(account => (
+                      <option key={account.id} value={account.id}>
+                        {generateBankAccountName(account.id)}
+                      </option>
+                    ))}
+                    {!maxBankAccountsReached && (
+                      <option value="new">+ Create New Bank Account</option>
+                    )}
+                  </select>
+
+                  {formData.achToBankMapping[option.id] === 'new' && !maxBankAccountsReached && (
+                    <button
+                      type="button"
+                      onClick={() => addBankAccount(option.id)}
+                      className="add-bank-button"
+                    >
+                      Create Bank Account for {option.label}
+                    </button>
+                  )}
+
+                  {maxBankAccountsReached && formData.achToBankMapping[option.id] === '' && (
+                    <div className="warning-message">
+                      Maximum 3 bank accounts reached. Please select an existing account.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
+
+        {maxBankAccountsReached && (
+          <div className="info-message">
+            <strong>✓ Maximum bank accounts (3) reached</strong><br/>
+            You can still assign multiple GHRA accounts to the same bank account.
+          </div>
+        )}
       </fieldset>
 
-      <fieldset className="form-section-inner">
-        <legend className="inner-legend">Bank Information</legend>
+      {usedBankAccounts.length > 0 && (
+        <div className="bank-info-section">
+          <div className="bank-info-intro">
+            <h4>Bank Account Details</h4>
+            <p className="section-text">
+              Enter bank information for {usedBankAccounts.length === 1 ? 'your selected' : 'each of your selected'} bank {usedBankAccounts.length === 1 ? 'account' : 'accounts'}:
+            </p>
+          </div>
 
-        <div className="form-group">
-          <label htmlFor="bankName">Bank Name</label>
-          <input
-            type="text"
-            id="bankName"
-            name="bankName"
-            value={formData.bankName}
-            onChange={handleInputChange}
-            className="form-input"
-            placeholder="Bank Name"
-          />
-        </div>
+          {usedBankAccounts.map((account) => {
+            const accountName = generateBankAccountName(account.id)
+            return (
+              <fieldset key={account.id} className="form-section-inner ach-bank-block">
+                <legend className="inner-legend">{accountName}</legend>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="bankAddress">Branch Address</label>
-            <input
-              type="text"
-              id="bankAddress"
-              name="bankAddress"
-              value={formData.bankAddress}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Street Address"
-            />
-          </div>
-        </div>
+                <div className="form-group">
+                  <label htmlFor={`bankName-${account.id}`}>Bank Name *</label>
+                  <input
+                    type="text"
+                    id={`bankName-${account.id}`}
+                    value={account.bankName}
+                    onChange={(e) => handleBankInfoChange(account.id, 'bankName', e.target.value)}
+                    className="form-input"
+                    placeholder="e.g., Chase Bank, Wells Fargo, Bank of America"
+                  />
+                </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="bankCity">City</label>
-            <input
-              type="text"
-              id="bankCity"
-              name="bankCity"
-              value={formData.bankCity}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="City"
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="bankState">State</label>
-            <input
-              type="text"
-              id="bankState"
-              name="bankState"
-              value={formData.bankState}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="State"
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="bankZip">Zip Code</label>
-            <input
-              type="text"
-              id="bankZip"
-              name="bankZip"
-              value={formData.bankZip}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Zip Code"
-            />
-          </div>
-        </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor={`bankAddress-${account.id}`}>Branch Address</label>
+                    <input
+                      type="text"
+                      id={`bankAddress-${account.id}`}
+                      value={account.bankAddress}
+                      onChange={(e) => handleBankInfoChange(account.id, 'bankAddress', e.target.value)}
+                      className="form-input"
+                      placeholder="Street Address"
+                    />
+                  </div>
+                </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="transitAbaNumber">Transit/ABA Number</label>
-            <input
-              type="text"
-              id="transitAbaNumber"
-              name="transitAbaNumber"
-              value={formData.transitAbaNumber}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Routing Number"
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="accountNumber">Account Number</label>
-            <input
-              type="text"
-              id="accountNumber"
-              name="accountNumber"
-              value={formData.accountNumber}
-              onChange={handleInputChange}
-              className="form-input"
-              placeholder="Account Number"
-            />
-          </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor={`bankCity-${account.id}`}>City</label>
+                    <input
+                      type="text"
+                      id={`bankCity-${account.id}`}
+                      value={account.bankCity}
+                      onChange={(e) => handleBankInfoChange(account.id, 'bankCity', e.target.value)}
+                      className="form-input"
+                      placeholder="City"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor={`bankState-${account.id}`}>State</label>
+                    <input
+                      type="text"
+                      id={`bankState-${account.id}`}
+                      value={account.bankState}
+                      onChange={(e) => handleBankInfoChange(account.id, 'bankState', e.target.value)}
+                      className="form-input"
+                      placeholder="State"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor={`bankZip-${account.id}`}>Zip Code</label>
+                    <input
+                      type="text"
+                      id={`bankZip-${account.id}`}
+                      value={account.bankZip}
+                      onChange={(e) => handleBankInfoChange(account.id, 'bankZip', e.target.value)}
+                      className="form-input"
+                      placeholder="Zip Code"
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor={`transitAbaNumber-${account.id}`}>Transit/ABA Number (Routing Number) *</label>
+                    <input
+                      type="text"
+                      id={`transitAbaNumber-${account.id}`}
+                      value={account.transitAbaNumber}
+                      onChange={(e) => handleBankInfoChange(account.id, 'transitAbaNumber', e.target.value)}
+                      className="form-input"
+                      placeholder="9-digit routing number"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor={`accountNumber-${account.id}`}>Account Number *</label>
+                    <input
+                      type="text"
+                      id={`accountNumber-${account.id}`}
+                      value={account.accountNumber}
+                      onChange={(e) => handleBankInfoChange(account.id, 'accountNumber', e.target.value)}
+                      className="form-input"
+                      placeholder="Account number"
+                    />
+                  </div>
+                </div>
+              </fieldset>
+            )
+          })}
         </div>
-      </fieldset>
+      )}
 
       <div className="form-group">
         <p className="section-text notice-text">

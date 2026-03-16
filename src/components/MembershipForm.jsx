@@ -89,7 +89,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     freezerDoors: '',
     beerCave: '',
     storeSpannerBoard: false,
-    owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '' }],
+    owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', homePhone: '', socialSecurityNumber: '', driverLicense: '', stateIssued: '' }],
     authorizedRepFirstName: '',
     authorizedRepMiddleInitial: '',
     authorizedRepLastName: '',
@@ -107,21 +107,37 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     storeManagerTitle: '',
     storeManagerDriverLicense: '',
     storeManagerMobile: '',
-    bankName: '',
-    bankAddress: '',
-    bankCity: '',
-    bankState: '',
-    bankZip: '',
-    transitAbaNumber: '',
-    accountNumber: '',
-    achInfoFor: 'corporate',
+    achInfoFor: {
+      corporate: false,
+      warehouse: false,
+      fuels: false
+    },
+    bankAccounts: [
+      {
+        id: 'bank_1',
+        bankName: '',
+        bankAddress: '',
+        bankCity: '',
+        bankState: '',
+        bankZip: '',
+        transitAbaNumber: '',
+        accountNumber: ''
+      }
+    ],
+    achToBankMapping: {
+      corporate: 'bank_1',
+      warehouse: 'bank_1',
+      fuels: 'bank_1'
+    },
     akdnContribute: '',
     akdnAmount: '',
     hfbContribute: '',
     hfbAmount: '',
     donationAuthRepFirstName: '',
     donationAuthRepLastName: '',
-    acknowledgement: false
+    acknowledgement: false,
+    warehouseDelivery: false,
+    authorizedCardHolders: [{ firstName: '', lastName: '', drivingLicense: '' }]
   })
 
   const [errors, setErrors] = useState({})
@@ -143,6 +159,74 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     }
   }
 
+  const handleAchInfoChange = (achType) => {
+    setFormData(prev => ({
+      ...prev,
+      achInfoFor: {
+        ...prev.achInfoFor,
+        [achType]: !prev.achInfoFor[achType]
+      }
+    }))
+  }
+
+  const handleAchToBankMapping = (achType, bankId) => {
+    setFormData(prev => ({
+      ...prev,
+      achToBankMapping: {
+        ...prev.achToBankMapping,
+        [achType]: bankId
+      }
+    }))
+  }
+
+  const handleBankInfoChange = (bankId, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      bankAccounts: prev.bankAccounts.map(account =>
+        account.id === bankId
+          ? { ...account, [field]: value }
+          : account
+      )
+    }))
+  }
+
+  const addBankAccount = (achTypeToAssign = null) => {
+    // Enforce max 3 bank accounts
+    if (formData.bankAccounts.length >= 3) {
+      return
+    }
+
+    const newBankId = `bank_${Date.now()}`
+    setFormData(prev => {
+      const updatedFormData = {
+        ...prev,
+        bankAccounts: [
+          ...prev.bankAccounts,
+          {
+            id: newBankId,
+            bankName: '',
+            bankAddress: '',
+            bankCity: '',
+            bankState: '',
+            bankZip: '',
+            transitAbaNumber: '',
+            accountNumber: ''
+          }
+        ]
+      }
+
+      // Auto-assign the new bank account to the specified ACH type
+      if (achTypeToAssign) {
+        updatedFormData.achToBankMapping = {
+          ...prev.achToBankMapping,
+          [achTypeToAssign]: newBankId
+        }
+      }
+
+      return updatedFormData
+    })
+  }
+
   const handleOwnerChange = (index, field, value) => {
     const updatedOwners = [...formData.owners]
     updatedOwners[index][field] = value
@@ -155,7 +239,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
   const addOwner = () => {
     setFormData(prev => ({
       ...prev,
-      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '' }]
+      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', homePhone: '', socialSecurityNumber: '', driverLicense: '', stateIssued: '' }]
     }))
   }
 
@@ -164,6 +248,31 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
       setFormData(prev => ({
         ...prev,
         owners: prev.owners.filter((_, i) => i !== index)
+      }))
+    }
+  }
+
+  const handleCardHolderChange = (index, field, value) => {
+    const updatedCardHolders = [...formData.authorizedCardHolders]
+    updatedCardHolders[index][field] = value
+    setFormData(prev => ({
+      ...prev,
+      authorizedCardHolders: updatedCardHolders
+    }))
+  }
+
+  const addCardHolder = () => {
+    setFormData(prev => ({
+      ...prev,
+      authorizedCardHolders: [...prev.authorizedCardHolders, { firstName: '', lastName: '', drivingLicense: '' }]
+    }))
+  }
+
+  const removeCardHolder = (index) => {
+    if (formData.authorizedCardHolders.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        authorizedCardHolders: prev.authorizedCardHolders.filter((_, i) => i !== index)
       }))
     }
   }
@@ -320,6 +429,13 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
             handleOwnerChange={handleOwnerChange}
             addOwner={addOwner}
             removeOwner={removeOwner}
+            handleCardHolderChange={handleCardHolderChange}
+            addCardHolder={addCardHolder}
+            removeCardHolder={removeCardHolder}
+            handleAchInfoChange={handleAchInfoChange}
+            handleAchToBankMapping={handleAchToBankMapping}
+            handleBankInfoChange={handleBankInfoChange}
+            addBankAccount={addBankAccount}
           />
         </div>
 

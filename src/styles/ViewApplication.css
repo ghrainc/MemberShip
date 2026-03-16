@@ -154,6 +154,21 @@
   font-weight: 600;
 }
 
+.card-holder-display {
+  background: white;
+  padding: 15px;
+  border-radius: 6px;
+  border-left: 3px solid #27ae60;
+  margin-bottom: 15px;
+}
+
+.card-holder-title {
+  color: #2c3e50;
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  font-weight: 600;
+}
+
 .form-navigation {
   padding: 30px;
   background: #f8f9fa;

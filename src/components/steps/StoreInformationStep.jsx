@@ -39,7 +39,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
 
       <fieldset className="form-section">
         <legend>Business Property</legend>
-        <div className="form-row">
+        <div className="business-row-item">
           <div className="form-group">
             <label htmlFor="businessProperty">Business Property</label>
             <select

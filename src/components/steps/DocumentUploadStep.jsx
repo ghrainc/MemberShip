@@ -30,7 +30,7 @@ function DocumentUploadStep({ formData, errors, handleInputChange }) {
       id: 'tobaccoPermit',
       title: 'Tobacco Permit',
       description: 'Tobacco Permit (if applicable)',
-      required: false
+      required: true
     },
     {
       id: 'beerLicense',
@@ -108,8 +108,6 @@ function DocumentUploadStep({ formData, errors, handleInputChange }) {
           <ul>
             <li>All documents must be clear copies with visible content</li>
             <li>Required documents must be submitted to proceed with application</li>
-            <li>Optional documents can be submitted later (within specified timeframes)</li>
-            <li>Please do not submit original government documents - GHRA will not be responsible for loss</li>
             <li>GHRA will not accept, process or hold incomplete and/or inaccurate documents and applications</li>
           </ul>
         </div>
