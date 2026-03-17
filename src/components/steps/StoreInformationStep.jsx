@@ -1,4 +1,4 @@
-function StoreInformationStep({ formData, errors, handleInputChange }) {
+function StoreInformationStep({ formData, errors, handleInputChange, copyStoreToMailing }) {
   return (
     <>
       <fieldset className="form-section">
@@ -486,6 +486,12 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
         <legend>Mailing Address</legend>
 
         <div className="mailing-address-row-item">
+          <button type="button" className="btn-same-address" onClick={copyStoreToMailing}>
+            Same as Store Address
+          </button>
+        </div>
+
+        <div className="mailing-address-row-item">
           <div className="form-group">
             <label htmlFor="mailingAddress">Mailing Address</label>
             <input
@@ -553,7 +559,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
               value={formData.storePhone}
               onChange={handleInputChange}
               className="form-input"
-              placeholder="(XXX) XXX-XXXX"
+              placeholder="XXX-XXX-XXXX"
             />
           </div>
           <div className="form-group">
@@ -565,7 +571,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
               value={formData.faxPhone}
               onChange={handleInputChange}
               className="form-input"
-              placeholder="(XXX) XXX-XXXX"
+              placeholder="XXX-XXX-XXXX"
             />
           </div>
           <div className="form-group">
@@ -577,7 +583,7 @@ function StoreInformationStep({ formData, errors, handleInputChange }) {
               value={formData.officePhone}
               onChange={handleInputChange}
               className="form-input"
-              placeholder="(XXX) XXX-XXXX"
+              placeholder="XXX-XXX-XXXX"
             />
           </div>
         </div>

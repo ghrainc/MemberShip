@@ -1,4 +1,15 @@
-import { useState } from 'react'
+import { useState, useContext } from 'react'
+import { AuthContext } from '../context/AuthContext'
+
+const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
+const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
+
+const formatPhone = (value) => {
+  const digits = value.replace(/\D/g, '').slice(0, 10)
+  if (digits.length > 6) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
+  if (digits.length > 3) return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  return digits
+}
 import '../styles/MembershipForm.css'
 import ProgressIndicator from './ProgressIndicator'
 import QualifyingBusinessStep from './steps/QualifyingBusinessStep'
@@ -25,9 +36,11 @@ const STEPS = [
   { id: 10, title: 'Agreements', component: AgreementsStep }
 ]
 
-function MembershipForm({ userEmail, onSubmit, onCancel }) {
-  const [currentStep, setCurrentStep] = useState(1)
-  const [formData, setFormData] = useState({
+function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1 }) {
+  const { saveDraft, saveApplication } = useContext(AuthContext)
+  const [currentStep, setCurrentStep] = useState(initialStep)
+  const [applicationId, setApplicationId] = useState(initialApplicationId)
+  const [formData, setFormData] = useState(initialFormData || {
     hardLiquor: 'no',
     ageRequirement: 'no',
     closedSundayAfter9pm: 'no',
@@ -89,7 +102,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     freezerDoors: '',
     beerCave: '',
     storeSpannerBoard: false,
-    owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', homePhone: '', socialSecurityNumber: '', driverLicense: '', stateIssued: '' }],
+    owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '' }],
     authorizedRepFirstName: '',
     authorizedRepMiddleInitial: '',
     authorizedRepLastName: '',
@@ -147,9 +160,10 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
+    const finalValue = type === 'checkbox' ? checked : PHONE_FIELDS.has(name) ? formatPhone(value) : value
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : type === 'custom' ? value : value
+      [name]: finalValue
     }))
     if (errors[name]) {
       setErrors(prev => ({
@@ -157,6 +171,16 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
         [name]: ''
       }))
     }
+  }
+
+  const copyStoreToMailing = () => {
+    setFormData(prev => ({
+      ...prev,
+      mailingAddress: prev.storeAddress,
+      mailingCity: prev.storeCity,
+      mailingZip: prev.storeZip,
+      mailingCounty: prev.storeCounty,
+    }))
   }
 
   const handleAchInfoChange = (achType) => {
@@ -229,7 +253,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
 
   const handleOwnerChange = (index, field, value) => {
     const updatedOwners = [...formData.owners]
-    updatedOwners[index][field] = value
+    updatedOwners[index][field] = OWNER_PHONE_FIELDS.has(field) ? formatPhone(value) : value
     setFormData(prev => ({
       ...prev,
       owners: updatedOwners
@@ -239,7 +263,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
   const addOwner = () => {
     setFormData(prev => ({
       ...prev,
-      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', homePhone: '', socialSecurityNumber: '', driverLicense: '', stateIssued: '' }]
+      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '' }]
     }))
   }
 
@@ -335,6 +359,8 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
       case 4: // Owners & Management
         if (!formData.storeManagerFirstName.trim()) newErrors.storeManagerFirstName = 'Store Manager First Name is required'
         if (!formData.storeManagerLastName.trim()) newErrors.storeManagerLastName = 'Store Manager Last Name is required'
+        const totalOwnership = formData.owners.reduce((sum, o) => sum + (parseFloat(o.ownershipPercent) || 0), 0)
+        if (Math.round(totalOwnership) !== 100) newErrors.ownershipTotal = `Total ownership must equal 100%. Current total: ${totalOwnership}%`
         break
 
       case 8: // Donations
@@ -342,7 +368,14 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
         break
 
       case 9: // Documents
-        if (!formData.driverLicenseCopies) newErrors.driverLicenseCopies = 'Driver License Copies are required'
+        if (formData.owners.length > 1) {
+          formData.owners.forEach((_, index) => {
+            if (!formData[`driverLicense_owner_${index}`])
+              newErrors[`driverLicense_owner_${index}`] = 'Driver License is required'
+          })
+        } else {
+          if (!formData.driverLicenseCopies) newErrors.driverLicenseCopies = 'Driver License Copies are required'
+        }
         if (!formData.salesTaxPermit) newErrors.salesTaxPermit = 'Sales Tax Permit is required'
         if (!formData.articlesOfIncorporation) newErrors.articlesOfIncorporation = 'Articles of Incorporation/Certificate of Formation is required'
         if (!formData.irsDocument) newErrors.irsDocument = 'IRS Document is required'
@@ -360,9 +393,11 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (validateStep()) {
       if (currentStep < STEPS.length) {
+        const savedId = await saveDraft(applicationId, currentStep, formData)
+        if (savedId && !applicationId) setApplicationId(savedId)
         setCurrentStep(currentStep + 1)
         window.scrollTo(0, 0)
       }
@@ -381,13 +416,11 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
     window.scrollTo(0, 0)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!validateStep()) return
 
-    if (!validateStep()) {
-      return
-    }
-
+    await saveApplication(applicationId, formData)
     onSubmit(formData)
     setSubmitted(true)
   }
@@ -426,6 +459,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel }) {
             formData={formData}
             errors={errors}
             handleInputChange={handleInputChange}
+            copyStoreToMailing={copyStoreToMailing}
             handleOwnerChange={handleOwnerChange}
             addOwner={addOwner}
             removeOwner={removeOwner}

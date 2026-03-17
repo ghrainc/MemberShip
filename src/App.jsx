@@ -8,9 +8,10 @@ import EmployeeDashboard from './components/EmployeeDashboard'
 import './App.css'
 
 function AppContent() {
-  const { isAuthenticated, currentUser, logout, saveApplication } = useContext(AuthContext)
-  const [screen, setScreen] = useState('login') // 'login', 'dashboard', 'form', 'view', 'employee-dashboard', 'employee-view'
+  const { isAuthenticated, currentUser, logout, getApplicationById } = useContext(AuthContext)
+  const [screen, setScreen] = useState('login')
   const [selectedAppId, setSelectedAppId] = useState(null)
+  const [draftData, setDraftData] = useState(null) // { applicationId, formData, currentStep }
 
   const handleLoginSuccess = (designMode) => {
     if (designMode === 'employee') {
@@ -21,7 +22,20 @@ function AppContent() {
   }
 
   const handleNewApplication = () => {
+    setDraftData(null)
     setScreen('form')
+  }
+
+  const handleContinueApplication = async (appId) => {
+    const app = await getApplicationById(appId)
+    if (app) {
+      setDraftData({
+        applicationId: app.Id,
+        formData: app.FormData,
+        currentStep: app.CurrentStep || 1
+      })
+      setScreen('form')
+    }
   }
 
   const handleViewApplication = (appId) => {
@@ -33,11 +47,9 @@ function AppContent() {
     }
   }
 
-  const handleFormSubmit = (formData) => {
-    if (currentUser?.email) {
-      saveApplication(currentUser.email, formData)
-      setScreen('dashboard')
-    }
+  const handleFormSubmit = () => {
+    setDraftData(null)
+    setScreen('dashboard')
   }
 
   const handleBackToDashboard = () => {
@@ -62,6 +74,7 @@ function AppContent() {
         <Dashboard
           onNewApplication={handleNewApplication}
           onViewApplication={handleViewApplication}
+          onContinueApplication={handleContinueApplication}
           onLogout={handleLogout}
         />
       )}
@@ -70,6 +83,9 @@ function AppContent() {
           userEmail={currentUser?.email}
           onSubmit={handleFormSubmit}
           onCancel={handleBackToDashboard}
+          initialApplicationId={draftData?.applicationId}
+          initialFormData={draftData?.formData}
+          initialStep={draftData?.currentStep || 1}
         />
       )}
       {screen === 'view' && selectedAppId && (

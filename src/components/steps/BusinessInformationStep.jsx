@@ -115,7 +115,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="ein">EIN (Fed Tax ID #) *</label>
+            <label htmlFor="ein">{formData.ownershipType === 'sole-proprietor' ? 'SSN *' : 'EIN (Fed Tax ID #) *'}</label>
             <input
               type="text"
               id="ein"

@@ -1,11 +1,19 @@
-import { useContext } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import '../styles/Dashboard.css'
 
-function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
+function Dashboard({ onNewApplication, onViewApplication, onContinueApplication, onLogout }) {
   const { currentUser, getUserApplications } = useContext(AuthContext)
-  const applications = getUserApplications(currentUser?.email)
+  const [applications, setApplications] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getUserApplications().then(data => {
+      setApplications(data || [])
+      setLoading(false)
+    })
+  }, [])
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
@@ -18,10 +26,10 @@ function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
 
   const getStatusBadge = (status) => {
     const statusMap = {
-      submitted: { label: 'Submitted', class: 'status-submitted' },
-      approved: { label: 'Approved', class: 'status-approved' },
-      pending: { label: 'Pending Review', class: 'status-pending' },
-      rejected: { label: 'Needs Revision', class: 'status-rejected' }
+      draft:     { label: 'Draft',          class: 'status-pending' },
+      submitted: { label: 'Submitted',      class: 'status-submitted' },
+      approved:  { label: 'Approved',       class: 'status-approved' },
+      rejected:  { label: 'Needs Revision', class: 'status-rejected' }
     }
     const statusInfo = statusMap[status] || { label: status, class: 'status-unknown' }
     return <span className={`status-badge ${statusInfo.class}`}>{statusInfo.label}</span>
@@ -57,9 +65,11 @@ function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
             <div className="section-title">
               <h2>Your Applications</h2>
               <p className="section-subtitle">
-                {applications.length === 0 
-                  ? "You haven't submitted any applications yet" 
-                  : `You have ${applications.length} application${applications.length !== 1 ? 's' : ''}`}
+                {loading
+                  ? 'Loading...'
+                  : applications.length === 0
+                    ? "You haven't submitted any applications yet"
+                    : `You have ${applications.length} application${applications.length !== 1 ? 's' : ''}`}
               </p>
             </div>
             <button className="new-app-button" onClick={onNewApplication}>
@@ -67,7 +77,9 @@ function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
             </button>
           </div>
 
-          {applications.length === 0 ? (
+          {loading ? (
+            <div className="empty-state"><p>Loading applications...</p></div>
+          ) : applications.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📋</div>
               <h3>No Applications Yet</h3>
@@ -79,41 +91,52 @@ function Dashboard({ onNewApplication, onViewApplication, onLogout }) {
           ) : (
             <div className="applications-grid">
               {applications.map((app) => (
-                <div key={app.id} className="application-card">
+                <div key={app.Id} className="application-card">
                   <div className="card-header">
                     <div className="card-title-section">
-                      <h3>{app.storeName}</h3>
-                      {getStatusBadge(app.status)}
+                      <h3>{app.StoreName || 'Unnamed Application'}</h3>
+                      {getStatusBadge(app.Status)}
                     </div>
-                    <span className="app-id">ID: {app.id}</span>
+                    <span className="app-id">ID: {app.Id}</span>
                   </div>
 
                   <div className="card-body">
                     <div className="app-info">
                       <div className="info-item">
                         <span className="info-label">Address</span>
-                        <span className="info-value">{app.storeAddress || 'Not provided'}</span>
+                        <span className="info-value">{app.StoreAddress || 'Not provided'}</span>
                       </div>
                       <div className="info-item">
-                        <span className="info-label">Submitted</span>
-                        <span className="info-value">{formatDate(app.submittedDate)}</span>
+                        <span className="info-label">Date</span>
+                        <span className="info-value">{formatDate(app.CreatedAt)}</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="card-actions">
-                    <button
-                      className="action-button view-button"
-                      onClick={() => onViewApplication(app.id)}
-                    >
-                      View Details
-                    </button>
-                    <button
-                      className="action-button download-button"
-                      onClick={() => generateApplicationPDF(app)}
-                    >
-                      Download PDF
-                    </button>
+                    {app.Status === 'draft' ? (
+                      <button
+                        className="action-button view-button"
+                        onClick={() => onContinueApplication(app.Id)}
+                      >
+                        Continue Editing
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          className="action-button view-button"
+                          onClick={() => onViewApplication(app.Id)}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          className="action-button download-button"
+                          onClick={() => generateApplicationPDF(app)}
+                        >
+                          Download PDF
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

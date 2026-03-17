@@ -104,30 +104,7 @@ function OwnersManagementStep({
                   value={owner.mobilePhone}
                   onChange={(e) => handleOwnerChange(index, 'mobilePhone', e.target.value)}
                   className="form-input"
-                  placeholder="(XXX) XXX-XXXX"
-                />
-              </div>
-              <div className="form-group">
-                <label>Home Phone</label>
-                <input
-                  type="tel"
-                  value={owner.homePhone}
-                  onChange={(e) => handleOwnerChange(index, 'homePhone', e.target.value)}
-                  className="form-input"
-                  placeholder="(XXX) XXX-XXXX"
-                />
-              </div>
-            </div>
-
-            <div className="owners-row-item">
-              <div className="form-group">
-                <label>Social Security Number</label>
-                <input
-                  type="text"
-                  value={owner.socialSecurityNumber}
-                  onChange={(e) => handleOwnerChange(index, 'socialSecurityNumber', e.target.value)}
-                  className="form-input"
-                  placeholder="XXX-XX-XXXX"
+                  placeholder="XXX-XXX-XXXX"
                 />
               </div>
               <div className="form-group">
@@ -164,6 +141,12 @@ function OwnersManagementStep({
         >
           + Add Another Owner/Partner
         </button>
+
+        {errors.ownershipTotal && (
+          <div className="ownership-total-error">
+            {errors.ownershipTotal}
+          </div>
+        )}
       </fieldset>
 
       <fieldset className="form-section">
@@ -237,7 +220,7 @@ function OwnersManagementStep({
               value={formData.storeManagerMobile}
               onChange={handleInputChange}
               className="form-input"
-              placeholder="(XXX) XXX-XXXX"
+              placeholder="XXX-XXX-XXXX"
             />
           </div>
         </div>

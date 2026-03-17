@@ -1,13 +1,28 @@
 import '../../styles/steps/DocumentUploadStep.css'
 
 function DocumentUploadStep({ formData, errors, handleInputChange }) {
+  const owners = formData.owners || []
+  const multipleOwners = owners.length > 1
+
+  const driverLicenseDocs = multipleOwners
+    ? owners.map((owner, index) => {
+        const name = [owner.firstName, owner.lastName].filter(Boolean).join(' ') || `Owner ${index + 1}`
+        return {
+          id: `driverLicense_owner_${index}`,
+          title: `Driver License — ${name}`,
+          description: 'Driver License copy (Picture and text must be visible)',
+          required: true
+        }
+      })
+    : [{
+        id: 'driverLicenseCopies',
+        title: 'Driver License Copies',
+        description: 'Driver License Copies of Authorized Representative and all Company Officers (Picture and text must be visible)',
+        required: true
+      }]
+
   const documents = [
-    {
-      id: 'driverLicenseCopies',
-      title: 'Driver License Copies',
-      description: 'Driver License Copies of Authorized Representative and all Company Officers (Picture and text must be visible)',
-      required: true
-    },
+    ...driverLicenseDocs,
     {
       id: 'salesTaxPermit',
       title: 'Sales Tax Permit',

@@ -11,29 +11,32 @@ function LoginPage({ onDesignSelect }) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [localError, setLocalError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLocalError('')
+    setSuccessMessage('')
 
     if (isEmployee) {
-      if (employeeLogin(email, password)) {
-        onDesignSelect?.('employee')
-      } else {
-        setLocalError(error)
-      }
+      const result = await employeeLogin(email, password)
+      if (result === true) onDesignSelect?.('employee')
+      else setLocalError(result)
     } else if (isSignup) {
-      if (signup(email, password, confirmPassword)) {
-        onDesignSelect?.(designMode)
+      const result = await signup(email, password, confirmPassword)
+      if (result === true) {
+        setIsSignup(false)
+        setEmail('')
+        setPassword('')
+        setConfirmPassword('')
+        setSuccessMessage('Account created successfully! Please log in.')
       } else {
-        setLocalError(error)
+        setLocalError(result)
       }
     } else {
-      if (login(email, password)) {
-        onDesignSelect?.(designMode)
-      } else {
-        setLocalError(error)
-      }
+      const result = await login(email, password)
+      if (result === true) onDesignSelect?.(designMode)
+      else setLocalError(result)
     }
   }
 
@@ -43,6 +46,7 @@ function LoginPage({ onDesignSelect }) {
     setPassword('')
     setConfirmPassword('')
     setLocalError('')
+    setSuccessMessage('')
   }
 
   const handleToggleEmployeeMode = () => {
@@ -127,6 +131,7 @@ function LoginPage({ onDesignSelect }) {
               </div>
             )}
 
+            {successMessage && <div className="success-message">{successMessage}</div>}
             {(localError || error) && <div className="error-message">{localError || error}</div>}
 
             <button type="submit" className="login-button">
@@ -228,7 +233,8 @@ function LoginPage({ onDesignSelect }) {
                   </div>
                 )}
 
-                {(localError || error) && <div className="error-message">{localError || error}</div>}
+                {successMessage && <div className="success-message">{successMessage}</div>}
+            {(localError || error) && <div className="error-message">{localError || error}</div>}
 
                 <button type="submit" className="login-button">
                   {isSignup ? 'Create Account' : 'Sign In'}
