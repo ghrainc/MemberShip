@@ -37,7 +37,7 @@ const STEPS = [
 ]
 
 function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1 }) {
-  const { saveDraft, saveApplication } = useContext(AuthContext)
+  const { saveDraft, saveApplication, uploadDocument, removeDocument } = useContext(AuthContext)
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [applicationId, setApplicationId] = useState(initialApplicationId)
   const [formData, setFormData] = useState(initialFormData || {
@@ -470,6 +470,9 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
             handleAchToBankMapping={handleAchToBankMapping}
             handleBankInfoChange={handleBankInfoChange}
             addBankAccount={addBankAccount}
+            applicationId={applicationId}
+            uploadDocument={uploadDocument}
+            removeDocument={removeDocument}
           />
         </div>
 

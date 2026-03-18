@@ -8,6 +8,10 @@ function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
 }
 
+function authHeadersMultipart(token) {
+  return { Authorization: `Bearer ${token}` }
+}
+
 export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [currentUser, setCurrentUser] = useState(null)
@@ -160,6 +164,34 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const removeDocument = useCallback(async (applicationId, docId) => {
+    if (!token) return
+    try {
+      await fetch(`${API}/documents/${applicationId}/${docId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+    } catch {
+      // best-effort — ignore errors
+    }
+  }, [token])
+
+  const uploadDocument = useCallback(async (applicationId, docId, file) => {
+    if (!token) throw new Error('Not authenticated')
+    const body = new FormData()
+    body.append('file', file)
+    body.append('applicationId', applicationId)
+    body.append('docId', docId)
+    const res = await fetch(`${API}/documents/upload`, {
+      method: 'POST',
+      headers: authHeadersMultipart(token),
+      body
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Upload failed')
+    return data // { filename, originalName, url }
+  }, [token])
+
   const updateApplicationStatus = useCallback(async (appId, status, notes = '') => {
     if (!token) return false
     try {
@@ -188,7 +220,9 @@ export const AuthProvider = ({ children }) => {
       getUserApplications,
       getApplicationById,
       getAllApplications,
-      updateApplicationStatus
+      updateApplicationStatus,
+      uploadDocument,
+      removeDocument
     }}>
       {children}
     </AuthContext.Provider>

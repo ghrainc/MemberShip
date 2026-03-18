@@ -3,11 +3,29 @@ const cors = require('cors')
 const sql = require('mssql')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
+const multer = require('multer')
+const path = require('path')
+const fs = require('fs')
 require('dotenv').config()
+
+const PORT = process.env.PORT || 3001
+
+const ALLOWED_EXTENSIONS = new Set(['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase()
+    if (ALLOWED_EXTENSIONS.has(ext)) cb(null, true)
+    else cb(new Error('Invalid file type. Only PDF, Word documents, and images are allowed.'))
+  }
+})
 
 const app = express()
 app.use(cors({ origin: 'http://localhost:5173' }))
 app.use(express.json({ limit: '10mb' }))
+app.use('/uploads', express.static(path.join(__dirname, 'UploadedDocuments')))
 
 // ── DB connection ────────────────────────────────────────────────────────────
 
@@ -259,9 +277,56 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
   }
 })
 
+// ── Document upload ──────────────────────────────────────────────────────────
+
+// POST /api/documents/upload
+app.post('/api/documents/upload', authMiddleware, (req, res) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message })
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+
+    const { applicationId, docId } = req.body
+    if (!applicationId) return res.status(400).json({ error: 'applicationId is required' })
+
+    const ext = path.extname(req.file.originalname).toLowerCase()
+    const filename = `${docId}${ext}`
+    const dir = path.join(__dirname, 'UploadedDocuments', String(applicationId))
+
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, filename), req.file.buffer)
+
+    res.json({
+      filename,
+      originalName: req.file.originalname,
+      url: `http://localhost:${PORT}/uploads/${applicationId}/${filename}`
+    })
+  })
+})
+
+// DELETE /api/documents/:applicationId/:docId  — remove an uploaded file
+app.delete('/api/documents/:applicationId/:docId', authMiddleware, (req, res) => {
+  const { applicationId, docId } = req.params
+  const dir = path.join(__dirname, 'UploadedDocuments', String(applicationId))
+
+  // Find the file that starts with docId (extension may vary)
+  let deleted = false
+  if (fs.existsSync(dir)) {
+    const files = fs.readdirSync(dir)
+    for (const file of files) {
+      const nameWithoutExt = path.basename(file, path.extname(file))
+      if (nameWithoutExt === docId) {
+        fs.unlinkSync(path.join(dir, file))
+        deleted = true
+        break
+      }
+    }
+  }
+
+  res.json({ deleted })
+})
+
 // ── Start ────────────────────────────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3001
 app.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`)
   try {

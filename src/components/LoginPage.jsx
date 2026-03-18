@@ -71,25 +71,8 @@ function LoginPage({ onDesignSelect }) {
             />
             <h1>GHRA Application Portal</h1>
             <p className="login-subtitle">
-              {isEmployee ? 'Employee Login' : (isSignup ? 'Create Your Account' : 'Welcome Back')}
+              {isEmployee ? 'Employee Login' : 'Welcome Back'}
             </p>
-          </div>
-
-          <div className="login-mode-selector">
-            <button
-              type="button"
-              className={`mode-button ${!isEmployee ? 'active' : ''}`}
-              onClick={() => isEmployee && handleToggleEmployeeMode()}
-            >
-              Member Login
-            </button>
-            <button
-              type="button"
-              className={`mode-button ${isEmployee ? 'active' : ''}`}
-              onClick={() => !isEmployee && handleToggleEmployeeMode()}
-            >
-              Employee Login
-            </button>
           </div>
 
           <form onSubmit={handleSubmit} className="login-form">
@@ -117,51 +100,32 @@ function LoginPage({ onDesignSelect }) {
               />
             </div>
 
-            {!isEmployee && isSignup && (
-              <div className="form-group">
-                <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
-                <input
-                  type="password"
-                  id="confirmPassword"
-                  className="form-input"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm your password"
-                />
-              </div>
-            )}
-
             {successMessage && <div className="success-message">{successMessage}</div>}
             {(localError || error) && <div className="error-message">{localError || error}</div>}
 
             <button type="submit" className="login-button">
-              {isEmployee ? 'Sign In as Employee' : (isSignup ? 'Create Account' : 'Sign In')}
+              {isEmployee ? 'Sign In as Employee' : 'Sign In'}
             </button>
           </form>
 
-          {!isEmployee && (
-            <div className="login-footer">
-              <p>
-                {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
-                <button type="button" className="toggle-button" onClick={handleToggleMode}>
-                  {isSignup ? 'Sign In' : 'Sign Up'}
-                </button>
-              </p>
+          <div className="employee-login-section">
+            <div className="employee-divider">
+              <span>or</span>
             </div>
-          )}
-
-          <div className="demo-info">
-            <p><strong>Demo Credentials:</strong></p>
             {isEmployee ? (
-              <>
-                <p>Email: admin@ghra.com</p>
-                <p>Password: admin123</p>
-              </>
+              <button type="button" className="employee-toggle-button" onClick={handleToggleEmployeeMode}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="employee-toggle-icon">
+                  <path d="M19 12H5M12 5l-7 7 7 7"/>
+                </svg>
+                Back to Member Login
+              </button>
             ) : (
-              <>
-                <p>Email: john@example.com</p>
-                <p>Password: password123</p>
-              </>
+              <button type="button" className="employee-toggle-button" onClick={handleToggleEmployeeMode}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="employee-toggle-icon">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Employee Portal
+              </button>
             )}
           </div>
         </div>

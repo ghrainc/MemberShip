@@ -340,21 +340,55 @@
   color: #764ba2;
 }
 
-.demo-info {
+.employee-login-section {
+  margin-top: 10px;
+}
+
+.employee-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  color: #bdc3c7;
+  font-size: 13px;
+}
+
+.employee-divider::before,
+.employee-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e0e6ed;
+}
+
+.employee-toggle-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 16px;
   background: #f8f9fa;
-  padding: 15px;
+  color: #7f8c8d;
+  border: 1px solid #e0e6ed;
   border-radius: 6px;
-  font-size: 12px;
-  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.demo-info p {
-  margin: 4px 0;
+.employee-toggle-button:hover {
+  background: #f0f4ff;
+  color: #667eea;
+  border-color: #667eea;
 }
 
-.demo-info p:first-child {
-  font-weight: 600;
-  margin-bottom: 8px;
+.employee-toggle-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+  flex-shrink: 0;
 }
 
 /* Design 2: Professional Split */
