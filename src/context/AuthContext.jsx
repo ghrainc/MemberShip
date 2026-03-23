@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = useCallback(async (email, password) => {
     setError('')
-    if (!email || !password) { setError('Email and password are required'); return false }
+    if (!email || !password) { setError('Email and password are required'); return { success: false, error: 'Email and password are required' } }
 
     try {
       const res = await fetch(`${API}/auth/login`, {
@@ -32,16 +32,16 @@ export const AuthProvider = ({ children }) => {
       if (!res.ok || data.role !== 'member') {
         const msg = data.error || 'Invalid email or password'
         setError(msg)
-        return msg
+        return { success: false, error: msg }
       }
       setToken(data.token)
       setIsAuthenticated(true)
-      setCurrentUser({ email: data.email, role: data.role })
-      return true
+      setCurrentUser({ email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword })
+      return { success: true, mustChangePassword: !!data.mustChangePassword }
     } catch {
       const msg = 'Unable to connect to server'
       setError(msg)
-      return msg
+      return { success: false, error: msg }
     }
   }, [])
 
@@ -206,6 +206,54 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const employeeUpdateApplication = useCallback(async (appId, formData) => {
+    if (!token) return false
+    try {
+      const res = await fetch(`${API}/applications/${appId}`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({ formData })
+      })
+      return res.ok
+    } catch {
+      return false
+    }
+  }, [token])
+
+  const changePassword = useCallback(async (newPassword) => {
+    if (!token) return 'Not authenticated'
+    try {
+      const res = await fetch(`${API}/auth/change-password`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ newPassword })
+      })
+      const data = await res.json()
+      if (!res.ok) return data.error || 'Failed to change password'
+      // Clear mustChangePassword flag in local state
+      setCurrentUser(prev => prev ? { ...prev, mustChangePassword: false } : prev)
+      return true
+    } catch {
+      return 'Unable to connect to server'
+    }
+  }, [token])
+
+  const createMember = useCallback(async (email, password) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/auth/create-member`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ email, password })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to create member' }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
@@ -221,6 +269,9 @@ export const AuthProvider = ({ children }) => {
       getApplicationById,
       getAllApplications,
       updateApplicationStatus,
+      employeeUpdateApplication,
+      changePassword,
+      createMember,
       uploadDocument,
       removeDocument
     }}>

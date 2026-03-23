@@ -36,7 +36,7 @@ const STEPS = [
   { id: 10, title: 'Agreements', component: AgreementsStep }
 ]
 
-function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1 }) {
+function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1, isEmployeeEdit = false, onEmployeeSave = null }) {
   const { saveDraft, saveApplication, uploadDocument, removeDocument } = useContext(AuthContext)
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [applicationId, setApplicationId] = useState(initialApplicationId)
@@ -396,8 +396,10 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
   const handleNext = async () => {
     if (validateStep()) {
       if (currentStep < STEPS.length) {
-        const savedId = await saveDraft(applicationId, currentStep, formData)
-        if (savedId && !applicationId) setApplicationId(savedId)
+        if (!isEmployeeEdit) {
+          const savedId = await saveDraft(applicationId, currentStep, formData)
+          if (savedId && !applicationId) setApplicationId(savedId)
+        }
         setCurrentStep(currentStep + 1)
         window.scrollTo(0, 0)
       }
@@ -420,9 +422,14 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
     e.preventDefault()
     if (!validateStep()) return
 
-    await saveApplication(applicationId, formData)
-    onSubmit(formData)
-    setSubmitted(true)
+    if (isEmployeeEdit && onEmployeeSave) {
+      await onEmployeeSave(applicationId, formData)
+      onSubmit(formData)
+    } else {
+      await saveApplication(applicationId, formData)
+      onSubmit(formData)
+      setSubmitted(true)
+    }
   }
 
   if (submitted) {
@@ -491,7 +498,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
               type="submit"
               className="nav-button submit-button"
             >
-              Submit Application
+              {isEmployeeEdit ? 'Save Changes' : 'Submit Application'}
             </button>
           ) : (
             <button

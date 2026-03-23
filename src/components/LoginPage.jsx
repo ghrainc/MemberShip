@@ -1,5 +1,6 @@
 import { useState, useContext } from 'react'
 import { AuthContext } from '../context/AuthContext'
+import PasswordInput from './PasswordInput'
 import '../styles/LoginPage.css'
 
 function LoginPage({ onDesignSelect }) {
@@ -35,8 +36,15 @@ function LoginPage({ onDesignSelect }) {
       }
     } else {
       const result = await login(email, password)
-      if (result === true) onDesignSelect?.(designMode)
-      else setLocalError(result)
+      if (result?.success) {
+        if (result.mustChangePassword) {
+          onDesignSelect?.('change-password')
+        } else {
+          onDesignSelect?.(designMode)
+        }
+      } else {
+        setLocalError(result?.error || result || 'Login failed')
+      }
     }
   }
 
@@ -90,13 +98,12 @@ function LoginPage({ onDesignSelect }) {
 
             <div className="form-group">
               <label htmlFor="password" className="form-label">Password</label>
-              <input
-                type="password"
+              <PasswordInput
                 id="password"
-                className="form-input"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
+                className="form-input"
               />
             </div>
 
@@ -173,32 +180,30 @@ function LoginPage({ onDesignSelect }) {
 
                 <div className="form-group">
                   <label htmlFor="password" className="form-label">Password</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     id="password"
-                    className="form-input"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
+                    className="form-input"
                   />
                 </div>
 
                 {isSignup && (
                   <div className="form-group">
                     <label htmlFor="confirmPassword" className="form-label">Confirm Password</label>
-                    <input
-                      type="password"
+                    <PasswordInput
                       id="confirmPassword"
-                      className="form-input"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm your password"
+                      className="form-input"
                     />
                   </div>
                 )}
 
                 {successMessage && <div className="success-message">{successMessage}</div>}
-            {(localError || error) && <div className="error-message">{localError || error}</div>}
+                {(localError || error) && <div className="error-message">{localError || error}</div>}
 
                 <button type="submit" className="login-button">
                   {isSignup ? 'Create Account' : 'Sign In'}

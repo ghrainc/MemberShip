@@ -97,10 +97,13 @@
 
 .form-section legend {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
   color: #2c3e50;
-  margin: 0 0 15px 0;
+  margin: 0 0 16px 0;
   display: block;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+  width: 100%;
 }
 
 .form-section + .form-section legend {
@@ -109,17 +112,35 @@
 
 .form-section-inner {
   background: #f8f9fa;
-  padding: 20px;
+  padding: 18px 20px;
   border-radius: 6px;
-  margin-bottom: 20px;
+  border-left: 3px solid #667eea;
+  margin-bottom: 16px;
+}
+
+.form-section-inner:last-child {
+  margin-bottom: 0;
 }
 
 .form-section-inner .inner-legend {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 15px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 14px;
   display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inner-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.inner-section-header .inner-legend {
+  margin-bottom: 0;
 }
 
 .section-note {

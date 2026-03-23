@@ -1,3 +1,75 @@
+/* ── Documents review section ─────────────────────────────────────────────── */
+
+.documents-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.document-review-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #f8f9fa;
+  border: 1px solid #e0e6ed;
+}
+
+.doc-status-icon {
+  font-size: 14px;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.doc-status-icon.uploaded {
+  background: #d4edda;
+  color: #27ae60;
+}
+
+.doc-status-icon.missing {
+  background: #f8d7da;
+  color: #e74c3c;
+}
+
+.doc-review-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2c3e50;
+  flex: 1;
+}
+
+.doc-review-filename {
+  font-size: 12px;
+  color: #7f8c8d;
+  font-style: italic;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-preview-link {
+  font-size: 12px;
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.doc-preview-link:hover {
+  text-decoration: underline;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+
 .membership-container.view-app-mode {
   max-width: 900px;
   margin: 0 auto;
@@ -63,27 +135,41 @@
   margin: 0;
 }
 
+/* Add spacing + a separator line between consecutive fieldsets inside the review */
+.view-app-form .step-content > .form-section + .form-section,
+.view-app-form .step-content > fieldset + fieldset {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #e0e6ed;
+}
+
 .form-section legend {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
   color: #2c3e50;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   display: block;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+  width: 100%;
 }
 
 .form-section-inner {
   background: #f8f9fa;
-  padding: 20px;
+  padding: 18px 20px;
   border-radius: 6px;
-  margin-bottom: 20px;
+  border-left: 3px solid #667eea;
+  margin-bottom: 16px;
 }
 
 .form-section-inner .inner-legend {
-  font-size: 14px;
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 15px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 14px;
   display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .info-field {
@@ -226,6 +312,16 @@
 .nav-button.download-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+}
+
+.nav-button.edit-action-button {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.nav-button.edit-action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 .nav-button.approve-action-button {
@@ -374,3 +470,4 @@
     gap: 12px;
   }
 }
+

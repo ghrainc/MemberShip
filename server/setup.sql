@@ -4,11 +4,12 @@ GO
 
 -- Users table (members + employees)
 CREATE TABLE Users (
-  Id            INT IDENTITY(1,1) PRIMARY KEY,
-  Email         NVARCHAR(255)  NOT NULL UNIQUE,
-  PasswordHash  NVARCHAR(255)  NOT NULL,
-  Role          NVARCHAR(20)   NOT NULL DEFAULT 'member',  -- 'member' or 'employee'
-  CreatedAt     DATETIME       NOT NULL DEFAULT GETDATE()
+  Id                  INT IDENTITY(1,1) PRIMARY KEY,
+  Email               NVARCHAR(255)  NOT NULL UNIQUE,
+  PasswordHash        NVARCHAR(255)  NOT NULL,
+  Role                NVARCHAR(20)   NOT NULL DEFAULT 'member',  -- 'member' or 'employee'
+  MustChangePassword  BIT            NOT NULL DEFAULT 0,          -- 1 = forced change on next login
+  CreatedAt           DATETIME       NOT NULL DEFAULT GETDATE()
 );
 GO
 

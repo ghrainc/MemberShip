@@ -121,6 +121,21 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
                       >
                         Continue Editing
                       </button>
+                    ) : app.Status === 'rejected' ? (
+                      <>
+                        <button
+                          className="action-button view-button"
+                          onClick={() => onViewApplication(app.Id)}
+                        >
+                          View Details
+                        </button>
+                        <button
+                          className="action-button resubmit-button"
+                          onClick={() => onContinueApplication(app.Id)}
+                        >
+                          Edit &amp; Resubmit
+                        </button>
+                      </>
                     ) : (
                       <>
                         <button

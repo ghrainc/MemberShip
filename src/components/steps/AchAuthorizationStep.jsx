@@ -136,6 +136,7 @@ function AchAuthorizationStep({
                     onChange={(e) => handleBankInfoChange(account.id, 'bankName', e.target.value)}
                     className="form-input"
                     placeholder="e.g., Chase Bank, Wells Fargo, Bank of America"
+                    maxLength={50}
                   />
                 </div>
 
@@ -149,6 +150,7 @@ function AchAuthorizationStep({
                       onChange={(e) => handleBankInfoChange(account.id, 'bankAddress', e.target.value)}
                       className="form-input"
                       placeholder="Street Address"
+                      maxLength={50}
                     />
                   </div>
                 </div>
@@ -163,6 +165,7 @@ function AchAuthorizationStep({
                       onChange={(e) => handleBankInfoChange(account.id, 'bankCity', e.target.value)}
                       className="form-input"
                       placeholder="City"
+                      maxLength={50}
                     />
                   </div>
                   <div className="form-group">
@@ -174,6 +177,7 @@ function AchAuthorizationStep({
                       onChange={(e) => handleBankInfoChange(account.id, 'bankState', e.target.value)}
                       className="form-input"
                       placeholder="State"
+                      maxLength={50}
                     />
                   </div>
                   <div className="form-group">
@@ -182,9 +186,11 @@ function AchAuthorizationStep({
                       type="text"
                       id={`bankZip-${account.id}`}
                       value={account.bankZip}
-                      onChange={(e) => handleBankInfoChange(account.id, 'bankZip', e.target.value)}
+                      onChange={(e) => handleBankInfoChange(account.id, 'bankZip', e.target.value.replace(/\D/g, ''))}
                       className="form-input"
-                      placeholder="Zip Code"
+                      placeholder="Numbers only"
+                      maxLength={20}
+                      inputMode="numeric"
                     />
                   </div>
                 </div>
@@ -196,9 +202,11 @@ function AchAuthorizationStep({
                       type="text"
                       id={`transitAbaNumber-${account.id}`}
                       value={account.transitAbaNumber}
-                      onChange={(e) => handleBankInfoChange(account.id, 'transitAbaNumber', e.target.value)}
+                      onChange={(e) => handleBankInfoChange(account.id, 'transitAbaNumber', e.target.value.replace(/\D/g, ''))}
                       className="form-input"
-                      placeholder="9-digit routing number"
+                      placeholder="Numbers only"
+                      maxLength={20}
+                      inputMode="numeric"
                     />
                   </div>
                   <div className="form-group">
@@ -207,9 +215,11 @@ function AchAuthorizationStep({
                       type="text"
                       id={`accountNumber-${account.id}`}
                       value={account.accountNumber}
-                      onChange={(e) => handleBankInfoChange(account.id, 'accountNumber', e.target.value)}
+                      onChange={(e) => handleBankInfoChange(account.id, 'accountNumber', e.target.value.replace(/\D/g, ''))}
                       className="form-input"
-                      placeholder="Account number"
+                      placeholder="Numbers only"
+                      maxLength={20}
+                      inputMode="numeric"
                     />
                   </div>
                 </div>

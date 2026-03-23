@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''nodemailer''\\); console.log\\(''nodemailer ok''\\)\")",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

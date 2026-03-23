@@ -1,90 +1,79 @@
+// Helpers
+const numericInput = (handleInputChange, name) => (e) => {
+  const value = e.target.value.replace(/\D/g, '')
+  handleInputChange({ target: { name, value, type: 'text' } })
+}
+
+function formatEin(raw, isSoleProprietor) {
+  const digits = raw.replace(/\D/g, '')
+  if (isSoleProprietor) {
+    // SSN: XXX-XX-XXXX (9 digits)
+    const d = digits.slice(0, 9)
+    if (d.length <= 3) return d
+    if (d.length <= 5) return `${d.slice(0, 3)}-${d.slice(3)}`
+    return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`
+  } else {
+    // EIN: XX-XXXXXXX (9 digits)
+    const d = digits.slice(0, 9)
+    if (d.length <= 2) return d
+    return `${d.slice(0, 2)}-${d.slice(2)}`
+  }
+}
+
 function BusinessInformationStep({ formData, errors, handleInputChange }) {
+  const isSoleProprietor = formData.ownershipType === 'sole-proprietor'
+
+  const handleEinChange = (e) => {
+    const formatted = formatEin(e.target.value, isSoleProprietor)
+    handleInputChange({ target: { name: 'ein', value: formatted, type: 'text' } })
+  }
+
   return (
-    <>
-      <fieldset className="form-section">
-        <legend>Type of Ownership</legend>
+    <fieldset className="form-section">
+      <legend>Business Information</legend>
+
+      <div className="form-section-inner">
+        <span className="inner-legend">Type of Ownership</span>
         <div className="radio-group radio-group-row">
           <label className="radio-label">
-            <input
-              type="radio"
-              name="ownershipType"
-              value="sole-proprietor"
-              checked={formData.ownershipType === 'sole-proprietor'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="ownershipType" value="sole-proprietor" checked={formData.ownershipType === 'sole-proprietor'} onChange={handleInputChange} />
             Sole Proprietorship
           </label>
           <label className="radio-label">
-            <input
-              type="radio"
-              name="ownershipType"
-              value="partnership"
-              checked={formData.ownershipType === 'partnership'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="ownershipType" value="partnership" checked={formData.ownershipType === 'partnership'} onChange={handleInputChange} />
             Partnership
           </label>
           <label className="radio-label">
-            <input
-              type="radio"
-              name="ownershipType"
-              value="limited-partnership"
-              checked={formData.ownershipType === 'limited-partnership'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="ownershipType" value="limited-partnership" checked={formData.ownershipType === 'limited-partnership'} onChange={handleInputChange} />
             Limited Partnership
           </label>
           <label className="radio-label">
-            <input
-              type="radio"
-              name="ownershipType"
-              value="corporation"
-              checked={formData.ownershipType === 'corporation'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="ownershipType" value="corporation" checked={formData.ownershipType === 'corporation'} onChange={handleInputChange} />
             Corporation
           </label>
           <label className="radio-label">
-            <input
-              type="radio"
-              name="ownershipType"
-              value="llc"
-              checked={formData.ownershipType === 'llc'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="ownershipType" value="llc" checked={formData.ownershipType === 'llc'} onChange={handleInputChange} />
             LLC
           </label>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="form-section">
-        <legend>Business Type</legend>
+      <div className="form-section-inner">
+        <span className="inner-legend">Business Type</span>
         <div className="radio-group radio-group-row">
           <label className="radio-label">
-            <input
-              type="radio"
-              name="businessType"
-              value="with-fuel"
-              checked={formData.businessType === 'with-fuel'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="businessType" value="with-fuel" checked={formData.businessType === 'with-fuel'} onChange={handleInputChange} />
             Convenience Store with Fuel
           </label>
           <label className="radio-label">
-            <input
-              type="radio"
-              name="businessType"
-              value="without-fuel"
-              checked={formData.businessType === 'without-fuel'}
-              onChange={handleInputChange}
-            />
+            <input type="radio" name="businessType" value="without-fuel" checked={formData.businessType === 'without-fuel'} onChange={handleInputChange} />
             Convenience Store without Fuel
           </label>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="form-section">
-        <legend>Business Information</legend>
+      <div className="form-section-inner">
+        <span className="inner-legend">Business Details</span>
 
         <div className="form-group">
           <label htmlFor="memberName">Member Name (Company Name) *</label>
@@ -96,6 +85,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
             onChange={handleInputChange}
             className={`form-input ${errors.memberName ? 'input-error' : ''}`}
             placeholder="Enter company name"
+            maxLength={50}
           />
           {errors.memberName && <span className="error-text">{errors.memberName}</span>}
         </div>
@@ -110,20 +100,24 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
             onChange={handleInputChange}
             className="form-input"
             placeholder="Enter DBA name if applicable"
+            maxLength={50}
           />
         </div>
 
         <div className="form-row">
           <div className="form-group">
-            <label htmlFor="ein">{formData.ownershipType === 'sole-proprietor' ? 'SSN *' : 'EIN (Fed Tax ID #) *'}</label>
+            <label htmlFor="ein">
+              {isSoleProprietor ? 'SSN * (XXX-XX-XXXX)' : 'EIN (Fed Tax ID #) * (XX-XXXXXXX)'}
+            </label>
             <input
               type="text"
               id="ein"
               name="ein"
               value={formData.ein}
-              onChange={handleInputChange}
+              onChange={handleEinChange}
               className={`form-input ${errors.ein ? 'input-error' : ''}`}
-              placeholder="XX-XXXXXXX"
+              placeholder={isSoleProprietor ? 'XXX-XX-XXXX' : 'XX-XXXXXXX'}
+              maxLength={isSoleProprietor ? 11 : 10}
             />
             {errors.ein && <span className="error-text">{errors.ein}</span>}
           </div>
@@ -135,17 +129,19 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
               id="salesTaxId"
               name="salesTaxId"
               value={formData.salesTaxId}
-              onChange={handleInputChange}
+              onChange={numericInput(handleInputChange, 'salesTaxId')}
               className={`form-input ${errors.salesTaxId ? 'input-error' : ''}`}
-              placeholder="Enter Sales Tax ID"
+              placeholder="Numbers only"
+              maxLength={20}
+              inputMode="numeric"
             />
             {errors.salesTaxId && <span className="error-text">{errors.salesTaxId}</span>}
           </div>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="form-section">
-        <legend>Authorized Representative</legend>
+      <div className="form-section-inner">
+        <span className="inner-legend">Authorized Representative</span>
 
         <div className="form-row">
           <div className="form-group">
@@ -158,6 +154,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
               onChange={handleInputChange}
               className={`form-input ${errors.authorizedRepFirstName ? 'input-error' : ''}`}
               placeholder="First Name"
+              maxLength={50}
             />
             {errors.authorizedRepFirstName && <span className="error-text">{errors.authorizedRepFirstName}</span>}
           </div>
@@ -172,7 +169,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
               onChange={handleInputChange}
               className="form-input"
               placeholder="M.I."
-              maxLength="2"
+              maxLength={2}
             />
           </div>
 
@@ -186,14 +183,15 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
               onChange={handleInputChange}
               className={`form-input ${errors.authorizedRepLastName ? 'input-error' : ''}`}
               placeholder="Last Name"
+              maxLength={50}
             />
             {errors.authorizedRepLastName && <span className="error-text">{errors.authorizedRepLastName}</span>}
           </div>
         </div>
-      </fieldset>
+      </div>
 
-      <fieldset className="form-section">
-        <legend>Previous Membership</legend>
+      <div className="form-section-inner">
+        <span className="inner-legend">Previous Membership</span>
 
         <div className="checkbox-group">
           <label className="checkbox-label">
@@ -218,11 +216,12 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
               onChange={handleInputChange}
               className="form-input"
               placeholder="Enter previous GHRA number"
+              maxLength={50}
             />
           </div>
         )}
-      </fieldset>
-    </>
+      </div>
+    </fieldset>
   )
 }
 

@@ -1,7 +1,4 @@
 function DonationsStep({ formData, handleInputChange }) {
-  // Note: Donation auth rep names are automatically filled from Authorized Representative fields
-  // If not filled, user can manually enter them
-
   return (
     <>
       <fieldset className="form-section">
@@ -20,103 +17,102 @@ function DonationsStep({ formData, handleInputChange }) {
             The sponsorship contributions are allocated as follows:
           </p>
         </div>
-      </fieldset>
 
-      <fieldset className="form-section">
-        <legend className="donation-org-title">AGA KHAN DEVELOPMENT NETWORK (AKDN)</legend>
+        <div className="form-section-inner">
+          <span className="inner-legend">AGA Khan Development Network (AKDN)</span>
 
-        <p className="donation-instruction">Please Select One</p>
+          <p className="donation-instruction">Please Select One</p>
 
-        <div className="donation-options-group">
-          <label className="donation-radio-label">
-            <input
-              type="radio"
-              name="akdnContribute"
-              value="yes"
-              checked={formData.akdnContribute === 'yes'}
-              onChange={handleInputChange}
-            />
-            <span>YES, I would like to contribute $100 or More $
+          <div className="donation-options-group">
+            <label className="donation-radio-label">
               <input
-                type="number"
-                name="akdnAmount"
-                value={formData.akdnAmount || ''}
+                type="radio"
+                name="akdnContribute"
+                value="yes"
+                checked={formData.akdnContribute === 'yes'}
                 onChange={handleInputChange}
-                placeholder="______"
-                className="donation-amount-input"
-                disabled={formData.akdnContribute !== 'yes'}
-                min="100"
               />
-              toward sponsorship.
-            </span>
-          </label>
-          <label className="donation-radio-label">
-            <input
-              type="radio"
-              name="akdnContribute"
-              value="no"
-              checked={formData.akdnContribute === 'no'}
-              onChange={handleInputChange}
-            />
-            <span>NO, I do not wish to contribute</span>
-          </label>
-        </div>
-      </fieldset>
-
-      <fieldset className="form-section donation-org-spacing">
-        <legend className="donation-org-title">HOUSTON FOOD BANK (HFB)</legend>
-
-        <p className="donation-instruction">Please Select One</p>
-
-        <div className="donation-options-group">
-          <label className="donation-radio-label">
-            <input
-              type="radio"
-              name="hfbContribute"
-              value="yes"
-              checked={formData.hfbContribute === 'yes'}
-              onChange={handleInputChange}
-            />
-            <span>YES, I would like to contribute $10 or More $
+              <span>YES, I would like to contribute $100 or More $
+                <input
+                  type="number"
+                  name="akdnAmount"
+                  value={formData.akdnAmount || ''}
+                  onChange={handleInputChange}
+                  placeholder="______"
+                  className="donation-amount-input"
+                  disabled={formData.akdnContribute !== 'yes'}
+                  min="100"
+                />
+                toward sponsorship.
+              </span>
+            </label>
+            <label className="donation-radio-label">
               <input
-                type="number"
-                name="hfbAmount"
-                value={formData.hfbAmount || ''}
+                type="radio"
+                name="akdnContribute"
+                value="no"
+                checked={formData.akdnContribute === 'no'}
                 onChange={handleInputChange}
-                placeholder="______"
-                className="donation-amount-input"
-                disabled={formData.hfbContribute !== 'yes'}
-                min="10"
               />
-              toward sponsorship.
-            </span>
-          </label>
-          <label className="donation-radio-label">
-            <input
-              type="radio"
-              name="hfbContribute"
-              value="no"
-              checked={formData.hfbContribute === 'no'}
-              onChange={handleInputChange}
-            />
-            <span>NO, I do not wish to contribute</span>
-          </label>
+              <span>NO, I do not wish to contribute</span>
+            </label>
+          </div>
         </div>
-      </fieldset>
 
-      <fieldset className="form-section donation-note-spacing">
-        <p className="donation-note">
-          GHRA will deduct contribution amount annually from your (Member) 3rd quarter rebate check for this cause.
-          Members have the flexibility to adjust their contribution amounts during the renewal process each year. GHRA
-          sincerely appreciates the continued support and involvement of its members in this meaningful initiative.
-        </p>
-        <p className="donation-auth-note">
-          The undersigned GHRA member hereby authorizes GHRA to make a deduction and disbursement from member's
-          rebate check for the 3rd Quarter for the above contributions, if any, designated by the member.
-        </p>
+        <div className="form-section-inner">
+          <span className="inner-legend">Houston Food Bank (HFB)</span>
 
-        <div className="donation-auth-section">
-          <h4 className="auth-rep-heading">Authorized Representative</h4>
+          <p className="donation-instruction">Please Select One</p>
+
+          <div className="donation-options-group">
+            <label className="donation-radio-label">
+              <input
+                type="radio"
+                name="hfbContribute"
+                value="yes"
+                checked={formData.hfbContribute === 'yes'}
+                onChange={handleInputChange}
+              />
+              <span>YES, I would like to contribute $10 or More $
+                <input
+                  type="number"
+                  name="hfbAmount"
+                  value={formData.hfbAmount || ''}
+                  onChange={handleInputChange}
+                  placeholder="______"
+                  className="donation-amount-input"
+                  disabled={formData.hfbContribute !== 'yes'}
+                  min="10"
+                />
+                toward sponsorship.
+              </span>
+            </label>
+            <label className="donation-radio-label">
+              <input
+                type="radio"
+                name="hfbContribute"
+                value="no"
+                checked={formData.hfbContribute === 'no'}
+                onChange={handleInputChange}
+              />
+              <span>NO, I do not wish to contribute</span>
+            </label>
+          </div>
+        </div>
+
+        <div className="form-section-inner">
+          <span className="inner-legend">Authorized Representative</span>
+
+          <p className="donation-note">
+            GHRA will deduct contribution amount annually from your (Member) 3rd quarter rebate check for this cause.
+            Members have the flexibility to adjust their contribution amounts during the renewal process each year. GHRA
+            sincerely appreciates the continued support and involvement of its members in this meaningful initiative.
+          </p>
+          <p className="donation-auth-note">
+            The undersigned GHRA member hereby authorizes GHRA to make a deduction and disbursement from member's
+            rebate check for the 3rd Quarter for the above contributions, if any, designated by the member.
+          </p>
+
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="donationAuthRepFirstName">First Name</label>
@@ -147,10 +143,10 @@ function DonationsStep({ formData, handleInputChange }) {
       </fieldset>
 
       <fieldset className="form-section">
-        <legend>Information on the organizations GHRA is partnering</legend>
+        <legend>About the Organizations</legend>
 
-        <div className="org-info-subsection">
-          <h4>AGA KHAN DEVELOPMENT NETWORK (AKDN)</h4>
+        <div className="form-section-inner">
+          <span className="inner-legend">AGA Khan Development Network (AKDN)</span>
           <p className="org-description">
             GHRA and its members, consistently demonstrates its support for AKDN by actively contributing to their cause annually. The
             AKDN is committed to tackling the underlying causes of poverty through the promotion of innovative solutions in vital areas
@@ -158,8 +154,8 @@ function DonationsStep({ formData, handleInputChange }) {
           </p>
         </div>
 
-        <div className="org-info-subsection">
-          <h4>HOUSTON FOOD BANK</h4>
+        <div className="form-section-inner">
+          <span className="inner-legend">Houston Food Bank</span>
           <p className="org-description">
             The Houston Food Bank is a prominent non-profit organization based in Houston, Texas, dedicated to addressing food
             insecurity in the region. It plays a vital role in distributing food and other essential resources to individuals and families in

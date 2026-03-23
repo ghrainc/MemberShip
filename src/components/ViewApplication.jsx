@@ -1,68 +1,108 @@
-import { useState, useContext } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import ProgressIndicator from './ProgressIndicator'
 import ApprovalDialog from './ApprovalDialog'
 import '../styles/ViewApplication.css'
 
+// ── Value → Display label lookup maps ────────────────────────────────────────
+
+const OWNERSHIP_TYPE = {
+  'sole-proprietor':   'Sole Proprietorship',
+  'partnership':       'Partnership',
+  'limited-partnership': 'Limited Partnership',
+  'corporation':       'Corporation',
+  'llc':               'LLC'
+}
+const BUSINESS_TYPE = {
+  'with-fuel':    'Convenience Store with Fuel',
+  'without-fuel': 'Convenience Store without Fuel'
+}
+const STORE_CONDITION = {
+  'existing':  'Existing Store',
+  'remodeled': 'Remodeled',
+  'brand-new': 'Brand New'
+}
+const BUSINESS_PROPERTY = { 'owned': 'Owned', 'leased': 'Leased' }
+const FUEL_AVAILABLE    = { 'branded': 'Branded', 'unbranded': 'Unbranded' }
+const POS_SYSTEM = {
+  'gilbarco-passport': 'Gilbarco passport',
+  'verifone': 'Verifone',
+  'ruby':     'Ruby',
+  'other':    'Other'
+}
+const FOOD_CONCEPT = {
+  'chicken': 'Chicken', 'pizza': 'Pizza', 'mexican': 'Mexican',
+  'burger':  'Burger',  'bbq':   'BBQ',   'other':   'Other'
+}
+const PRODUCT_CATEGORY_LABELS = {
+  gasoline:         'Gasoline',
+  beverages:        'Beverages',
+  tobaccoProducts:  'Tobacco Products',
+  snackFoods:       'Snack Foods',
+  candy:            'Candy',
+  groceryItems:     'Grocery Items',
+  bakeryItems:      'Bakery Items',
+  dairyProducts:    'Dairy Products',
+  preparedFoods:    'Prepared Foods',
+  freshPackagedMeats: 'Fresh/Packaged Meats',
+  produce:          'Produce',
+  healthBeautyAids: 'Health and Beauty Aids'
+}
+const YES_NO       = { 'yes': 'Yes', 'no': 'No' }
+const YES_NO_UPPER = { 'yes': 'YES', 'no': 'NO' }
+
+function lbl(map, value) {
+  if (!value) return null
+  return map[value] || value
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const SECTIONS = [
-  { id: 1, title: 'Qualifying Business' },
-  { id: 2, title: 'Business Information' },
-  { id: 3, title: 'Store Information' },
-  { id: 4, title: 'Owners & Management' },
-  { id: 5, title: 'References' },
-  { id: 6, title: 'Financial Information' },
-  { id: 7, title: 'Warehouse Application' },
-  { id: 8, title: 'Donations' },
-  { id: 9, title: 'Documents' }
+  { id: 1,  title: 'Qualifying Business' },
+  { id: 2,  title: 'Business Information' },
+  { id: 3,  title: 'Store Information' },
+  { id: 4,  title: 'Owners & Management' },
+  { id: 5,  title: 'References' },
+  { id: 6,  title: 'ACH Authorization' },
+  { id: 7,  title: 'Warehouse Application' },
+  { id: 8,  title: 'Donations' },
+  { id: 9,  title: 'Documents' },
+  { id: 10, title: 'Agreements' }
 ]
 
-function ViewApplication({ applicationId, onBack }) {
-  const { currentUser, getApplicationById, getAllApplications, updateApplicationStatus } = useContext(AuthContext)
+function ViewApplication({ applicationId, onBack, onEdit }) {
+  const { currentUser, getApplicationById, updateApplicationStatus } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
-  let application
-  if (isEmployee) {
-    const allApps = getAllApplications()
-    application = allApps.find(app => app.id === applicationId)
-  } else {
-    application = getApplicationById(currentUser?.email, applicationId)
-  }
-
+  const [application, setApplication]   = useState(null)
+  const [loading, setLoading]           = useState(true)
   const [currentSection, setCurrentSection] = useState(1)
   const [approvalDialog, setApprovalDialog] = useState(null)
 
-  const handleDownloadPDF = () => {
-    if (application) {
-      generateApplicationPDF(application)
-    }
-  }
+  useEffect(() => {
+    setLoading(true)
+    getApplicationById(applicationId).then(data => {
+      setApplication(data)
+      setLoading(false)
+    })
+  }, [applicationId])
 
-  const handleSectionClick = (sectionId) => {
-    setCurrentSection(sectionId)
-    window.scrollTo(0, 0)
-  }
+  const handleSectionClick = (id) => { setCurrentSection(id); window.scrollTo(0, 0) }
+  const handleApproveClick = () => setApprovalDialog({ action: 'approve' })
+  const handleRejectClick  = () => setApprovalDialog({ action: 'reject' })
 
-  const handleApproveClick = () => {
-    setApprovalDialog({ action: 'approve' })
-  }
-
-  const handleRejectClick = () => {
-    setApprovalDialog({ action: 'reject' })
-  }
-
-  const handleApprovalConfirm = (comments) => {
-    const action = approvalDialog.action
-    const newStatus = action === 'approve' ? 'approved' : 'rejected'
-    updateApplicationStatus(applicationId, newStatus, comments)
+  const handleApprovalConfirm = async (comments) => {
+    const newStatus = approvalDialog.action === 'approve' ? 'approved' : 'rejected'
+    await updateApplicationStatus(applicationId, newStatus, comments)
     setApprovalDialog(null)
     onBack()
   }
 
-  const handleApprovalCancel = () => {
-    setApprovalDialog(null)
+  if (loading) {
+    return <div className="view-application-container"><div className="empty-state"><p>Loading application...</p></div></div>
   }
-
   if (!application) {
     return (
       <div className="view-application-container">
@@ -72,104 +112,191 @@ function ViewApplication({ applicationId, onBack }) {
     )
   }
 
-  const data = application.fullData || {}
+  const data = application.FormData || {}
 
-  const InfoField = ({ label, value }) => (
+  // ── Shared components ────────────────────────────────────────────────────
+
+  const InfoField = ({ label: fieldLabel, value }) => (
     <div className="info-field">
-      <span className="info-field-label">{label}</span>
+      <span className="info-field-label">{fieldLabel}</span>
       <span className="info-field-value">{value || 'Not provided'}</span>
     </div>
   )
+  const InfoRow = ({ children }) => <div className="info-row">{children}</div>
 
-  const InfoRow = ({ children }) => (
-    <div className="info-row">
+  // Gray sub-section box — matches the References style exactly
+  const Section = ({ title, children }) => (
+    <div className="form-section-inner">
+      {title && <span className="inner-legend">{title}</span>}
       {children}
     </div>
   )
 
+  // ── Section renderers ────────────────────────────────────────────────────
+
   const renderSection = () => {
     switch (currentSection) {
+
+      // ── 1: Qualifying Business ───────────────────────────────────────────
       case 1:
         return (
           <fieldset className="form-section">
-            <legend>Qualifying Business Information</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Certification Answers</span>
-              <InfoRow>
-                <InfoField label="Hard Liquor Sales" value={data.hardLiquor === 'yes' ? 'Yes' : 'No'} />
-                <InfoField label="Age Requirement" value={data.ageRequirement === 'yes' ? 'Yes' : 'No'} />
-                <InfoField label="Closed Sunday After 9pm" value={data.closedSundayAfter9pm === 'yes' ? 'Yes' : 'No'} />
-              </InfoRow>
-            </div>
+            <legend>Qualifying Business</legend>
 
-            {data.storeProductCategories && data.storeProductCategories.length > 0 && (
-              <div className="form-section-inner">
-                <span className="inner-legend">Product Categories</span>
+            <Section title="Certification Questions">
+              <InfoRow>
+                <InfoField label="Does your store sell hard liquor (18% or more alcohol content)?" value={lbl(YES_NO_UPPER, data.hardLiquor)} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Is there an age requirement to allow patrons into your store?" value={lbl(YES_NO_UPPER, data.ageRequirement)} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Is your store required to be closed on Sunday and after 9:00 PM Monday - Saturday?" value={lbl(YES_NO_UPPER, data.closedSundayAfter9pm)} />
+              </InfoRow>
+            </Section>
+
+            {data.storeProductCategories?.length > 0 && (
+              <Section title={`Product Mix — Total Criteria Met: ${data.storeProductCategories.length}`}>
                 <div className="category-list">
-                  {data.storeProductCategories.map((cat, idx) => (
-                    <span key={idx} className="category-tag">{cat}</span>
+                  {data.storeProductCategories.map((cat, i) => (
+                    <span key={i} className="category-tag">{PRODUCT_CATEGORY_LABELS[cat] || cat}</span>
                   ))}
                 </div>
-              </div>
+              </Section>
             )}
           </fieldset>
         )
 
+      // ── 2: Business Information ──────────────────────────────────────────
       case 2:
         return (
           <fieldset className="form-section">
             <legend>Business Information</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Member & Business Details</span>
+
+            <Section title="Type of Ownership">
               <InfoRow>
-                <InfoField label="Member Name" value={data.memberName} />
+                <InfoField label="Ownership Type" value={lbl(OWNERSHIP_TYPE, data.ownershipType)} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Business Type">
+              <InfoRow>
+                <InfoField label="Business Type" value={lbl(BUSINESS_TYPE, data.businessType)} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Business Details">
+              <InfoRow>
+                <InfoField label="Member Name (Company Name)" value={data.memberName} />
                 <InfoField label="DBA/Assumed Name" value={data.dbaName} />
               </InfoRow>
               <InfoRow>
-                <InfoField label="EIN" value={data.ein} />
-                <InfoField label="Sales Tax ID" value={data.salesTaxId} />
+                <InfoField label={data.ownershipType === 'sole-proprietor' ? 'SSN' : 'EIN (Fed Tax ID #)'} value={data.ein} />
+                <InfoField label="Sales Tax ID #" value={data.salesTaxId} />
               </InfoRow>
-              <InfoRow>
-                <InfoField label="Ownership Type" value={data.ownershipType} />
-                <InfoField label="Business Type" value={data.businessType} />
-              </InfoRow>
-            </div>
+            </Section>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Store Certification</span>
+            <Section title="Authorized Representative">
               <InfoRow>
-                <InfoField label="Store Name" value={data.storeNameCertification} />
-                <InfoField label="Store Address" value={data.storeAddressCertification} />
+                <InfoField label="First Name" value={data.authorizedRepFirstName} />
+                <InfoField label="Middle Initial" value={data.authorizedRepMiddleInitial} />
+                <InfoField label="Last Name" value={data.authorizedRepLastName} />
               </InfoRow>
-              <InfoRow>
-                <InfoField label="Store City" value={data.storeCityCertification} />
-                <InfoField label="Store Zip" value={data.storeZipCertification} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="Auth Rep First Name" value={data.authorizedRepFirstNameCertification} />
-                <InfoField label="Auth Rep Middle Initial" value={data.authorizedRepMiddleInitialCertification} />
-                <InfoField label="Auth Rep Last Name" value={data.authorizedRepLastNameCertification} />
-              </InfoRow>
-            </div>
+            </Section>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Previous Membership</span>
+            <Section title="Previous Membership">
               <InfoRow>
-                <InfoField label="Previously a GHRA Member" value={data.previousMember ? 'Yes' : 'No'} />
-                {data.previousMember && (
-                  <InfoField label="Previous GHRA #" value={data.previousGhraNumber} />
-                )}
+                <InfoField label="Was the store previously a member store of GHRA?" value={data.previousMember ? 'Yes' : 'No'} />
+                {data.previousMember && <InfoField label="Previous GHRA #" value={data.previousGhraNumber} />}
               </InfoRow>
-            </div>
+            </Section>
           </fieldset>
         )
 
+      // ── 3: Store Information ─────────────────────────────────────────────
       case 3:
         return (
           <fieldset className="form-section">
             <legend>Store Information</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Location Details</span>
+
+            <Section title="Store Condition">
+              <InfoRow>
+                <InfoField label="Store Condition" value={lbl(STORE_CONDITION, data.storeCondition)} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Business Property">
+              <InfoRow>
+                <InfoField label="Business Property" value={lbl(BUSINESS_PROPERTY, data.businessProperty)} />
+                <InfoField label="Store Size" value={data.storeSize} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Fuel">
+              <InfoRow>
+                <InfoField label="If with fuel" value={lbl(FUEL_AVAILABLE, data.fuelAvailable)} />
+                {data.fuelAvailable === 'branded' && <InfoField label="Brand Name" value={data.brandName} />}
+                <InfoField label="Number of Tanks" value={data.numberOfTanks} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Tank Capacity" value={data.tankCapacity} />
+                <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
+                <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="TCEQ number" value={data.tceqNumber} />
+              </InfoRow>
+            </Section>
+
+            <Section title="POS System">
+              <InfoRow>
+                <InfoField label="Do you scan your products at the POS?" value={lbl(YES_NO, data.scanPOS)} />
+                <InfoField label="Who is back office provider?" value={data.backOfficeProvider} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="What register system (POS) is being used?" value={lbl(POS_SYSTEM, data.posSystem)} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Food Service">
+              <InfoRow>
+                <InfoField label="Do you have food service at store" value={lbl(YES_NO, data.foodServiceAvailable)} />
+              </InfoRow>
+              {data.foodServiceAvailable === 'yes' && (
+                <>
+                  <InfoRow>
+                    <InfoField label="Food Concept" value={lbl(FOOD_CONCEPT, data.foodConcept)} />
+                    <InfoField label="Is your food service branded" value={lbl(YES_NO, data.foodServiceBranded)} />
+                    {data.foodServiceBranded === 'yes' && <InfoField label="Brand Name" value={data.foodBrandName} />}
+                  </InfoRow>
+                  <InfoRow>
+                    <InfoField label="Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?" value={lbl(YES_NO, data.bigMardKudosGameday)} />
+                  </InfoRow>
+                </>
+              )}
+            </Section>
+
+            <Section title="Cooler">
+              <InfoRow>
+                <InfoField label="Does your store have a walk-in cooler?" value={lbl(YES_NO, data.walkInCooler)} />
+                {data.walkInCooler === 'yes' && <InfoField label="If yes, how many doors" value={data.coolerDoors} />}
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Does your store have a walk-in Freezer?" value={lbl(YES_NO, data.walkInFreezer)} />
+                {data.walkInFreezer === 'yes' && <InfoField label="If yes, how many doors" value={data.freezerDoors} />}
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Does your store have a beer cave?" value={lbl(YES_NO, data.beerCave)} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Spanner Board">
+              <InfoRow>
+                <InfoField label="Spanner Board Available" value={data.storeSpannerBoard ? 'Yes' : 'No'} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Store Address">
               <InfoRow>
                 <InfoField label="Store Address" value={data.storeAddress} />
               </InfoRow>
@@ -177,146 +304,80 @@ function ViewApplication({ applicationId, onBack }) {
                 <InfoField label="City" value={data.storeCity} />
                 <InfoField label="State" value="TX" />
                 <InfoField label="Zip Code" value={data.storeZip} />
+                <InfoField label="County" value={data.storeCounty} />
               </InfoRow>
-            </div>
+            </Section>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Contact Information</span>
+            <Section title="Mailing Address">
+              <InfoRow>
+                <InfoField label="Mailing Address" value={data.mailingAddress} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="City" value={data.mailingCity} />
+                <InfoField label="Zip Code" value={data.mailingZip} />
+                <InfoField label="County" value={data.mailingCounty} />
+              </InfoRow>
+            </Section>
+
+            <Section title="Contact Information">
               <InfoRow>
                 <InfoField label="Store Phone" value={data.storePhone} />
+                <InfoField label="Fax Phone" value={data.faxPhone} />
+                <InfoField label="Office Phone" value={data.officePhone} />
+              </InfoRow>
+              <InfoRow>
                 <InfoField label="Email Address" value={data.emailAddress} />
               </InfoRow>
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">Business Details</span>
-              <InfoRow>
-                <InfoField label="Store Size (sq ft)" value={data.storeSize} />
-                <InfoField label="Business Property" value={data.businessProperty} />
-              </InfoRow>
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">Fuel Details</span>
-              <InfoRow>
-                <InfoField label="If with fuel" value={data.fuelAvailable} />
-                {data.fuelAvailable === 'branded' && (
-                  <InfoField label="Brand Name" value={data.brandName} />
-                )}
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="Number of Tanks" value={data.numberOfTanks} />
-                <InfoField label="Tank Capacity" value={data.tankCapacity} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
-                <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="TCEQ number" value={data.tceqNumber} />
-              </InfoRow>
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">POS System</span>
-              <InfoRow>
-                <InfoField label="Do you scan your products at the POS?" value={data.scanPOS} />
-                <InfoField label="Who is back office provider?" value={data.backOfficeProvider} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="What register system (POS) is being used?" value={data.posSystem} />
-              </InfoRow>
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">Food Service Details</span>
-              <InfoRow>
-                <InfoField label="Do you have food service at store" value={data.foodServiceAvailable} />
-              </InfoRow>
-              {data.foodServiceAvailable === 'yes' && (
-                <>
-                  <InfoRow>
-                    <InfoField label="Food Concept" value={data.foodConcept} />
-                    <InfoField label="Is your food service branded" value={data.foodServiceBranded} />
-                  </InfoRow>
-                  {data.foodServiceBranded === 'yes' && (
-                    <InfoRow>
-                      <InfoField label="Brand Name" value={data.foodBrandName} />
-                    </InfoRow>
-                  )}
-                  <InfoRow>
-                    <InfoField label="Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?" value={data.bigMardKudosGameday} />
-                  </InfoRow>
-                </>
-              )}
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">Cooler</span>
-              <InfoRow>
-                <InfoField label="Does your store have a walk-in cooler?" value={data.walkInCooler} />
-              </InfoRow>
-              {data.walkInCooler === 'yes' && (
-                <InfoRow>
-                  <InfoField label="Number of cooler doors" value={data.coolerDoors} />
-                </InfoRow>
-              )}
-              <InfoRow>
-                <InfoField label="Does your store have a walk-in Freezer?" value={data.walkInFreezer} />
-              </InfoRow>
-              {data.walkInFreezer === 'yes' && (
-                <InfoRow>
-                  <InfoField label="Number of freezer doors" value={data.freezerDoors} />
-                </InfoRow>
-              )}
-              <InfoRow>
-                <InfoField label="Does your store have a beer cave?" value={data.beerCave} />
-              </InfoRow>
-            </div>
-
-            <div className="form-section-inner">
-              <span className="inner-legend">Other Facilities</span>
-              <InfoRow>
-                <InfoField label="Spanner Board" value={data.storeSpannerBoard ? 'Yes' : 'No'} />
-              </InfoRow>
-            </div>
+            </Section>
           </fieldset>
         )
 
+      // ── 4: Owners & Management ───────────────────────────────────────────
       case 4:
         return (
           <fieldset className="form-section">
             <legend>Owners & Management</legend>
-            {data.owners && data.owners.length > 0 && (
-              <div className="form-section-inner">
-                <span className="inner-legend">Owner Information</span>
-                <div className="owners-list">
-                  {data.owners.map((owner, idx) => (
-                    <div key={idx} className="owner-subsection">
-                      <h4>{idx === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${idx + 1}`}</h4>
-                      <InfoRow>
-                        <InfoField label="First Name" value={owner.firstName} />
-                        <InfoField label="Middle Initial" value={owner.middleInitial} />
-                        <InfoField label="Last Name" value={owner.lastName} />
-                      </InfoRow>
-                      <InfoRow>
-                        <InfoField label="Title" value={owner.title} />
-                        <InfoField label="Ownership %" value={owner.ownershipPercent} />
-                      </InfoRow>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
+            {(data.owners || []).map((owner, idx) => (
+              <Section key={idx} title={idx === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${idx + 1}`}>
+                <InfoRow>
+                  <InfoField label="First Name" value={owner.firstName} />
+                  <InfoField label="Middle Initial" value={owner.middleInitial} />
+                  <InfoField label="Last Name" value={owner.lastName} />
+                </InfoRow>
+                <InfoRow>
+                  <InfoField label="Title" value={owner.title} />
+                  <InfoField label="Ownership %" value={owner.ownershipPercent} />
+                  <InfoField label="Mobile Phone" value={owner.mobilePhone} />
+                </InfoRow>
+                <InfoRow>
+                  <InfoField label="Driver License #" value={owner.driverLicense} />
+                  <InfoField label="State Issued" value={owner.stateIssued} />
+                </InfoRow>
+              </Section>
+            ))}
+
+            <Section title="Store Manager">
+              <InfoRow>
+                <InfoField label="First Name" value={data.storeManagerFirstName} />
+                <InfoField label="Last Name" value={data.storeManagerLastName} />
+                <InfoField label="Title" value={data.storeManagerTitle} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Mobile Phone" value={data.storeManagerMobile} />
+                <InfoField label="Driver License #" value={data.storeManagerDriverLicense} />
+              </InfoRow>
+            </Section>
           </fieldset>
         )
 
+      // ── 5: References ────────────────────────────────────────────────────
       case 5:
         return (
           <fieldset className="form-section">
             <legend>References</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Reference 1</span>
+
+            <Section title="Reference 1">
               <InfoRow>
                 <InfoField label="Company Name" value={data.reference1Company} />
                 <InfoField label="GHRA Membership #" value={data.reference1GhraNumber} />
@@ -325,10 +386,9 @@ function ViewApplication({ applicationId, onBack }) {
                 <InfoField label="Email" value={data.reference1Email} />
                 <InfoField label="Representative Name" value={data.reference1RepName} />
               </InfoRow>
-            </div>
+            </Section>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Reference 2</span>
+            <Section title="Reference 2">
               <InfoRow>
                 <InfoField label="Company Name" value={data.reference2Company} />
                 <InfoField label="GHRA Membership #" value={data.reference2GhraNumber} />
@@ -337,105 +397,200 @@ function ViewApplication({ applicationId, onBack }) {
                 <InfoField label="Email" value={data.reference2Email} />
                 <InfoField label="Representative Name" value={data.reference2RepName} />
               </InfoRow>
-            </div>
+            </Section>
           </fieldset>
         )
 
-      case 6:
+      // ── 6: ACH Authorization ─────────────────────────────────────────────
+      case 6: {
+        const achOptions = [
+          { id: 'corporate', label: 'GHRA Corporate' },
+          { id: 'warehouse', label: 'GHRA Warehouse' },
+          { id: 'fuels',     label: 'GHRA Fuels' }
+        ]
+        const achInfoFor    = data.achInfoFor || {}
+        const bankAccounts  = data.bankAccounts || []
         return (
           <fieldset className="form-section">
-            <legend>Financial Information</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Bank Details</span>
+            <legend>ACH Authorization</legend>
+
+            <Section title="ACH Information">
               <InfoRow>
-                <InfoField label="Bank Name" value={data.bankName} />
-                <InfoField label="Bank Address" value={data.bankAddress} />
+                {achOptions.map(opt => (
+                  <InfoField key={opt.id} label={opt.label} value={achInfoFor[opt.id] ? 'Yes' : 'No'} />
+                ))}
               </InfoRow>
-              <InfoRow>
-                <InfoField label="Bank City" value={data.bankCity} />
-                <InfoField label="Bank State" value={data.bankState} />
-                <InfoField label="Bank Zip" value={data.bankZip} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="Transit/ABA Number" value={data.transitAbaNumber} />
-                <InfoField label="Account Number" value={data.accountNumber} />
-              </InfoRow>
-            </div>
+            </Section>
+
+            {bankAccounts.length > 0
+              ? bankAccounts.map((account, idx) => (
+                  <Section key={account.id || idx} title={`Bank Account ${idx + 1}`}>
+                    <InfoRow>
+                      <InfoField label="Bank Name" value={account.bankName} />
+                      <InfoField label="Branch Address" value={account.bankAddress} />
+                    </InfoRow>
+                    <InfoRow>
+                      <InfoField label="City" value={account.bankCity} />
+                      <InfoField label="State" value={account.bankState} />
+                      <InfoField label="Zip Code" value={account.bankZip} />
+                    </InfoRow>
+                    <InfoRow>
+                      <InfoField label="Transit/ABA Number (Routing Number)" value={account.transitAbaNumber} />
+                      <InfoField label="Account Number" value={account.accountNumber} />
+                    </InfoRow>
+                  </Section>
+                ))
+              : <Section><span className="info-field-value">No bank accounts provided</span></Section>
+            }
           </fieldset>
         )
+      }
 
+      // ── 7: Warehouse Application ─────────────────────────────────────────
       case 7:
         return (
           <fieldset className="form-section">
-            <legend>Donations</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Sponsorship Contributions</span>
-              <InfoRow>
-                <InfoField label="AKDN Contribution" value={data.akdnContribute === 'yes' ? `Yes - $${data.akdnAmount}` : 'No'} />
-                <InfoField label="Houston Food Bank Contribution" value={data.hfbContribute === 'yes' ? `Yes - $${data.hfbAmount}` : 'No'} />
-              </InfoRow>
-            </div>
+            <legend>Warehouse Application</legend>
 
-            <div className="form-section-inner">
-              <span className="inner-legend">Authorized Representative</span>
+            <Section title="Warehouse Information">
               <InfoRow>
-                <InfoField label="First Name" value={data.donationAuthRepFirstName} />
-                <InfoField label="Last Name" value={data.donationAuthRepLastName} />
+                <InfoField label="Would you like to set up your account for delivery?" value={data.warehouseDelivery ? 'Yes' : 'No'} />
               </InfoRow>
-            </div>
+            </Section>
+
+            {data.warehouseDelivery && (data.authorizedCardHolders || []).map((holder, idx) => (
+              <Section key={idx} title={`Authorized Card Holder ${idx + 1}`}>
+                <InfoRow>
+                  <InfoField label="First Name" value={holder.firstName} />
+                  <InfoField label="Last Name" value={holder.lastName} />
+                  <InfoField label="Driver License #" value={holder.drivingLicense} />
+                </InfoRow>
+              </Section>
+            ))}
           </fieldset>
         )
 
+      // ── 8: Donations ─────────────────────────────────────────────────────
       case 8:
         return (
           <fieldset className="form-section">
-            <legend>Warehouse Application</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Warehouse Information</span>
-              <InfoRow>
-                <InfoField label="Account Setup for Delivery" value={data.warehouseDelivery ? 'Yes' : 'No'} />
-              </InfoRow>
-            </div>
+            <legend>Donations</legend>
 
-            {data.warehouseDelivery && data.authorizedCardHolders && data.authorizedCardHolders.length > 0 && (
-              <div className="form-section-inner">
-                <span className="inner-legend">Authorized Card Holders</span>
-                {data.authorizedCardHolders.map((holder, idx) => (
-                  <div key={idx} className="card-holder-display">
-                    <div className="card-holder-title">Card Holder {idx + 1}</div>
-                    <InfoRow>
-                      <InfoField label="First Name" value={holder.firstName} />
-                      <InfoField label="Last Name" value={holder.lastName} />
-                    </InfoRow>
-                    <InfoRow>
-                      <InfoField label="Driver License #" value={holder.drivingLicense} />
-                    </InfoRow>
-                  </div>
-                ))}
-              </div>
-            )}
+            <Section title="AGA KHAN DEVELOPMENT NETWORK (AKDN)">
+              <InfoRow>
+                <InfoField
+                  label="Contribution"
+                  value={data.akdnContribute === 'yes' ? `Yes — $${data.akdnAmount}` : 'No, I do not wish to contribute'}
+                />
+              </InfoRow>
+            </Section>
+
+            <Section title="HOUSTON FOOD BANK (HFB)">
+              <InfoRow>
+                <InfoField
+                  label="Contribution"
+                  value={data.hfbContribute === 'yes' ? `Yes — $${data.hfbAmount}` : 'No, I do not wish to contribute'}
+                />
+              </InfoRow>
+            </Section>
+
+            <Section title="Authorized Representative">
+              <InfoRow>
+                <InfoField label="First Name" value={data.donationAuthRepFirstName || data.authorizedRepFirstName} />
+                <InfoField label="Last Name" value={data.donationAuthRepLastName || data.authorizedRepLastName} />
+              </InfoRow>
+            </Section>
           </fieldset>
         )
 
-      case 9:
+      // ── 9: Documents ─────────────────────────────────────────────────────
+      case 9: {
+        const owners = data.owners || []
+        const multipleOwners = owners.length > 1
+        const docFields = [
+          ...(multipleOwners
+            ? owners.map((o, i) => ({
+                key: `driverLicense_owner_${i}`,
+                label: `Driver License — ${[o.firstName, o.lastName].filter(Boolean).join(' ') || `Owner ${i + 1}`}`
+              }))
+            : [{ key: 'driverLicenseCopies', label: 'Driver License Copies' }]),
+          { key: 'salesTaxPermit',          label: 'Sales Tax Permit' },
+          { key: 'articlesOfIncorporation', label: 'Articles of Incorporation/Certificate of Formation' },
+          { key: 'irsDocument',             label: 'IRS Document' },
+          { key: 'tobaccoPermit',           label: 'Tobacco Permit' },
+          { key: 'beerLicense',             label: 'Beer License' }
+        ]
         return (
           <fieldset className="form-section">
             <legend>Documents</legend>
-            <div className="form-section-inner">
-              <span className="inner-legend">Uploaded Documents</span>
+            <Section title="Uploaded Documents">
+              <div className="documents-review-list">
+                {docFields.map(({ key, label: docLabel }) => {
+                  const val = data[key]
+                  const uploaded = !!val
+                  const originalName = typeof val === 'object' ? val.originalName : (val || null)
+                  const url = typeof val === 'object' ? val.url : null
+                  return (
+                    <div key={key} className="document-review-item">
+                      <span className={`doc-status-icon ${uploaded ? 'uploaded' : 'missing'}`}>
+                        {uploaded ? '✓' : '✕'}
+                      </span>
+                      <span className="doc-review-label">{docLabel}</span>
+                      {uploaded && originalName && (
+                        <span className="doc-review-filename">{originalName}</span>
+                      )}
+                      {url && (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="doc-preview-link">
+                          Preview
+                        </a>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </Section>
+          </fieldset>
+        )
+      }
+
+      // ── 10: Agreements ───────────────────────────────────────────────────
+      case 10:
+        return (
+          <fieldset className="form-section">
+            <legend>Agreements</legend>
+
+            <Section title="Membership Agreement & Requirements">
               <InfoRow>
-                <InfoField label="Driver License Copies" value={data.driverLicenseCopies ? '✓ Uploaded' : 'Not uploaded'} />
-                <InfoField label="Sales Tax Permit" value={data.salesTaxPermit ? '✓ Uploaded' : 'Not uploaded'} />
+                <InfoField label="Membership Agreement" value={data.membershipAgreement ? 'Agreed' : 'Not agreed'} />
               </InfoRow>
               <InfoRow>
-                <InfoField label="Articles of Incorporation" value={data.articlesOfIncorporation ? '✓ Uploaded' : 'Not uploaded'} />
-                <InfoField label="IRS Document" value={data.irsDocument ? '✓ Uploaded' : 'Not uploaded'} />
+                <InfoField label="Requirements to be a Member" value={data.memberRequirements ? 'Agreed' : 'Not agreed'} />
               </InfoRow>
               <InfoRow>
-                <InfoField label="Tobacco Permit" value={data.tobaccoPermit ? '✓ Uploaded' : 'Not uploaded'} />
-                <InfoField label="Beer License" value={data.beerLicense ? '✓ Uploaded' : 'Not uploaded'} />
+                <InfoField label="Financial Information & Rebate Consent" value={data.rebateConsent ? 'Agreed' : 'Not agreed'} />
               </InfoRow>
-            </div>
+            </Section>
+
+            <Section title="Final Acknowledgement">
+              <InfoRow>
+                <InfoField
+                  label="I certify that I have read and understand the GHRA Membership Agreement, Requirements, and all other documents provided"
+                  value={data.acknowledgement ? 'Acknowledged' : 'Not acknowledged'}
+                />
+              </InfoRow>
+              <InfoRow>
+                <InfoField
+                  label="Authorization to share business information with vendors and access POS data"
+                  value={data.authorizationConsent ? 'Agreed' : 'Not agreed'}
+                />
+              </InfoRow>
+              <InfoRow>
+                <InfoField
+                  label="Indemnification and hold harmless agreement"
+                  value={data.indemnificationConsent ? 'Agreed' : 'Not agreed'}
+                />
+              </InfoRow>
+            </Section>
           </fieldset>
         )
 
@@ -443,6 +598,9 @@ function ViewApplication({ applicationId, onBack }) {
         return null
     }
   }
+
+  const submittedDate = application.UpdatedAt || application.CreatedAt
+  const formattedDate = submittedDate ? new Date(submittedDate).toLocaleDateString() : '—'
 
   return (
     <div className="membership-container view-app-mode">
@@ -453,11 +611,20 @@ function ViewApplication({ applicationId, onBack }) {
           className="membership-logo"
         />
         <h1>Application Review</h1>
-        <p className="header-subtitle">{application.storeName}</p>
-        <p className="submitted-info">Submitted: {new Date(application.submittedDate).toLocaleDateString()} | ID: {application.id}</p>
+        <p className="header-subtitle">{application.StoreName || 'Unnamed Application'}</p>
+        <p className="submitted-info">
+          {application.Status === 'submitted' ? 'Submitted' : 'Last Updated'}: {formattedDate}
+          &nbsp;|&nbsp; ID: {application.Id}
+          &nbsp;|&nbsp; Status: <strong>{application.Status}</strong>
+        </p>
       </div>
 
-      <ProgressIndicator currentStep={currentSection} totalSteps={SECTIONS.length} steps={SECTIONS} onStepClick={handleSectionClick} />
+      <ProgressIndicator
+        currentStep={currentSection}
+        totalSteps={SECTIONS.length}
+        steps={SECTIONS}
+        onStepClick={handleSectionClick}
+      />
 
       <div className="membership-form view-app-form">
         <div className="step-content">
@@ -465,77 +632,44 @@ function ViewApplication({ applicationId, onBack }) {
         </div>
 
         <div className="form-navigation">
-          {isEmployee ? (
+          <button type="button" onClick={onBack} className="nav-button cancel-button">
+            ← Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => currentSection > 1 && handleSectionClick(currentSection - 1)}
+            disabled={currentSection === 1}
+            className="nav-button prev-button"
+          >
+            ← Previous
+          </button>
+          {currentSection < SECTIONS.length && (
+            <button
+              type="button"
+              onClick={() => handleSectionClick(currentSection + 1)}
+              className="nav-button next-button"
+            >
+              Next →
+            </button>
+          )}
+          {isEmployee && (
             <>
-              <button
-                type="button"
-                onClick={onBack}
-                className="nav-button cancel-button"
-              >
-                ← Back
-              </button>
-              <button
-                type="button"
-                onClick={handleApproveClick}
-                disabled={application?.status !== 'submitted'}
-                className="nav-button approve-action-button"
-              >
-                ✓ Approve
-              </button>
-              <button
-                type="button"
-                onClick={handleRejectClick}
-                disabled={application?.status !== 'submitted'}
-                className="nav-button reject-action-button"
-              >
-                ✕ Reject
-              </button>
-              <button
-                type="button"
-                onClick={handleDownloadPDF}
-                className="nav-button download-button"
-              >
-                📥 Download PDF
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => currentSection > 1 && handleSectionClick(currentSection - 1)}
-                disabled={currentSection === 1}
-                className="nav-button prev-button"
-              >
-                ← Previous
-              </button>
-
-              {currentSection === SECTIONS.length ? (
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="nav-button submit-button"
-                >
-                  Back to Dashboard
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => handleSectionClick(currentSection + 1)}
-                  className="nav-button next-button"
-                >
-                  Next →
+              {onEdit && (
+                <button type="button" onClick={() => onEdit(applicationId)} className="nav-button edit-action-button">
+                  ✎ Edit
                 </button>
               )}
-
-              <button
-                type="button"
-                onClick={handleDownloadPDF}
-                className="nav-button download-button"
-              >
-                📥 Download PDF
+              <button type="button" onClick={handleApproveClick} disabled={application.Status !== 'submitted'} className="nav-button approve-action-button">
+                ✓ Approve
+              </button>
+              <button type="button" onClick={handleRejectClick} disabled={application.Status !== 'submitted'} className="nav-button reject-action-button">
+                ✕ Reject
               </button>
             </>
           )}
+          <button type="button" onClick={() => generateApplicationPDF(application)} className="nav-button download-button">
+            📥 Download PDF
+          </button>
         </div>
       </div>
 
@@ -548,7 +682,7 @@ function ViewApplication({ applicationId, onBack }) {
           application={application}
           action={approvalDialog.action}
           onConfirm={handleApprovalConfirm}
-          onCancel={handleApprovalCancel}
+          onCancel={() => setApprovalDialog(null)}
         />
       )}
     </div>
