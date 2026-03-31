@@ -36,7 +36,13 @@ const STEPS = [
   { id: 10, title: 'Agreements', component: AgreementsStep }
 ]
 
-function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1, isEmployeeEdit = false, onEmployeeSave = null }) {
+function formatReviewerName(email) {
+  if (!email) return ''
+  const local = email.split('@')[0]
+  return local.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = null, initialFormData = null, initialStep = 1, initialNotes = null, initialReviewedBy = null, initialReviewedAt = null, initialCommentsHistory = [], isEmployeeEdit = false, onEmployeeSave = null }) {
   const { saveDraft, saveApplication, uploadDocument, removeDocument } = useContext(AuthContext)
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [applicationId, setApplicationId] = useState(initialApplicationId)
@@ -155,6 +161,7 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
 
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const CurrentStepComponent = STEPS[currentStep - 1].component
 
@@ -457,6 +464,50 @@ function MembershipForm({ userEmail, onSubmit, onCancel, initialApplicationId = 
         <p className="header-subtitle">Greater Houston Retailers Cooperative Association, Inc.</p>
         <p className="applicant-email">Applicant Email: {userEmail}</p>
       </div>
+
+      {initialNotes && (
+        <div className="reviewer-comments-banner banner-rejected">
+          <div className="reviewer-comments-header">
+            <span className="reviewer-comments-icon">✕</span>
+            <strong>Reviewer Comments</strong>
+            {initialReviewedBy && (
+              <span className="reviewer-meta">
+                by {formatReviewerName(initialReviewedBy)}
+                {initialReviewedAt && ` on ${new Date(initialReviewedAt).toLocaleDateString()}`}
+              </span>
+            )}
+          </div>
+          <p className="reviewer-comments-text">{initialNotes}</p>
+        </div>
+      )}
+
+      {initialCommentsHistory.length > 0 && (
+        <div className="review-history-panel">
+          <button className="review-history-toggle" onClick={() => setHistoryOpen(o => !o)}>
+            <span>Review History ({initialCommentsHistory.length})</span>
+            <span className="toggle-arrow">{historyOpen ? '▲' : '▼'}</span>
+          </button>
+          {historyOpen && (
+            <div className="comments-history-list">
+              {initialCommentsHistory.map((entry, idx) => (
+                <div key={idx} className={`history-entry ${entry.status === 'rejected' ? 'entry-rejected' : 'entry-approved'}`}>
+                  <div className="history-entry-header">
+                    <span className={`history-status-badge ${entry.status === 'rejected' ? 'badge-rejected' : 'badge-approved'}`}>
+                      {entry.status === 'rejected' ? '✕ Rejected' : '✓ Approved'}
+                    </span>
+                    <span className="history-entry-num">#{idx + 1}</span>
+                  </div>
+                  <p className="history-comment">{entry.comment}</p>
+                  <div className="history-entry-meta">
+                    <span>{formatReviewerName(entry.reviewedBy)}</span>
+                    <span>{new Date(entry.reviewedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <ProgressIndicator currentStep={currentStep} totalSteps={STEPS.length} steps={STEPS} onStepClick={handleStepClick} />
 

@@ -7,6 +7,7 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
   const { currentUser, getAllApplications, createMember } = useContext(AuthContext)
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
   const [searchTerms, setSearchTerms] = useState({
     storeName: '',
@@ -36,6 +37,13 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
       setLoading(false)
     })
   }, [])
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    const data = await getAllApplications()
+    setApplications(data || [])
+    setRefreshing(false)
+  }
 
   const handleSearchChange = (field, value) => {
     setSearchTerms(prev => ({ ...prev, [field]: value }))
@@ -186,9 +194,14 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
         <div className="dashboard-content">
           <div className="content-header">
             <h2>All Applications</h2>
-            <p className="application-count">
-              {loading ? 'Loading...' : `${sortedApplications.length} application${sortedApplications.length !== 1 ? 's' : ''}`}
-            </p>
+            <div className="content-header-right">
+              <p className="application-count">
+                {loading ? 'Loading...' : `${sortedApplications.length} application${sortedApplications.length !== 1 ? 's' : ''}`}
+              </p>
+              <button className="refresh-button" onClick={handleRefresh} disabled={refreshing}>
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
           </div>
 
           {loading ? (

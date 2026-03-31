@@ -115,6 +115,168 @@
   margin: 6px 0 0 0;
 }
 
+.reviewer-comments-banner {
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  border-left: 5px solid;
+}
+
+.banner-rejected {
+  background: #fdf2f2;
+  border-color: #e74c3c;
+}
+
+.banner-approved {
+  background: #f0faf4;
+  border-color: #27ae60;
+}
+
+.banner-info {
+  background: #f0f4ff;
+  border-color: #667eea;
+}
+
+.reviewer-comments-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.reviewer-comments-icon {
+  font-size: 16px;
+}
+
+.banner-rejected .reviewer-comments-header strong {
+  color: #c0392b;
+}
+
+.banner-approved .reviewer-comments-header strong {
+  color: #1e8449;
+}
+
+.banner-info .reviewer-comments-header strong {
+  color: #4a5568;
+}
+
+.reviewer-meta {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin-left: auto;
+}
+
+.reviewer-comments-text {
+  margin: 0;
+  font-size: 14px;
+  color: #2c3e50;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+/* ── Review history collapsible panel ─────────────────────────────────────── */
+
+.review-history-panel {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.review-history-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  color: #2c3e50;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.review-history-toggle:hover {
+  background: #f8f9fa;
+}
+
+.toggle-arrow {
+  font-size: 11px;
+  color: #7f8c8d;
+}
+
+.comments-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+}
+
+.history-entry {
+  border-radius: 6px;
+  padding: 10px 12px;
+  border-left: 4px solid;
+}
+
+.entry-rejected {
+  background: #fdf2f2;
+  border-color: #e74c3c;
+}
+
+.entry-approved {
+  background: #f0faf4;
+  border-color: #27ae60;
+}
+
+.history-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.history-status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.badge-rejected {
+  background: #e74c3c;
+  color: white;
+}
+
+.badge-approved {
+  background: #27ae60;
+  color: white;
+}
+
+.history-entry-num {
+  font-size: 11px;
+  color: #aaa;
+}
+
+.history-comment {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #2c3e50;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.history-entry-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #7f8c8d;
+}
+
 .membership-form.view-app-form {
   background: white;
   border-radius: 8px;

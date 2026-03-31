@@ -35,7 +35,11 @@ function AppContent() {
       setDraftData({
         applicationId: app.Id,
         formData: app.FormData,
-        currentStep: app.CurrentStep || 1
+        currentStep: app.CurrentStep || 1,
+        notes: app.Notes,
+        reviewedBy: app.ReviewedBy,
+        reviewedAt: app.ReviewedAt,
+        commentsHistory: app.CommentsHistory || []
       })
       setScreen('form')
     }
@@ -56,7 +60,11 @@ function AppContent() {
       setDraftData({
         applicationId: app.Id,
         formData: app.FormData,
-        currentStep: 1
+        currentStep: 1,
+        notes: app.Notes,
+        reviewedBy: app.ReviewedBy,
+        reviewedAt: app.ReviewedAt,
+        commentsHistory: app.CommentsHistory || []
       })
       setScreen('employee-edit')
     }
@@ -107,6 +115,10 @@ function AppContent() {
           initialApplicationId={draftData?.applicationId}
           initialFormData={draftData?.formData}
           initialStep={draftData?.currentStep || 1}
+          initialNotes={draftData?.notes}
+          initialReviewedBy={draftData?.reviewedBy}
+          initialReviewedAt={draftData?.reviewedAt}
+          initialCommentsHistory={draftData?.commentsHistory || []}
         />
       )}
       {screen === 'view' && selectedAppId && (
@@ -140,6 +152,10 @@ function AppContent() {
           initialApplicationId={draftData?.applicationId}
           initialFormData={draftData?.formData}
           initialStep={draftData?.currentStep || 1}
+          initialNotes={draftData?.notes}
+          initialReviewedBy={draftData?.reviewedBy}
+          initialReviewedAt={draftData?.reviewedAt}
+          initialCommentsHistory={draftData?.commentsHistory || []}
           isEmployeeEdit={true}
           onEmployeeSave={employeeUpdateApplication}
         />

@@ -107,6 +107,34 @@
   font-weight: 600;
 }
 
+.content-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.refresh-button {
+  background: #2980b9;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-button:hover:not(:disabled) {
+  background: #1f6391;
+  transform: translateY(-1px);
+}
+
+.refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .application-count {
   color: #7f8c8d;
   font-size: 14px;

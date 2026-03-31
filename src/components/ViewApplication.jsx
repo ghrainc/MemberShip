@@ -72,6 +72,12 @@ const SECTIONS = [
   { id: 10, title: 'Agreements' }
 ]
 
+function formatReviewerName(email) {
+  if (!email) return ''
+  const local = email.split('@')[0]
+  return local.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 function ViewApplication({ applicationId, onBack, onEdit }) {
   const { currentUser, getApplicationById, updateApplicationStatus } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
@@ -80,6 +86,7 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
   const [loading, setLoading]           = useState(true)
   const [currentSection, setCurrentSection] = useState(1)
   const [approvalDialog, setApprovalDialog] = useState(null)
+  const [historyOpen, setHistoryOpen]   = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -599,6 +606,17 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
     }
   }
 
+  // If CommentsHistory is empty but Notes exists (pre-migration record), synthesise one entry
+  let commentsHistory = Array.isArray(application.CommentsHistory) ? application.CommentsHistory : []
+  if (commentsHistory.length === 0 && application.Notes && application.ReviewedBy) {
+    commentsHistory = [{
+      status: application.Status,
+      comment: application.Notes,
+      reviewedBy: application.ReviewedBy,
+      reviewedAt: application.ReviewedAt
+    }]
+  }
+
   const submittedDate = application.UpdatedAt || application.CreatedAt
   const formattedDate = submittedDate ? new Date(submittedDate).toLocaleDateString() : '—'
 
@@ -619,12 +637,58 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
         </p>
       </div>
 
+      {application.Notes && (
+        <div className={`reviewer-comments-banner ${application.Status === 'rejected' ? 'banner-rejected' : application.Status === 'approved' ? 'banner-approved' : 'banner-info'}`}>
+          <div className="reviewer-comments-header">
+            <span className="reviewer-comments-icon">
+              {application.Status === 'rejected' ? '✕' : application.Status === 'approved' ? '✓' : '💬'}
+            </span>
+            <strong>Reviewer Comments</strong>
+            {application.ReviewedBy && (
+              <span className="reviewer-meta">
+                by {formatReviewerName(application.ReviewedBy)}
+                {application.ReviewedAt && ` on ${new Date(application.ReviewedAt).toLocaleDateString()}`}
+              </span>
+            )}
+          </div>
+          <p className="reviewer-comments-text">{application.Notes}</p>
+        </div>
+      )}
+
       <ProgressIndicator
         currentStep={currentSection}
         totalSteps={SECTIONS.length}
         steps={SECTIONS}
         onStepClick={handleSectionClick}
       />
+
+      {commentsHistory.length > 0 && (
+        <div className="review-history-panel">
+          <button className="review-history-toggle" onClick={() => setHistoryOpen(o => !o)}>
+            <span>Review History ({commentsHistory.length})</span>
+            <span className="toggle-arrow">{historyOpen ? '▲' : '▼'}</span>
+          </button>
+          {historyOpen && (
+            <div className="comments-history-list">
+              {commentsHistory.map((entry, idx) => (
+                <div key={idx} className={`history-entry ${entry.status === 'rejected' ? 'entry-rejected' : 'entry-approved'}`}>
+                  <div className="history-entry-header">
+                    <span className={`history-status-badge ${entry.status === 'rejected' ? 'badge-rejected' : 'badge-approved'}`}>
+                      {entry.status === 'rejected' ? '✕ Rejected' : '✓ Approved'}
+                    </span>
+                    <span className="history-entry-num">#{idx + 1}</span>
+                  </div>
+                  <p className="history-comment">{entry.comment}</p>
+                  <div className="history-entry-meta">
+                    <span>{formatReviewerName(entry.reviewedBy)}</span>
+                    <span>{new Date(entry.reviewedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="membership-form view-app-form">
         <div className="step-content">

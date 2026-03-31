@@ -101,6 +101,13 @@ async function ensureSchema() {
       )
         ALTER TABLE Users ADD MustChangePassword BIT NOT NULL DEFAULT 0
     `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'CommentsHistory'
+      )
+        ALTER TABLE Applications ADD CommentsHistory NVARCHAR(MAX) NULL
+    `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
   }
@@ -339,11 +346,19 @@ app.get('/api/applications/all', authMiddleware, async (req, res) => {
   try {
     const db = await getPool()
     const result = await db.request()
-      .query(`SELECT Id, UserEmail, StoreName, StoreAddress, Status, CurrentStep, ReviewedBy, ReviewedAt, Notes, CreatedAt,
-              JSON_VALUE(FormData, '$.authorizedRepFirstName') AS AuthRepFirstName,
-              JSON_VALUE(FormData, '$.authorizedRepLastName')  AS AuthRepLastName
+      .query(`SELECT Id, UserEmail, StoreName, StoreAddress, Status, CurrentStep, ReviewedBy, ReviewedAt, Notes, CreatedAt, FormData
               FROM Applications ORDER BY CreatedAt DESC`)
-    res.json(result.recordset)
+    const rows = result.recordset.map(row => {
+      let fd = {}
+      try { fd = JSON.parse(row.FormData || '{}') } catch {}
+      return {
+        ...row,
+        FormData: undefined,
+        AuthRepFirstName: fd.authorizedRepFirstName || '',
+        AuthRepLastName: fd.authorizedRepLastName || ''
+      }
+    })
+    res.json(rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -359,6 +374,7 @@ app.get('/api/applications/:id', authMiddleware, async (req, res) => {
     if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
     const row = result.recordset[0]
     row.FormData = JSON.parse(row.FormData)
+    try { row.CommentsHistory = JSON.parse(row.CommentsHistory || '[]') } catch { row.CommentsHistory = [] }
     res.json(row)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -371,13 +387,30 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
   const { status, notes } = req.body
   try {
     const db = await getPool()
+
+    // Load existing history to append to it
+    const existing = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query('SELECT CommentsHistory FROM Applications WHERE Id = @id')
+    let history = []
+    try { history = JSON.parse(existing.recordset[0]?.CommentsHistory || '[]') } catch {}
+    if (notes) {
+      history.push({
+        status,
+        comment: notes,
+        reviewedBy: req.user.email,
+        reviewedAt: new Date().toISOString()
+      })
+    }
+
     await db.request()
       .input('id', sql.Int, req.params.id)
       .input('status', sql.NVarChar, status)
       .input('notes', sql.NVarChar(sql.MAX), notes || '')
       .input('reviewedBy', sql.NVarChar, req.user.email)
+      .input('history', sql.NVarChar(sql.MAX), JSON.stringify(history))
       .query(`UPDATE Applications
-              SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE()
+              SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
               WHERE Id = @id`)
 
     // Send email notification to member
