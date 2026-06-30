@@ -224,6 +224,10 @@ async function sendSignatureRequest(formData, userEmail) {
 }
 
 async function sendReferencesRequest(formData) {
+  if (!DROPBOX_SIGN_REFERENCES_TEMPLATE_ID) {
+    throw new Error('DROPBOX_SIGN_REFERENCES_TEMPLATE_ID is not set in .env')
+  }
+
   const ref1Email = (formData.reference1Email || '').trim()
   const ref1Name  = (formData.reference1RepName || '').trim() || 'Reference 1'
   const ref2Email = (formData.reference2Email || '').trim()
@@ -237,12 +241,12 @@ async function sendReferencesRequest(formData) {
   api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
   const signer1 = new SubSignatureRequestTemplateSigner()
-  signer1.role         = 'Reference 1'
+  signer1.role         = 'Reference 1 - Membership Application'
   signer1.emailAddress = ref1Email
   signer1.name         = ref1Name
 
   const signer2 = new SubSignatureRequestTemplateSigner()
-  signer2.role         = 'Reference 2'
+  signer2.role         = 'Reference 2 - Membership Application'
   signer2.emailAddress = ref2Email
   signer2.name         = ref2Name
 
@@ -251,6 +255,10 @@ async function sendReferencesRequest(formData) {
   request.signers      = [signer1, signer2]
   request.customFields = buildReferenceCustomFields(formData)
   request.testMode     = true
+
+  console.log('=== References DS signers ===')
+  console.log(JSON.stringify(request.signers, null, 2))
+  console.log('=============================')
 
   const response = await api.signatureRequestSendWithTemplate(request)
   return response.body.signatureRequest.signatureRequestId
