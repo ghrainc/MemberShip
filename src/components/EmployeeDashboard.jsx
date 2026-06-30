@@ -1,26 +1,31 @@
 import { useState, useContext, useEffect } from 'react'
+import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import '../styles/EmployeeDashboard.css'
 
-function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
-  const { currentUser, getAllApplications, createMember } = useContext(AuthContext)
+const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '' }
+
+function EmployeeDashboard() {
+  const { currentUser, getAllApplications, createMember, testDropboxSign, logout } = useContext(AuthContext)
+  const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  const [searchTerms, setSearchTerms] = useState({
-    storeName: '',
-    submittedDate: '',
-    status: '',
-    email: '',
-    repName: ''
-  })
+  const [searchTerms, setSearchTerms] = useState(EMPTY_FILTERS)
 
   const [sortConfig, setSortConfig] = useState({
     key: 'CreatedAt',
     direction: 'desc'
   })
+
+  // Dropbox Sign test modal state
+  const [showDsTest, setShowDsTest] = useState(false)
+  const [dsTestEmail, setDsTestEmail] = useState('')
+  const [dsTestName, setDsTestName] = useState('')
+  const [dsTestLoading, setDsTestLoading] = useState(false)
+  const [dsTestResult, setDsTestResult] = useState(null)
 
   // Create member modal state
   const [showCreateMember, setShowCreateMember] = useState(false)
@@ -38,6 +43,11 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
     })
   }, [])
 
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     const data = await getAllApplications()
@@ -49,12 +59,23 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
     setSearchTerms(prev => ({ ...prev, [field]: value }))
   }
 
+  const handleClearFilters = () => {
+    setSearchTerms(EMPTY_FILTERS)
+  }
+
   const handleSort = (key) => {
     setSortConfig(prev => ({
       key,
       direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
     }))
   }
+
+  const hasActiveFilters =
+    searchTerms.storeName !== '' ||
+    searchTerms.submittedDate !== '' ||
+    searchTerms.status !== '' ||
+    searchTerms.email !== '' ||
+    searchTerms.repName !== ''
 
   const filteredApplications = applications.filter(app => {
     const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
@@ -101,11 +122,13 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
 
   const getStatusBadge = (status) => {
     const statusMap = {
-      submitted: { label: 'Submitted',     class: 'status-submitted' },
-      approved:  { label: 'Approved',      class: 'status-approved' },
-      pending:   { label: 'Pending Review',class: 'status-pending' },
-      rejected:  { label: 'Rejected',      class: 'status-rejected' },
-      draft:     { label: 'Draft',         class: 'status-pending' }
+      submitted:           { label: 'Submitted',          class: 'status-submitted' },
+      approved:            { label: 'Approved',           class: 'status-approved' },
+      pending:             { label: 'Pending Review',     class: 'status-pending' },
+      rejected:            { label: 'Rejected',           class: 'status-rejected' },
+      draft:               { label: 'Draft',              class: 'status-pending' },
+      pending_signature:   { label: 'Awaiting Signature', class: 'status-pending-signature' },
+      signed:              { label: 'Signed by Member',   class: 'status-signed' }
     }
     const info = statusMap[status] || { label: status, class: 'status-unknown' }
     return <span className={`status-badge ${info.class}`}>{info.label}</span>
@@ -154,6 +177,23 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
     }
   }
 
+  const handleDsTestSubmit = async (e) => {
+    e.preventDefault()
+    if (!dsTestEmail) return
+    setDsTestLoading(true)
+    setDsTestResult(null)
+    const result = await testDropboxSign(dsTestEmail, dsTestName)
+    setDsTestResult(result)
+    setDsTestLoading(false)
+  }
+
+  const handleCloseDsTest = () => {
+    setShowDsTest(false)
+    setDsTestEmail('')
+    setDsTestName('')
+    setDsTestResult(null)
+  }
+
   const handleCloseModal = () => {
     setShowCreateMember(false)
     setNewMemberEmail('')
@@ -162,6 +202,10 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
     setCreateMemberError('')
     setCreateMemberSuccess('')
   }
+
+  const countLabel = hasActiveFilters
+    ? `${sortedApplications.length} of ${applications.length} application${applications.length !== 1 ? 's' : ''}`
+    : `${applications.length} application${applications.length !== 1 ? 's' : ''}`
 
   return (
     <div className="employee-dashboard-container">
@@ -183,8 +227,11 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
               <button className="create-member-button" onClick={() => setShowCreateMember(true)}>
                 + Create Member Login
               </button>
+              <button className="create-member-button" onClick={() => setShowDsTest(true)} style={{ background: '#6c757d' }}>
+                Test Dropbox Sign
+              </button>
               <span className="user-role">Employee: {currentUser?.email}</span>
-              <button className="logout-button" onClick={onLogout}>Logout</button>
+              <button className="logout-button" onClick={handleLogout}>Logout</button>
             </div>
           </div>
         </div>
@@ -196,8 +243,13 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
             <h2>All Applications</h2>
             <div className="content-header-right">
               <p className="application-count">
-                {loading ? 'Loading...' : `${sortedApplications.length} application${sortedApplications.length !== 1 ? 's' : ''}`}
+                {loading ? 'Loading...' : countLabel}
               </p>
+              {hasActiveFilters && (
+                <button className="clear-filters-button" onClick={handleClearFilters}>
+                  Clear Filters
+                </button>
+              )}
               <button className="refresh-button" onClick={handleRefresh} disabled={refreshing}>
                 {refreshing ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -206,7 +258,7 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
 
           {loading ? (
             <div className="empty-state"><p>Loading applications...</p></div>
-          ) : sortedApplications.length === 0 ? (
+          ) : applications.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📋</div>
               <h3>No Applications</h3>
@@ -293,6 +345,8 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
                           <option value="rejected">Rejected</option>
                           <option value="pending">Pending</option>
                           <option value="draft">Draft</option>
+                          <option value="pending_signature">Awaiting Signature</option>
+                          <option value="signed">Signed by Member</option>
                         </select>
                         <button className="sort-button" onClick={() => handleSort('Status')}>
                           <SortIcon column="Status" />
@@ -304,32 +358,43 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedApplications.map((app) => {
-                    const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
-                    return (
-                      <tr key={app.Id}>
-                        <td>{app.StoreName || '—'}</td>
-                        <td className="email-cell">{app.UserEmail}</td>
-                        <td>{repFullName || 'Not provided'}</td>
-                        <td>{formatDate(app.CreatedAt)}</td>
-                        <td>{getStatusBadge(app.Status)}</td>
-                        <td className="action-cell">
-                          <button
-                            className="view-button"
-                            onClick={() => onViewApplication(app.Id)}
-                          >
-                            View
-                          </button>
-                          <button
-                            className="edit-button"
-                            onClick={() => onEditApplication(app.Id)}
-                          >
-                            Edit
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {sortedApplications.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="empty-filter-row">
+                        No applications match the current filters.{' '}
+                        <button className="clear-filters-inline" onClick={handleClearFilters}>
+                          Clear Filters
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
+                    sortedApplications.map((app) => {
+                      const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
+                      return (
+                        <tr key={app.Id}>
+                          <td>{app.StoreName || '—'}</td>
+                          <td className="email-cell">{app.UserEmail}</td>
+                          <td>{repFullName || 'Not provided'}</td>
+                          <td>{formatDate(app.CreatedAt)}</td>
+                          <td>{getStatusBadge(app.Status)}</td>
+                          <td className="action-cell">
+                            <button
+                              className="view-button"
+                              onClick={() => navigate(`/employee/application/${app.Id}`)}
+                            >
+                              View
+                            </button>
+                            <button
+                              className="edit-button"
+                              onClick={() => navigate(`/employee/application/${app.Id}/edit/step/1`)}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -340,6 +405,60 @@ function EmployeeDashboard({ onViewApplication, onEditApplication, onLogout }) {
       <footer className="employee-dashboard-footer">
         <p>&copy; 2024 Greater Houston Retailers Cooperative Association. All rights reserved.</p>
       </footer>
+
+      {showDsTest && (
+        <div className="modal-overlay" onClick={handleCloseDsTest}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Test Dropbox Sign</h3>
+              <button className="modal-close" onClick={handleCloseDsTest}>✕</button>
+            </div>
+            <form onSubmit={handleDsTestSubmit} className="modal-form">
+              <p style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+                Sends a dummy signature request using the configured template and API key.
+                The request email will go to the address below.
+              </p>
+              <div className="form-group">
+                <label>Signer Email *</label>
+                <input
+                  type="email"
+                  value={dsTestEmail}
+                  onChange={(e) => setDsTestEmail(e.target.value)}
+                  className="form-input"
+                  placeholder="signer@example.com"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Signer Name (optional)</label>
+                <input
+                  type="text"
+                  value={dsTestName}
+                  onChange={(e) => setDsTestName(e.target.value)}
+                  className="form-input"
+                  placeholder="John Doe"
+                />
+              </div>
+              {dsTestResult && dsTestResult.success && (
+                <div className="modal-success">
+                  Sent! Signature Request ID: <code style={{ fontSize: 11, wordBreak: 'break-all' }}>{dsTestResult.signatureRequestId}</code>
+                </div>
+              )}
+              {dsTestResult && !dsTestResult.success && (
+                <div className="modal-error">Error: {dsTestResult.error}</div>
+              )}
+              <div className="modal-actions">
+                <button type="submit" className="modal-submit-button" disabled={dsTestLoading || !dsTestEmail}>
+                  {dsTestLoading ? 'Sending...' : 'Send Test Request'}
+                </button>
+                <button type="button" className="modal-cancel-button" onClick={handleCloseDsTest}>
+                  Close
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showCreateMember && (
         <div className="modal-overlay" onClick={handleCloseModal}>

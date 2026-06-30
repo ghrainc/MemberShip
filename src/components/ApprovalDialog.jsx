@@ -50,8 +50,8 @@ function ApprovalDialog({ application, action, onConfirm, onCancel }) {
 
         <div className="dialog-content">
           <div className="application-info">
-            <h3>{application.storeName}</h3>
-            <p>ID: {application.id}</p>
+            <h3>{application.StoreName}</h3>
+            <p>ID: {application.Id}</p>
           </div>
 
           <p className="confirmation-message">{config.message}</p>

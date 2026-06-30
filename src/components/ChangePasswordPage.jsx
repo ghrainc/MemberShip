@@ -1,10 +1,12 @@
 import { useState, useContext } from 'react'
+import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import '../styles/ChangePasswordPage.css'
 
-function ChangePasswordPage({ onSuccess, onLogout }) {
-  const { currentUser, changePassword } = useContext(AuthContext)
+function ChangePasswordPage() {
+  const { currentUser, changePassword, logout } = useContext(AuthContext)
+  const navigate = useNavigate()
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
@@ -32,10 +34,15 @@ function ChangePasswordPage({ onSuccess, onLogout }) {
     setLoading(false)
 
     if (result === true) {
-      onSuccess()
+      navigate('/dashboard')
     } else {
       setError(result || 'Failed to change password. Please try again.')
     }
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
   }
 
   return (
@@ -85,7 +92,7 @@ function ChangePasswordPage({ onSuccess, onLogout }) {
         </form>
 
         <div className="change-password-footer">
-          <button type="button" className="logout-link" onClick={onLogout}>
+          <button type="button" className="logout-link" onClick={handleLogout}>
             Logout and sign in with a different account
           </button>
         </div>

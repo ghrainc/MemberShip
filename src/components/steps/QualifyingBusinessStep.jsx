@@ -90,6 +90,7 @@ function QualifyingBusinessStep({ formData, errors, handleInputChange }) {
                   </label>
                 </div>
               </label>
+              {errors.hardLiquor && <span className="error-text">{errors.hardLiquor}</span>}
             </div>
 
             <div className="question-item">
@@ -118,6 +119,7 @@ function QualifyingBusinessStep({ formData, errors, handleInputChange }) {
                   </label>
                 </div>
               </label>
+              {errors.ageRequirement && <span className="error-text">{errors.ageRequirement}</span>}
             </div>
 
             <div className="question-item">
@@ -146,6 +148,7 @@ function QualifyingBusinessStep({ formData, errors, handleInputChange }) {
                   </label>
                 </div>
               </label>
+              {errors.closedSundayAfter9pm && <span className="error-text">{errors.closedSundayAfter9pm}</span>}
             </div>
           </div>
 
@@ -178,6 +181,7 @@ function QualifyingBusinessStep({ formData, errors, handleInputChange }) {
               <span className="warning"> (Minimum 7 required)</span>
             )}
           </div>
+          {errors.storeProductCategories && <span className="error-text">{errors.storeProductCategories}</span>}
         </div>
       </fieldset>
     </div>

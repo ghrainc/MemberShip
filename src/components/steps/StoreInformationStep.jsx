@@ -60,11 +60,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="fuel-row-item">
           <div className="form-group">
             <label htmlFor="fuelAvailable">If with fuel *</label>
-            <select id="fuelAvailable" name="fuelAvailable" value={formData.fuelAvailable || ''} onChange={handleInputChange} className="form-select">
+            <select id="fuelAvailable" name="fuelAvailable" value={formData.fuelAvailable || ''} onChange={handleInputChange} className={`form-select ${errors.fuelAvailable ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="branded">Branded</option>
               <option value="unbranded">Unbranded</option>
             </select>
+            {errors.fuelAvailable && <span className="error-text">{errors.fuelAvailable}</span>}
           </div>
 
           {formData.fuelAvailable === 'branded' && (
@@ -76,10 +77,11 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
                 name="brandName"
                 value={formData.brandName || ''}
                 onChange={handleInputChange}
-                className="form-input"
+                className={`form-input ${errors.brandName ? 'input-error' : ''}`}
                 placeholder="Enter brand name"
                 maxLength={50}
               />
+              {errors.brandName && <span className="error-text">{errors.brandName}</span>}
             </div>
           )}
 
@@ -91,11 +93,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="numberOfTanks"
               value={formData.numberOfTanks || ''}
               onChange={numericInput(handleInputChange, 'numberOfTanks')}
-              className="form-input"
+              className={`form-input ${errors.numberOfTanks ? 'input-error' : ''}`}
               placeholder="Numbers only"
               maxLength={20}
               inputMode="numeric"
             />
+            {errors.numberOfTanks && <span className="error-text">{errors.numberOfTanks}</span>}
           </div>
         </div>
 
@@ -108,11 +111,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="tankCapacity"
               value={formData.tankCapacity || ''}
               onChange={numericInput(handleInputChange, 'tankCapacity')}
-              className="form-input"
+              className={`form-input ${errors.tankCapacity ? 'input-error' : ''}`}
               placeholder="Numbers only"
               maxLength={20}
               inputMode="numeric"
             />
+            {errors.tankCapacity && <span className="error-text">{errors.tankCapacity}</span>}
           </div>
 
           <div className="form-group">
@@ -123,11 +127,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="estimatedFuelSales"
               value={formData.estimatedFuelSales || ''}
               onChange={numericInput(handleInputChange, 'estimatedFuelSales')}
-              className="form-input"
+              className={`form-input ${errors.estimatedFuelSales ? 'input-error' : ''}`}
               placeholder="Numbers only"
               maxLength={20}
               inputMode="numeric"
             />
+            {errors.estimatedFuelSales && <span className="error-text">{errors.estimatedFuelSales}</span>}
           </div>
 
           <div className="form-group">
@@ -138,10 +143,11 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="currentFuelSupplier"
               value={formData.currentFuelSupplier || ''}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.currentFuelSupplier ? 'input-error' : ''}`}
               placeholder="Supplier name"
               maxLength={50}
             />
+            {errors.currentFuelSupplier && <span className="error-text">{errors.currentFuelSupplier}</span>}
           </div>
         </div>
 
@@ -154,10 +160,11 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="tceqNumber"
               value={formData.tceqNumber || ''}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.tceqNumber ? 'input-error' : ''}`}
               placeholder="TCEQ number"
               maxLength={50}
             />
+            {errors.tceqNumber && <span className="error-text">{errors.tceqNumber}</span>}
           </div>
         </div>
       </div>
@@ -168,11 +175,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="pos-row-item">
           <div className="form-group">
             <label htmlFor="scanPOS">Do you scan your products at the POS? *</label>
-            <select id="scanPOS" name="scanPOS" value={formData.scanPOS || ''} onChange={handleInputChange} className="form-select">
+            <select id="scanPOS" name="scanPOS" value={formData.scanPOS || ''} onChange={handleInputChange} className={`form-select ${errors.scanPOS ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
+            {errors.scanPOS && <span className="error-text">{errors.scanPOS}</span>}
           </div>
 
           <div className="form-group">
@@ -183,23 +191,25 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
               name="backOfficeProvider"
               value={formData.backOfficeProvider || ''}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.backOfficeProvider ? 'input-error' : ''}`}
               placeholder="Provider name"
               maxLength={50}
             />
+            {errors.backOfficeProvider && <span className="error-text">{errors.backOfficeProvider}</span>}
           </div>
         </div>
 
         <div className="pos-row-item">
           <div className="form-group">
             <label htmlFor="posSystem">What register system (POS) is being used? *</label>
-            <select id="posSystem" name="posSystem" value={formData.posSystem || ''} onChange={handleInputChange} className="form-select">
+            <select id="posSystem" name="posSystem" value={formData.posSystem || ''} onChange={handleInputChange} className={`form-select ${errors.posSystem ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="gilbarco-passport">Gilbarco passport</option>
               <option value="verifone">Verifone</option>
               <option value="ruby">Ruby</option>
               <option value="other">Other</option>
             </select>
+            {errors.posSystem && <span className="error-text">{errors.posSystem}</span>}
           </div>
         </div>
       </div>
@@ -210,11 +220,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="food-service-row-item">
           <div className="form-group">
             <label htmlFor="foodServiceAvailable">Do you have food service at store *</label>
-            <select id="foodServiceAvailable" name="foodServiceAvailable" value={formData.foodServiceAvailable || ''} onChange={handleInputChange} className="form-select">
+            <select id="foodServiceAvailable" name="foodServiceAvailable" value={formData.foodServiceAvailable || ''} onChange={handleInputChange} className={`form-select ${errors.foodServiceAvailable ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
+            {errors.foodServiceAvailable && <span className="error-text">{errors.foodServiceAvailable}</span>}
           </div>
         </div>
 
@@ -222,8 +233,8 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
           <>
             <div className="food-service-row-item">
               <div className="form-group">
-                <label htmlFor="foodConcept">Food Concept</label>
-                <select id="foodConcept" name="foodConcept" value={formData.foodConcept || ''} onChange={handleInputChange} className="form-select">
+                <label htmlFor="foodConcept">Food Concept *</label>
+                <select id="foodConcept" name="foodConcept" value={formData.foodConcept || ''} onChange={handleInputChange} className={`form-select ${errors.foodConcept ? 'input-error' : ''}`}>
                   <option value="">Select one option</option>
                   <option value="chicken">Chicken</option>
                   <option value="pizza">Pizza</option>
@@ -232,44 +243,48 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
                   <option value="bbq">BBQ</option>
                   <option value="other">Other</option>
                 </select>
+                {errors.foodConcept && <span className="error-text">{errors.foodConcept}</span>}
               </div>
 
               <div className="form-group">
-                <label htmlFor="foodServiceBranded">Is your food service branded</label>
-                <select id="foodServiceBranded" name="foodServiceBranded" value={formData.foodServiceBranded || ''} onChange={handleInputChange} className="form-select">
+                <label htmlFor="foodServiceBranded">Is your food service branded *</label>
+                <select id="foodServiceBranded" name="foodServiceBranded" value={formData.foodServiceBranded || ''} onChange={handleInputChange} className={`form-select ${errors.foodServiceBranded ? 'input-error' : ''}`}>
                   <option value="">Select one option</option>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
                 </select>
+                {errors.foodServiceBranded && <span className="error-text">{errors.foodServiceBranded}</span>}
               </div>
             </div>
 
             {formData.foodServiceBranded === 'yes' && (
               <div className="food-service-row-item">
                 <div className="form-group">
-                  <label htmlFor="foodBrandName">Brand Name</label>
+                  <label htmlFor="foodBrandName">Brand Name *</label>
                   <input
                     type="text"
                     id="foodBrandName"
                     name="foodBrandName"
                     value={formData.foodBrandName || ''}
                     onChange={handleInputChange}
-                    className="form-input"
+                    className={`form-input ${errors.foodBrandName ? 'input-error' : ''}`}
                     placeholder="Enter brand name"
                     maxLength={50}
                   />
+                  {errors.foodBrandName && <span className="error-text">{errors.foodBrandName}</span>}
                 </div>
               </div>
             )}
 
             <div className="food-service-row-item">
               <div className="form-group">
-                <label htmlFor="bigMardKudosGameday">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</label>
-                <select id="bigMardKudosGameday" name="bigMardKudosGameday" value={formData.bigMardKudosGameday || ''} onChange={handleInputChange} className="form-select">
+                <label htmlFor="bigMardKudosGameday">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN? *</label>
+                <select id="bigMardKudosGameday" name="bigMardKudosGameday" value={formData.bigMardKudosGameday || ''} onChange={handleInputChange} className={`form-select ${errors.bigMardKudosGameday ? 'input-error' : ''}`}>
                   <option value="">Select one option</option>
                   <option value="yes">Yes</option>
                   <option value="no">No</option>
                 </select>
+                {errors.bigMardKudosGameday && <span className="error-text">{errors.bigMardKudosGameday}</span>}
               </div>
             </div>
           </>
@@ -282,11 +297,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="cooler-row-item">
           <div className="form-group">
             <label htmlFor="walkInCooler">Does your store have a walk-in cooler? *</label>
-            <select id="walkInCooler" name="walkInCooler" value={formData.walkInCooler || ''} onChange={handleInputChange} className="form-select">
+            <select id="walkInCooler" name="walkInCooler" value={formData.walkInCooler || ''} onChange={handleInputChange} className={`form-select ${errors.walkInCooler ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
+            {errors.walkInCooler && <span className="error-text">{errors.walkInCooler}</span>}
           </div>
 
           {formData.walkInCooler === 'yes' && (
@@ -298,11 +314,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
                 name="coolerDoors"
                 value={formData.coolerDoors || ''}
                 onChange={numericInput(handleInputChange, 'coolerDoors')}
-                className="form-input"
+                className={`form-input ${errors.coolerDoors ? 'input-error' : ''}`}
                 placeholder="Numbers only"
                 maxLength={20}
                 inputMode="numeric"
               />
+              {errors.coolerDoors && <span className="error-text">{errors.coolerDoors}</span>}
             </div>
           )}
         </div>
@@ -310,11 +327,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="cooler-row-item">
           <div className="form-group">
             <label htmlFor="walkInFreezer">Does your store have a walk-in Freezer? *</label>
-            <select id="walkInFreezer" name="walkInFreezer" value={formData.walkInFreezer || ''} onChange={handleInputChange} className="form-select">
+            <select id="walkInFreezer" name="walkInFreezer" value={formData.walkInFreezer || ''} onChange={handleInputChange} className={`form-select ${errors.walkInFreezer ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
+            {errors.walkInFreezer && <span className="error-text">{errors.walkInFreezer}</span>}
           </div>
 
           {formData.walkInFreezer === 'yes' && (
@@ -326,11 +344,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
                 name="freezerDoors"
                 value={formData.freezerDoors || ''}
                 onChange={numericInput(handleInputChange, 'freezerDoors')}
-                className="form-input"
+                className={`form-input ${errors.freezerDoors ? 'input-error' : ''}`}
                 placeholder="Numbers only"
                 maxLength={20}
                 inputMode="numeric"
               />
+              {errors.freezerDoors && <span className="error-text">{errors.freezerDoors}</span>}
             </div>
           )}
         </div>
@@ -338,11 +357,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         <div className="cooler-row-item">
           <div className="form-group">
             <label htmlFor="beerCave">Does your store have a beer cave? *</label>
-            <select id="beerCave" name="beerCave" value={formData.beerCave || ''} onChange={handleInputChange} className="form-select">
+            <select id="beerCave" name="beerCave" value={formData.beerCave || ''} onChange={handleInputChange} className={`form-select ${errors.beerCave ? 'input-error' : ''}`}>
               <option value="">Select one option</option>
               <option value="yes">Yes</option>
               <option value="no">No</option>
             </select>
+            {errors.beerCave && <span className="error-text">{errors.beerCave}</span>}
           </div>
         </div>
       </div>

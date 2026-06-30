@@ -1,5 +1,6 @@
 function AchAuthorizationStep({
   formData,
+  errors = {},
   handleAchInfoChange,
   handleAchToBankMapping,
   handleBankInfoChange,
@@ -134,10 +135,11 @@ function AchAuthorizationStep({
                     id={`bankName-${account.id}`}
                     value={account.bankName}
                     onChange={(e) => handleBankInfoChange(account.id, 'bankName', e.target.value)}
-                    className="form-input"
+                    className={`form-input ${errors[`bankName_${account.id}`] ? 'input-error' : ''}`}
                     placeholder="e.g., Chase Bank, Wells Fargo, Bank of America"
                     maxLength={50}
                   />
+                  {errors[`bankName_${account.id}`] && <span className="error-text">{errors[`bankName_${account.id}`]}</span>}
                 </div>
 
                 <div className="form-row">
@@ -203,11 +205,12 @@ function AchAuthorizationStep({
                       id={`transitAbaNumber-${account.id}`}
                       value={account.transitAbaNumber}
                       onChange={(e) => handleBankInfoChange(account.id, 'transitAbaNumber', e.target.value.replace(/\D/g, ''))}
-                      className="form-input"
+                      className={`form-input ${errors[`transitAbaNumber_${account.id}`] ? 'input-error' : ''}`}
                       placeholder="Numbers only"
                       maxLength={20}
                       inputMode="numeric"
                     />
+                    {errors[`transitAbaNumber_${account.id}`] && <span className="error-text">{errors[`transitAbaNumber_${account.id}`]}</span>}
                   </div>
                   <div className="form-group">
                     <label htmlFor={`accountNumber-${account.id}`}>Account Number *</label>
@@ -216,11 +219,12 @@ function AchAuthorizationStep({
                       id={`accountNumber-${account.id}`}
                       value={account.accountNumber}
                       onChange={(e) => handleBankInfoChange(account.id, 'accountNumber', e.target.value.replace(/\D/g, ''))}
-                      className="form-input"
+                      className={`form-input ${errors[`accountNumber_${account.id}`] ? 'input-error' : ''}`}
                       placeholder="Numbers only"
                       maxLength={20}
                       inputMode="numeric"
                     />
+                    {errors[`accountNumber_${account.id}`] && <span className="error-text">{errors[`accountNumber_${account.id}`]}</span>}
                   </div>
                 </div>
               </fieldset>

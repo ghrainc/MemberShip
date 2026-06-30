@@ -261,6 +261,16 @@
   color: #721c24;
 }
 
+.status-pending-signature {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-signed {
+  background: #cce5ff;
+  color: #004085;
+}
+
 .app-id {
   font-size: 11px;
   opacity: 0.8;

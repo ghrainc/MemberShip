@@ -1,10 +1,12 @@
 import { useContext, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import '../styles/Dashboard.css'
 
-function Dashboard({ onNewApplication, onViewApplication, onContinueApplication, onLogout }) {
-  const { currentUser, getUserApplications } = useContext(AuthContext)
+function Dashboard() {
+  const { currentUser, getUserApplications, logout } = useContext(AuthContext)
+  const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -14,6 +16,24 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
       setLoading(false)
     })
   }, [])
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const handleNewApplication = () => {
+    navigate('/application/new/step/1')
+  }
+
+  const handleContinueApplication = (appId) => {
+    // MembershipForm will load the app and redirect to the saved step
+    navigate(`/application/${appId}/step/1`)
+  }
+
+  const handleViewApplication = (appId) => {
+    navigate(`/application/${appId}`)
+  }
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
@@ -26,10 +46,12 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
 
   const getStatusBadge = (status) => {
     const statusMap = {
-      draft:     { label: 'Draft',          class: 'status-pending' },
-      submitted: { label: 'Submitted',      class: 'status-submitted' },
-      approved:  { label: 'Approved',       class: 'status-approved' },
-      rejected:  { label: 'Needs Revision', class: 'status-rejected' }
+      draft:               { label: 'Draft',               class: 'status-pending' },
+      submitted:           { label: 'Submitted',           class: 'status-submitted' },
+      approved:            { label: 'Approved',            class: 'status-approved' },
+      rejected:            { label: 'Needs Revision',      class: 'status-rejected' },
+      pending_signature:   { label: 'Awaiting Signature',  class: 'status-pending-signature' },
+      signed:              { label: 'Signed by Member',    class: 'status-signed' }
     }
     const statusInfo = statusMap[status] || { label: status, class: 'status-unknown' }
     return <span className={`status-badge ${statusInfo.class}`}>{statusInfo.label}</span>
@@ -53,7 +75,7 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
           <div className="header-right">
             <div className="user-info">
               <span className="user-email">{currentUser?.email}</span>
-              <button className="logout-button" onClick={onLogout}>Logout</button>
+              <button className="logout-button" onClick={handleLogout}>Logout</button>
             </div>
           </div>
         </div>
@@ -72,7 +94,7 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
                     : `You have ${applications.length} application${applications.length !== 1 ? 's' : ''}`}
               </p>
             </div>
-            <button className="new-app-button" onClick={onNewApplication}>
+            <button className="new-app-button" onClick={handleNewApplication}>
               <span>+</span> New Application
             </button>
           </div>
@@ -84,7 +106,7 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
               <div className="empty-icon">📋</div>
               <h3>No Applications Yet</h3>
               <p>Start a new membership application to get began with GHRA.</p>
-              <button className="empty-button" onClick={onNewApplication}>
+              <button className="empty-button" onClick={handleNewApplication}>
                 Create First Application
               </button>
             </div>
@@ -117,7 +139,7 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
                     {app.Status === 'draft' ? (
                       <button
                         className="action-button view-button"
-                        onClick={() => onContinueApplication(app.Id)}
+                        onClick={() => handleContinueApplication(app.Id)}
                       >
                         Continue Editing
                       </button>
@@ -125,13 +147,13 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
                       <>
                         <button
                           className="action-button view-button"
-                          onClick={() => onViewApplication(app.Id)}
+                          onClick={() => handleViewApplication(app.Id)}
                         >
                           View Details
                         </button>
                         <button
                           className="action-button resubmit-button"
-                          onClick={() => onContinueApplication(app.Id)}
+                          onClick={() => handleContinueApplication(app.Id)}
                         >
                           Edit &amp; Resubmit
                         </button>
@@ -140,7 +162,7 @@ function Dashboard({ onNewApplication, onViewApplication, onContinueApplication,
                       <>
                         <button
                           className="action-button view-button"
-                          onClick={() => onViewApplication(app.Id)}
+                          onClick={() => handleViewApplication(app.Id)}
                         >
                           View Details
                         </button>

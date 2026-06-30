@@ -300,6 +300,16 @@
   color: #e74c3c;
 }
 
+.status-pending-signature {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status-signed {
+  background: #cce5ff;
+  color: #004085;
+}
+
 .status-pending {
   background: #fdeaea;
   color: #e67e22;
@@ -522,6 +532,45 @@
 
 .modal-cancel-button:hover {
   background: #e0e6ed;
+}
+
+.clear-filters-button {
+  background: #e67e22;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-filters-button:hover {
+  background: #ca6f1e;
+  transform: translateY(-1px);
+}
+
+.empty-filter-row {
+  text-align: center;
+  padding: 40px 20px;
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.clear-filters-inline {
+  background: none;
+  border: none;
+  color: #667eea;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.clear-filters-inline:hover {
+  color: #764ba2;
 }
 
 .employee-dashboard-footer {

@@ -8,6 +8,161 @@ const path = require('path')
 const fs = require('fs')
 require('dotenv').config()
 
+const {
+  SignatureRequestApi,
+  SignatureRequestSendWithTemplateRequest,
+  SubSignatureRequestTemplateSigner,
+  SubCustomField,
+} = require('@dropbox/sign')
+
+const DROPBOX_SIGN_TEMPLATE_ID   = '48801a508aa8d04b909f28d75eec410c3dc34e3e'
+const DROPBOX_SIGN_SIGNER_ROLE   = 'Authorized Rep'
+
+async function sendSignatureRequest(formData, userEmail) {
+  const api = new SignatureRequestApi()
+  api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+  const firstName = formData.authorizedRepFirstName || ''
+  const lastName  = formData.authorizedRepLastName  || ''
+  const repName   = [firstName, lastName].filter(Boolean).join(' ') || userEmail
+
+  const signer = new SubSignatureRequestTemplateSigner()
+  signer.role         = DROPBOX_SIGN_SIGNER_ROLE
+  signer.emailAddress = userEmail
+  signer.name         = repName
+
+  const owner1 = (formData.owners        || [])[0] || {}
+  const owner2 = (formData.owners        || [])[1] || {}
+  const owner3 = (formData.owners        || [])[2] || {}
+  const bank1  = (formData.bankAccounts  || [])[0] || {}
+  const bank2  = (formData.bankAccounts  || [])[1] || {}
+  const bank3  = (formData.bankAccounts  || [])[2] || {}
+  const ach    = formData.achInfoFor     || {}
+  const own    = formData.ownershipType  || ''
+  const biz    = formData.businessType   || ''
+  const cond   = formData.storeCondition || ''
+  const prop   = formData.businessProperty || ''
+
+  // Build a SubCustomField — skip null/empty/false so DS doesn't error on blank required fields
+  function cf(name, value) {
+    if (value === undefined || value === null || value === '' || value === false) return null
+    const f = new SubCustomField()
+    f.name  = name
+    f.value = String(value)
+    return f
+  }
+  // Checkbox helper — only send when checked (unchecked checkboxes are left blank)
+  const chk = (name, checked) => checked ? cf(name, '1') : null
+
+  const customFields = [
+    // ── Business identity ────────────────────────────────────────────────────
+    cf('CorpName',     formData.memberName),
+    cf('StoreName',    formData.dbaName || formData.memberName),
+    cf('CorpEIN',      formData.ein),
+    cf('CorpSalesTax', formData.salesTaxId),
+    cf('PrevGHRAAC',   formData.previousGhraNumber),
+    cf('Leased Size',  formData.storeSize),
+
+    // ── Store address ────────────────────────────────────────────────────────
+    cf('StoreAddress', formData.storeAddress),
+    cf('StoreCity',    formData.storeCity),
+    cf('StoreZip',     formData.storeZip),
+    cf('StoreCounty',  formData.storeCounty),
+
+    // ── Mailing address ──────────────────────────────────────────────────────
+    cf('MailAddress',  formData.mailingAddress),
+    cf('MailCity',     formData.mailingCity),
+    cf('MailZip',      formData.mailingZip),
+    cf('MailCounty',   formData.mailingCounty),
+
+    // ── Contact ──────────────────────────────────────────────────────────────
+    cf('StorePhone',   formData.storePhone),
+    cf('StoreEmail',   formData.emailAddress),
+
+    // ── Authorized rep (owner 1) ─────────────────────────────────────────────
+    cf('AuthRep',      repName),
+    cf('AuthRepTitle', owner1.title),
+    cf('AuthRepPerc',  owner1.ownershipPercent != null ? `${owner1.ownershipPercent}%` : null),
+    cf('AuthRepCell',  owner1.mobilePhone),
+    cf('AuthRepDL',    owner1.driverLicense),
+    cf('AuthRepState', owner1.stateIssued),
+
+    // ── Owner 2 ──────────────────────────────────────────────────────────────
+    cf('Owner2Name',   [owner2.firstName, owner2.lastName].filter(Boolean).join(' ') || null),
+    cf('Owner2Title',  owner2.title),
+    cf('Owner2Perc',   owner2.ownershipPercent != null ? `${owner2.ownershipPercent}%` : null),
+    cf('Owner2Cell',   owner2.mobilePhone),
+    cf('Owner2DL',     owner2.driverLicense),
+    cf('Owner2State',  owner2.stateIssued),
+
+    // ── Owner 3 ──────────────────────────────────────────────────────────────
+    cf('Owner3Name',   [owner3.firstName, owner3.lastName].filter(Boolean).join(' ') || null),
+    cf('Owner3Title',  owner3.title),
+    cf('Owner3Perc',   owner3.ownershipPercent != null ? `${owner3.ownershipPercent}%` : null),
+    cf('Owner3Cell',   owner3.mobilePhone),
+    cf('Owner3DL',     owner3.driverLicense),
+    cf('Owner3State',  owner3.stateIssued),
+
+    // ── Bank accounts ────────────────────────────────────────────────────────
+    cf('Bank1Name',    bank1.bankName),
+    cf('Bank1Address', bank1.bankAddress),
+    cf('Bank1Transit', bank1.transitAbaNumber),
+    cf('Bank1Account', bank1.accountNumber),
+    cf('Bank2Name',    bank2.bankName),
+    cf('Bank2Address', bank2.bankAddress),
+    cf('Bank2Transit', bank2.transitAbaNumber),
+    cf('Bank2Account', bank2.accountNumber),
+    cf('Bank3Name',    bank3.bankName),
+    cf('Bank3Address', bank3.bankAddress),
+    cf('Bank3Transit', bank3.transitAbaNumber),
+    cf('Bank3Account', bank3.accountNumber),
+
+    // ── Ownership type ───────────────────────────────────────────────────────
+    chk('Sole',               own === 'sole-proprietor'),
+    chk('Partnership',        own === 'partnership'),
+    chk('LimitedPartnership', own === 'limited-partnership'),
+    chk('Corp',               own === 'corporation'),
+    chk('LLC',                own === 'llc'),
+
+    // ── Business type ────────────────────────────────────────────────────────
+    chk('StoreWithFuel',    biz === 'with-fuel'),
+    chk('StoreWithoutFuel', biz === 'without-fuel'),
+
+    // ── Store condition / property ───────────────────────────────────────────
+    chk('Existing Store', cond === 'existing'),
+    chk('Remodeled',      cond === 'remodeled'),
+    chk('BrandNew',       cond === 'brand-new'),
+    chk('Owned',          prop === 'owned'),
+    chk('Leased',         prop === 'leased'),
+
+    // ── Previous GHRA membership ─────────────────────────────────────────────
+    chk('PrevGHRAYes', !!formData.previousMember),
+    chk('PrevGHRANo',  !formData.previousMember),
+
+    // ── ACH bank checkboxes ──────────────────────────────────────────────────
+    chk('CorpBank1',  !!ach.corporate),
+    chk('WHBank',     !!ach.warehouse),
+    chk('FuelsBank1', !!ach.fuels),
+    chk('CorpBank2',  !!ach.corporate),
+    chk('WHBank2',    !!ach.warehouse),
+    chk('FuelsBank2', !!ach.fuels),
+    chk('CorpBank3',  !!ach.corporate),
+    chk('FuelsBank3', !!ach.fuels),
+
+    // ── Other ────────────────────────────────────────────────────────────────
+    chk('OldSpanner', !!formData.storeSpannerBoard),
+  ].filter(Boolean)
+
+  const request = new SignatureRequestSendWithTemplateRequest()
+  request.templateIds  = [DROPBOX_SIGN_TEMPLATE_ID]
+  request.signers      = [signer]
+  request.customFields = customFields
+  request.testMode     = true
+
+  const response = await api.signatureRequestSendWithTemplate(request)
+  return response.body.signatureRequest.signatureRequestId
+}
+
 // nodemailer is optional — email notifications silently skipped if not installed or configured
 let nodemailer
 try { nodemailer = require('nodemailer') } catch {}
@@ -59,7 +214,7 @@ const upload = multer({
 })
 
 const app = express()
-app.use(cors({ origin: 'http://localhost:5173' }))
+app.use(cors({ origin: /^http:\/\/localhost(:\d+)?$/ }))
 app.use(express.json({ limit: '10mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'UploadedDocuments')))
 
@@ -107,6 +262,20 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'CommentsHistory'
       )
         ALTER TABLE Applications ADD CommentsHistory NVARCHAR(MAX) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'SignatureRequestId'
+      )
+        ALTER TABLE Applications ADD SignatureRequestId NVARCHAR(255) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'SignedAt'
+      )
+        ALTER TABLE Applications ADD SignedAt DATETIME NULL
     `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
@@ -413,10 +582,37 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
               SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
               WHERE Id = @id`)
 
-    // Send email notification to member
+    if (status === 'approved') {
+      // Load full FormData + email to build the signature request
+      const fullApp = await db.request()
+        .input('id2', sql.Int, req.params.id)
+        .query('SELECT FormData, UserEmail FROM Applications WHERE Id = @id2')
+
+      if (!fullApp.recordset.length) return res.status(404).json({ error: 'Not found' })
+      const { FormData: rawFormData, UserEmail } = fullApp.recordset[0]
+      let fd = {}
+      try { fd = JSON.parse(rawFormData || '{}') } catch {}
+
+      try {
+        const signatureRequestId = await sendSignatureRequest(fd, UserEmail)
+        await db.request()
+          .input('sigId', sql.NVarChar, signatureRequestId)
+          .input('id3', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET Status = 'pending_signature', SignatureRequestId = @sigId WHERE Id = @id3`)
+        return res.json({ success: true, status: 'pending_signature', signatureRequestId })
+      } catch (dsErr) {
+        const detail = dsErr.body?.error?.errorMsg || dsErr.message || 'Unknown error'
+        console.error('Dropbox Sign send failed:', detail)
+        return res.status(500).json({
+          error: `Application approved but signature request failed to send: ${detail}`
+        })
+      }
+    }
+
+    // For rejected / any other status — send email and return success
     const appRow = await db.request()
-      .input('id2', sql.Int, req.params.id)
-      .query('SELECT UserEmail, StoreName FROM Applications WHERE Id = @id2')
+      .input('id4', sql.Int, req.params.id)
+      .query('SELECT UserEmail, StoreName FROM Applications WHERE Id = @id4')
     if (appRow.recordset.length > 0) {
       const { UserEmail, StoreName } = appRow.recordset[0]
       sendStatusEmail(UserEmail, StoreName, status, notes).catch(() => {})
@@ -497,6 +693,104 @@ app.delete('/api/documents/:applicationId/:docId', authMiddleware, (req, res) =>
   }
 
   res.json({ deleted })
+})
+
+// ── Dropbox Sign test ────────────────────────────────────────────────────────
+
+// POST /api/test/dropbox-sign  — employee only, sends a dummy signature request
+app.post('/api/test/dropbox-sign', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+
+  const { signerEmail, signerName } = req.body
+  if (!signerEmail) return res.status(400).json({ error: 'signerEmail is required' })
+
+  const firstName = signerName ? signerName.split(' ')[0] : 'Test'
+  const lastName  = signerName ? signerName.split(' ').slice(1).join(' ') || 'Signer' : 'Signer'
+
+  const dummyFormData = {
+    memberName:                'TEST Company LLC',
+    dbaName:                   'TEST Store DBA',
+    ownershipType:             'llc',
+    businessType:              'with-fuel',
+    storeCondition:            'existing',
+    businessProperty:          'leased',
+    storeSize:                 '2500',
+    ein:                       '12-3456789',
+    salesTaxId:                '1-23-4567890-1',
+    previousMember:            false,
+    previousGhraNumber:        '',
+    storeAddress:              '1234 Main Street',
+    storeCity:                 'Houston',
+    storeZip:                  '77001',
+    storeCounty:               'Harris',
+    mailingAddress:            '1234 Main Street',
+    mailingCity:               'Houston',
+    mailingZip:                '77001',
+    mailingCounty:             'Harris',
+    storePhone:                '713-555-0100',
+    emailAddress:              signerEmail,
+    authorizedRepFirstName:    firstName,
+    authorizedRepLastName:     lastName,
+    owners: [{
+      firstName:        firstName,
+      lastName:         lastName,
+      title:            'Owner',
+      ownershipPercent: 100,
+      mobilePhone:      '713-555-0101',
+      driverLicense:    'TX12345678',
+      stateIssued:      'TX',
+    }],
+    bankAccounts: [{
+      bankName:          'First National Bank',
+      bankAddress:       '100 Bank Street, Houston TX 77002',
+      transitAbaNumber:  '021000021',
+      accountNumber:     '123456789',
+    }],
+    achInfoFor: { corporate: true, warehouse: false, fuels: false },
+    storeSpannerBoard: false,
+  }
+
+  try {
+    const signatureRequestId = await sendSignatureRequest(dummyFormData, signerEmail)
+    res.json({ success: true, signatureRequestId })
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
+    console.error('Dropbox Sign test failed:', detail)
+    res.status(500).json({ error: detail })
+  }
+})
+
+// ── Dropbox Sign webhook ─────────────────────────────────────────────────────
+
+// POST /api/webhooks/dropbox-sign  — account-level callback (no JWT)
+// Dropbox Sign delivers events as multipart/form-data with a field named "json"
+app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
+  // Always respond 200 with this exact body or Dropbox Sign marks the delivery failed
+  res.set('Content-Type', 'text/plain')
+
+  let event
+  try {
+    event = JSON.parse(req.body?.json || '{}')
+  } catch {
+    return res.status(200).send('Hello API Event Received')
+  }
+
+  const eventType = event?.event?.event_type
+  if (eventType === 'signature_request_signed' || eventType === 'signature_request_all_signed') {
+    const sigReqId = event?.signature_request?.signature_request_id
+    if (sigReqId) {
+      try {
+        const db = await getPool()
+        await db.request()
+          .input('sigId', sql.NVarChar, sigReqId)
+          .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE SignatureRequestId = @sigId`)
+      } catch (err) {
+        console.error('Webhook DB update failed:', err.message)
+      }
+    }
+  }
+
+  return res.status(200).send('Hello API Event Received')
 })
 
 // ── Start ────────────────────────────────────────────────────────────────────

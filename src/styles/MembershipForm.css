@@ -187,7 +187,8 @@
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.form-input.input-error {
+.form-input.input-error,
+.form-select.input-error {
   border-color: #e74c3c;
 }
 
@@ -195,6 +196,42 @@
   color: #e74c3c;
   font-size: 12px;
   margin-top: 4px;
+}
+
+.validation-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #e74c3c;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 90vw;
+  line-height: 1.4;
+}
+
+.validation-toast-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.validation-toast-close:hover {
+  opacity: 1;
 }
 
 .ownership-total-error {

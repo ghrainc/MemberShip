@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext } from 'react'
+import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import ProgressIndicator from './ProgressIndicator'
@@ -78,7 +79,9 @@ function formatReviewerName(email) {
   return local.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
-function ViewApplication({ applicationId, onBack, onEdit }) {
+function ViewApplication() {
+  const { id } = useParams()
+  const navigate = useNavigate()
   const { currentUser, getApplicationById, updateApplicationStatus } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
@@ -90,21 +93,29 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
 
   useEffect(() => {
     setLoading(true)
-    getApplicationById(applicationId).then(data => {
+    getApplicationById(id).then(data => {
       setApplication(data)
       setLoading(false)
     })
-  }, [applicationId])
+  }, [id])
 
-  const handleSectionClick = (id) => { setCurrentSection(id); window.scrollTo(0, 0) }
+  const handleSectionClick = (sectionId) => { setCurrentSection(sectionId); window.scrollTo(0, 0) }
   const handleApproveClick = () => setApprovalDialog({ action: 'approve' })
   const handleRejectClick  = () => setApprovalDialog({ action: 'reject' })
 
   const handleApprovalConfirm = async (comments) => {
     const newStatus = approvalDialog.action === 'approve' ? 'approved' : 'rejected'
-    await updateApplicationStatus(applicationId, newStatus, comments)
+    await updateApplicationStatus(id, newStatus, comments)
     setApprovalDialog(null)
-    onBack()
+    navigate('/employee')
+  }
+
+  const handleBack = () => {
+    navigate(isEmployee ? '/employee' : '/dashboard')
+  }
+
+  const handleEdit = () => {
+    navigate(`/employee/application/${id}/edit/step/1`)
   }
 
   if (loading) {
@@ -113,7 +124,7 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
   if (!application) {
     return (
       <div className="view-application-container">
-        <button className="back-button" onClick={onBack}>← Back to Dashboard</button>
+        <button className="back-button" onClick={handleBack}>← Back to Dashboard</button>
         <div className="error-message">Application not found</div>
       </div>
     )
@@ -131,7 +142,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
   )
   const InfoRow = ({ children }) => <div className="info-row">{children}</div>
 
-  // Gray sub-section box — matches the References style exactly
   const Section = ({ title, children }) => (
     <div className="form-section-inner">
       {title && <span className="inner-legend">{title}</span>}
@@ -144,12 +154,10 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
   const renderSection = () => {
     switch (currentSection) {
 
-      // ── 1: Qualifying Business ───────────────────────────────────────────
       case 1:
         return (
           <fieldset className="form-section">
             <legend>Qualifying Business</legend>
-
             <Section title="Certification Questions">
               <InfoRow>
                 <InfoField label="Does your store sell hard liquor (18% or more alcohol content)?" value={lbl(YES_NO_UPPER, data.hardLiquor)} />
@@ -161,7 +169,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Is your store required to be closed on Sunday and after 9:00 PM Monday - Saturday?" value={lbl(YES_NO_UPPER, data.closedSundayAfter9pm)} />
               </InfoRow>
             </Section>
-
             {data.storeProductCategories?.length > 0 && (
               <Section title={`Product Mix — Total Criteria Met: ${data.storeProductCategories.length}`}>
                 <div className="category-list">
@@ -174,24 +181,16 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 2: Business Information ──────────────────────────────────────────
       case 2:
         return (
           <fieldset className="form-section">
             <legend>Business Information</legend>
-
             <Section title="Type of Ownership">
-              <InfoRow>
-                <InfoField label="Ownership Type" value={lbl(OWNERSHIP_TYPE, data.ownershipType)} />
-              </InfoRow>
+              <InfoRow><InfoField label="Ownership Type" value={lbl(OWNERSHIP_TYPE, data.ownershipType)} /></InfoRow>
             </Section>
-
             <Section title="Business Type">
-              <InfoRow>
-                <InfoField label="Business Type" value={lbl(BUSINESS_TYPE, data.businessType)} />
-              </InfoRow>
+              <InfoRow><InfoField label="Business Type" value={lbl(BUSINESS_TYPE, data.businessType)} /></InfoRow>
             </Section>
-
             <Section title="Business Details">
               <InfoRow>
                 <InfoField label="Member Name (Company Name)" value={data.memberName} />
@@ -202,7 +201,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Sales Tax ID #" value={data.salesTaxId} />
               </InfoRow>
             </Section>
-
             <Section title="Authorized Representative">
               <InfoRow>
                 <InfoField label="First Name" value={data.authorizedRepFirstName} />
@@ -210,7 +208,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Last Name" value={data.authorizedRepLastName} />
               </InfoRow>
             </Section>
-
             <Section title="Previous Membership">
               <InfoRow>
                 <InfoField label="Was the store previously a member store of GHRA?" value={data.previousMember ? 'Yes' : 'No'} />
@@ -220,25 +217,19 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 3: Store Information ─────────────────────────────────────────────
       case 3:
         return (
           <fieldset className="form-section">
             <legend>Store Information</legend>
-
             <Section title="Store Condition">
-              <InfoRow>
-                <InfoField label="Store Condition" value={lbl(STORE_CONDITION, data.storeCondition)} />
-              </InfoRow>
+              <InfoRow><InfoField label="Store Condition" value={lbl(STORE_CONDITION, data.storeCondition)} /></InfoRow>
             </Section>
-
             <Section title="Business Property">
               <InfoRow>
                 <InfoField label="Business Property" value={lbl(BUSINESS_PROPERTY, data.businessProperty)} />
                 <InfoField label="Store Size" value={data.storeSize} />
               </InfoRow>
             </Section>
-
             <Section title="Fuel">
               <InfoRow>
                 <InfoField label="If with fuel" value={lbl(FUEL_AVAILABLE, data.fuelAvailable)} />
@@ -250,25 +241,17 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
                 <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
               </InfoRow>
-              <InfoRow>
-                <InfoField label="TCEQ number" value={data.tceqNumber} />
-              </InfoRow>
+              <InfoRow><InfoField label="TCEQ number" value={data.tceqNumber} /></InfoRow>
             </Section>
-
             <Section title="POS System">
               <InfoRow>
                 <InfoField label="Do you scan your products at the POS?" value={lbl(YES_NO, data.scanPOS)} />
                 <InfoField label="Who is back office provider?" value={data.backOfficeProvider} />
               </InfoRow>
-              <InfoRow>
-                <InfoField label="What register system (POS) is being used?" value={lbl(POS_SYSTEM, data.posSystem)} />
-              </InfoRow>
+              <InfoRow><InfoField label="What register system (POS) is being used?" value={lbl(POS_SYSTEM, data.posSystem)} /></InfoRow>
             </Section>
-
             <Section title="Food Service">
-              <InfoRow>
-                <InfoField label="Do you have food service at store" value={lbl(YES_NO, data.foodServiceAvailable)} />
-              </InfoRow>
+              <InfoRow><InfoField label="Do you have food service at store" value={lbl(YES_NO, data.foodServiceAvailable)} /></InfoRow>
               {data.foodServiceAvailable === 'yes' && (
                 <>
                   <InfoRow>
@@ -282,7 +265,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 </>
               )}
             </Section>
-
             <Section title="Cooler">
               <InfoRow>
                 <InfoField label="Does your store have a walk-in cooler?" value={lbl(YES_NO, data.walkInCooler)} />
@@ -292,21 +274,13 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Does your store have a walk-in Freezer?" value={lbl(YES_NO, data.walkInFreezer)} />
                 {data.walkInFreezer === 'yes' && <InfoField label="If yes, how many doors" value={data.freezerDoors} />}
               </InfoRow>
-              <InfoRow>
-                <InfoField label="Does your store have a beer cave?" value={lbl(YES_NO, data.beerCave)} />
-              </InfoRow>
+              <InfoRow><InfoField label="Does your store have a beer cave?" value={lbl(YES_NO, data.beerCave)} /></InfoRow>
             </Section>
-
             <Section title="Spanner Board">
-              <InfoRow>
-                <InfoField label="Spanner Board Available" value={data.storeSpannerBoard ? 'Yes' : 'No'} />
-              </InfoRow>
+              <InfoRow><InfoField label="Spanner Board Available" value={data.storeSpannerBoard ? 'Yes' : 'No'} /></InfoRow>
             </Section>
-
             <Section title="Store Address">
-              <InfoRow>
-                <InfoField label="Store Address" value={data.storeAddress} />
-              </InfoRow>
+              <InfoRow><InfoField label="Store Address" value={data.storeAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.storeCity} />
                 <InfoField label="State" value="TX" />
@@ -314,37 +288,29 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="County" value={data.storeCounty} />
               </InfoRow>
             </Section>
-
             <Section title="Mailing Address">
-              <InfoRow>
-                <InfoField label="Mailing Address" value={data.mailingAddress} />
-              </InfoRow>
+              <InfoRow><InfoField label="Mailing Address" value={data.mailingAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.mailingCity} />
                 <InfoField label="Zip Code" value={data.mailingZip} />
                 <InfoField label="County" value={data.mailingCounty} />
               </InfoRow>
             </Section>
-
             <Section title="Contact Information">
               <InfoRow>
                 <InfoField label="Store Phone" value={data.storePhone} />
                 <InfoField label="Fax Phone" value={data.faxPhone} />
                 <InfoField label="Office Phone" value={data.officePhone} />
               </InfoRow>
-              <InfoRow>
-                <InfoField label="Email Address" value={data.emailAddress} />
-              </InfoRow>
+              <InfoRow><InfoField label="Email Address" value={data.emailAddress} /></InfoRow>
             </Section>
           </fieldset>
         )
 
-      // ── 4: Owners & Management ───────────────────────────────────────────
       case 4:
         return (
           <fieldset className="form-section">
             <legend>Owners & Management</legend>
-
             {(data.owners || []).map((owner, idx) => (
               <Section key={idx} title={idx === 0 ? 'Owner / Partner / Authorized Representative 1' : `Owner / Partner / Authorized Representative ${idx + 1}`}>
                 <InfoRow>
@@ -363,7 +329,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 </InfoRow>
               </Section>
             ))}
-
             <Section title="Store Manager">
               <InfoRow>
                 <InfoField label="First Name" value={data.storeManagerFirstName} />
@@ -378,12 +343,10 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 5: References ────────────────────────────────────────────────────
       case 5:
         return (
           <fieldset className="form-section">
             <legend>References</legend>
-
             <Section title="Reference 1">
               <InfoRow>
                 <InfoField label="Company Name" value={data.reference1Company} />
@@ -394,7 +357,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Representative Name" value={data.reference1RepName} />
               </InfoRow>
             </Section>
-
             <Section title="Reference 2">
               <InfoRow>
                 <InfoField label="Company Name" value={data.reference2Company} />
@@ -408,19 +370,17 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 6: ACH Authorization ─────────────────────────────────────────────
       case 6: {
         const achOptions = [
           { id: 'corporate', label: 'GHRA Corporate' },
           { id: 'warehouse', label: 'GHRA Warehouse' },
           { id: 'fuels',     label: 'GHRA Fuels' }
         ]
-        const achInfoFor    = data.achInfoFor || {}
-        const bankAccounts  = data.bankAccounts || []
+        const achInfoFor   = data.achInfoFor || {}
+        const bankAccounts = data.bankAccounts || []
         return (
           <fieldset className="form-section">
             <legend>ACH Authorization</legend>
-
             <Section title="ACH Information">
               <InfoRow>
                 {achOptions.map(opt => (
@@ -428,7 +388,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 ))}
               </InfoRow>
             </Section>
-
             {bankAccounts.length > 0
               ? bankAccounts.map((account, idx) => (
                   <Section key={account.id || idx} title={`Bank Account ${idx + 1}`}>
@@ -453,18 +412,15 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
         )
       }
 
-      // ── 7: Warehouse Application ─────────────────────────────────────────
       case 7:
         return (
           <fieldset className="form-section">
             <legend>Warehouse Application</legend>
-
             <Section title="Warehouse Information">
               <InfoRow>
                 <InfoField label="Would you like to set up your account for delivery?" value={data.warehouseDelivery ? 'Yes' : 'No'} />
               </InfoRow>
             </Section>
-
             {data.warehouseDelivery && (data.authorizedCardHolders || []).map((holder, idx) => (
               <Section key={idx} title={`Authorized Card Holder ${idx + 1}`}>
                 <InfoRow>
@@ -477,12 +433,10 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 8: Donations ─────────────────────────────────────────────────────
       case 8:
         return (
           <fieldset className="form-section">
             <legend>Donations</legend>
-
             <Section title="AGA KHAN DEVELOPMENT NETWORK (AKDN)">
               <InfoRow>
                 <InfoField
@@ -491,7 +445,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 />
               </InfoRow>
             </Section>
-
             <Section title="HOUSTON FOOD BANK (HFB)">
               <InfoRow>
                 <InfoField
@@ -500,7 +453,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 />
               </InfoRow>
             </Section>
-
             <Section title="Authorized Representative">
               <InfoRow>
                 <InfoField label="First Name" value={data.donationAuthRepFirstName || data.authorizedRepFirstName} />
@@ -510,7 +462,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           </fieldset>
         )
 
-      // ── 9: Documents ─────────────────────────────────────────────────────
       case 9: {
         const owners = data.owners || []
         const multipleOwners = owners.length > 1
@@ -560,12 +511,10 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
         )
       }
 
-      // ── 10: Agreements ───────────────────────────────────────────────────
       case 10:
         return (
           <fieldset className="form-section">
             <legend>Agreements</legend>
-
             <Section title="Membership Agreement & Requirements">
               <InfoRow>
                 <InfoField label="Membership Agreement" value={data.membershipAgreement ? 'Agreed' : 'Not agreed'} />
@@ -577,7 +526,6 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
                 <InfoField label="Financial Information & Rebate Consent" value={data.rebateConsent ? 'Agreed' : 'Not agreed'} />
               </InfoRow>
             </Section>
-
             <Section title="Final Acknowledgement">
               <InfoRow>
                 <InfoField
@@ -696,7 +644,7 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
         </div>
 
         <div className="form-navigation">
-          <button type="button" onClick={onBack} className="nav-button cancel-button">
+          <button type="button" onClick={handleBack} className="nav-button cancel-button">
             ← Dashboard
           </button>
           <button
@@ -718,11 +666,9 @@ function ViewApplication({ applicationId, onBack, onEdit }) {
           )}
           {isEmployee && (
             <>
-              {onEdit && (
-                <button type="button" onClick={() => onEdit(applicationId)} className="nav-button edit-action-button">
-                  ✎ Edit
-                </button>
-              )}
+              <button type="button" onClick={handleEdit} className="nav-button edit-action-button">
+                ✎ Edit
+              </button>
               <button type="button" onClick={handleApproveClick} disabled={application.Status !== 'submitted'} className="nav-button approve-action-button">
                 ✓ Approve
               </button>

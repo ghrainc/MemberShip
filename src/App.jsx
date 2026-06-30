@@ -1,175 +1,53 @@
-import { useState, useContext } from 'react'
-import { AuthProvider, AuthContext } from './context/AuthContext'
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router'
+import { AuthProvider } from './context/AuthContext'
+import ProtectedRoute, { ChangePasswordRoute, RootRedirect } from './components/ProtectedRoute'
 import LoginPage from './components/LoginPage'
 import Dashboard from './components/Dashboard'
+import EmployeeDashboard from './components/EmployeeDashboard'
 import MembershipForm from './components/MembershipForm'
 import ViewApplication from './components/ViewApplication'
-import EmployeeDashboard from './components/EmployeeDashboard'
 import ChangePasswordPage from './components/ChangePasswordPage'
 import './App.css'
 
-function AppContent() {
-  const { isAuthenticated, currentUser, logout, getApplicationById, employeeUpdateApplication } = useContext(AuthContext)
-  const [screen, setScreen] = useState('login')
-  const [selectedAppId, setSelectedAppId] = useState(null)
-  const [draftData, setDraftData] = useState(null) // { applicationId, formData, currentStep }
+const router = createBrowserRouter([
+  { path: '/', element: <RootRedirect /> },
+  { path: '/login', element: <LoginPage /> },
+  {
+    path: '/change-password',
+    element: <ChangePasswordRoute><ChangePasswordPage /></ChangePasswordRoute>
+  },
+  {
+    path: '/dashboard',
+    element: <ProtectedRoute requireRole="member"><Dashboard /></ProtectedRoute>
+  },
+  {
+    path: '/employee',
+    element: <ProtectedRoute requireRole="employee"><EmployeeDashboard /></ProtectedRoute>
+  },
+  // Member wizard — :id is "new" for a fresh application, or an integer ID when continuing
+  {
+    path: '/application/:id/step/:step',
+    element: <ProtectedRoute requireRole="member"><MembershipForm /></ProtectedRoute>
+  },
+  {
+    path: '/application/:id',
+    element: <ProtectedRoute requireRole="member"><ViewApplication /></ProtectedRoute>
+  },
+  {
+    path: '/employee/application/:id',
+    element: <ProtectedRoute requireRole="employee"><ViewApplication /></ProtectedRoute>
+  },
+  {
+    path: '/employee/application/:id/edit/step/:step',
+    element: <ProtectedRoute requireRole="employee"><MembershipForm isEmployeeEdit /></ProtectedRoute>
+  },
+  { path: '*', element: <Navigate to="/login" replace /> },
+])
 
-  const handleLoginSuccess = (designMode) => {
-    if (designMode === 'employee') {
-      setScreen('employee-dashboard')
-    } else if (designMode === 'change-password') {
-      setScreen('change-password')
-    } else {
-      setScreen('dashboard')
-    }
-  }
-
-  const handleNewApplication = () => {
-    setDraftData(null)
-    setScreen('form')
-  }
-
-  const handleContinueApplication = async (appId) => {
-    const app = await getApplicationById(appId)
-    if (app) {
-      setDraftData({
-        applicationId: app.Id,
-        formData: app.FormData,
-        currentStep: app.CurrentStep || 1,
-        notes: app.Notes,
-        reviewedBy: app.ReviewedBy,
-        reviewedAt: app.ReviewedAt,
-        commentsHistory: app.CommentsHistory || []
-      })
-      setScreen('form')
-    }
-  }
-
-  const handleViewApplication = (appId) => {
-    setSelectedAppId(appId)
-    if (currentUser?.role === 'employee') {
-      setScreen('employee-view')
-    } else {
-      setScreen('view')
-    }
-  }
-
-  const handleEditApplication = async (appId) => {
-    const app = await getApplicationById(appId)
-    if (app) {
-      setDraftData({
-        applicationId: app.Id,
-        formData: app.FormData,
-        currentStep: 1,
-        notes: app.Notes,
-        reviewedBy: app.ReviewedBy,
-        reviewedAt: app.ReviewedAt,
-        commentsHistory: app.CommentsHistory || []
-      })
-      setScreen('employee-edit')
-    }
-  }
-
-  const handleFormSubmit = () => {
-    setDraftData(null)
-    setScreen('dashboard')
-  }
-
-  const handleBackToDashboard = () => {
-    if (currentUser?.role === 'employee') {
-      setScreen('employee-dashboard')
-    } else {
-      setScreen('dashboard')
-    }
-    setSelectedAppId(null)
-  }
-
-  const handleLogout = () => {
-    logout()
-    setScreen('login')
-    setSelectedAppId(null)
-  }
-
-  return (
-    <div className="app-container">
-      {screen === 'login' && <LoginPage onDesignSelect={handleLoginSuccess} />}
-      {screen === 'change-password' && (
-        <ChangePasswordPage
-          onSuccess={() => setScreen('dashboard')}
-          onLogout={handleLogout}
-        />
-      )}
-      {screen === 'dashboard' && (
-        <Dashboard
-          onNewApplication={handleNewApplication}
-          onViewApplication={handleViewApplication}
-          onContinueApplication={handleContinueApplication}
-          onLogout={handleLogout}
-        />
-      )}
-      {screen === 'form' && (
-        <MembershipForm
-          userEmail={currentUser?.email}
-          onSubmit={handleFormSubmit}
-          onCancel={handleBackToDashboard}
-          initialApplicationId={draftData?.applicationId}
-          initialFormData={draftData?.formData}
-          initialStep={draftData?.currentStep || 1}
-          initialNotes={draftData?.notes}
-          initialReviewedBy={draftData?.reviewedBy}
-          initialReviewedAt={draftData?.reviewedAt}
-          initialCommentsHistory={draftData?.commentsHistory || []}
-        />
-      )}
-      {screen === 'view' && selectedAppId && (
-        <ViewApplication
-          applicationId={selectedAppId}
-          onBack={handleBackToDashboard}
-        />
-      )}
-      {screen === 'employee-dashboard' && (
-        <EmployeeDashboard
-          onViewApplication={handleViewApplication}
-          onEditApplication={handleEditApplication}
-          onLogout={handleLogout}
-        />
-      )}
-      {screen === 'employee-view' && selectedAppId && (
-        <ViewApplication
-          applicationId={selectedAppId}
-          onBack={handleBackToDashboard}
-          onEdit={handleEditApplication}
-        />
-      )}
-      {screen === 'employee-edit' && draftData && (
-        <MembershipForm
-          userEmail={currentUser?.email}
-          onSubmit={() => {
-            setDraftData(null)
-            setScreen('employee-dashboard')
-          }}
-          onCancel={handleBackToDashboard}
-          initialApplicationId={draftData?.applicationId}
-          initialFormData={draftData?.formData}
-          initialStep={draftData?.currentStep || 1}
-          initialNotes={draftData?.notes}
-          initialReviewedBy={draftData?.reviewedBy}
-          initialReviewedAt={draftData?.reviewedAt}
-          initialCommentsHistory={draftData?.commentsHistory || []}
-          isEmployeeEdit={true}
-          onEmployeeSave={employeeUpdateApplication}
-        />
-      )}
-    </div>
-  )
-}
-
-function App() {
+export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <RouterProvider router={router} />
     </AuthProvider>
   )
 }
-
-export default App

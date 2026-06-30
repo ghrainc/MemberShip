@@ -12,10 +12,24 @@ function authHeadersMultipart(token) {
   return { Authorization: `Bearer ${token}` }
 }
 
+function saveAuthToStorage(token, user) {
+  localStorage.setItem('ghra_token', token)
+  localStorage.setItem('ghra_user', JSON.stringify(user))
+}
+
+function clearAuthFromStorage() {
+  localStorage.removeItem('ghra_token')
+  localStorage.removeItem('ghra_user')
+}
+
+function loadUserFromStorage() {
+  try { return JSON.parse(localStorage.getItem('ghra_user')) } catch { return null }
+}
+
 export const AuthProvider = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
-  const [token, setToken] = useState(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!localStorage.getItem('ghra_token'))
+  const [currentUser, setCurrentUser] = useState(loadUserFromStorage)
+  const [token, setToken] = useState(() => localStorage.getItem('ghra_token'))
   const [error, setError] = useState('')
 
   const login = useCallback(async (email, password) => {
@@ -34,9 +48,11 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword }
       setToken(data.token)
       setIsAuthenticated(true)
-      setCurrentUser({ email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword })
+      setCurrentUser(user)
+      saveAuthToStorage(data.token, user)
       return { success: true, mustChangePassword: !!data.mustChangePassword }
     } catch {
       const msg = 'Unable to connect to server'
@@ -61,9 +77,11 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return msg
       }
+      const user = { email: data.email, role: data.role }
       setToken(data.token)
       setIsAuthenticated(true)
-      setCurrentUser({ email: data.email, role: data.role })
+      setCurrentUser(user)
+      saveAuthToStorage(data.token, user)
       return true
     } catch {
       const msg = 'Unable to connect to server'
@@ -86,9 +104,11 @@ export const AuthProvider = ({ children }) => {
       })
       const data = await res.json()
       if (!res.ok) { const msg = data.error || 'Signup failed'; setError(msg); return msg }
+      const user = { email: data.email, role: data.role }
       setToken(data.token)
       setIsAuthenticated(true)
-      setCurrentUser({ email: data.email, role: data.role })
+      setCurrentUser(user)
+      saveAuthToStorage(data.token, user)
       return true
     } catch {
       const msg = 'Unable to connect to server'
@@ -102,6 +122,7 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null)
     setToken(null)
     setError('')
+    clearAuthFromStorage()
   }, [])
 
   const saveDraft = useCallback(async (applicationId, currentStep, formData) => {
@@ -230,11 +251,30 @@ export const AuthProvider = ({ children }) => {
       })
       const data = await res.json()
       if (!res.ok) return data.error || 'Failed to change password'
-      // Clear mustChangePassword flag in local state
-      setCurrentUser(prev => prev ? { ...prev, mustChangePassword: false } : prev)
+      setCurrentUser(prev => {
+        if (!prev) return prev
+        const updated = { ...prev, mustChangePassword: false }
+        saveAuthToStorage(token, updated)
+        return updated
+      })
       return true
     } catch {
       return 'Unable to connect to server'
+    }
+  }, [token])
+
+  const testDropboxSign = useCallback(async (signerEmail, signerName) => {
+    try {
+      const res = await fetch(`${API}/test/dropbox-sign`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ signerEmail, signerName })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed' }
+      return { success: true, signatureRequestId: data.signatureRequestId }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
     }
   }, [token])
 
@@ -273,7 +313,8 @@ export const AuthProvider = ({ children }) => {
       changePassword,
       createMember,
       uploadDocument,
-      removeDocument
+      removeDocument,
+      testDropboxSign
     }}>
       {children}
     </AuthContext.Provider>
