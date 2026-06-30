@@ -15,35 +15,39 @@ const {
   SubCustomField,
 } = require('@dropbox/sign')
 
-const DROPBOX_SIGN_TEMPLATE_ID   = '48801a508aa8d04b909f28d75eec410c3dc34e3e'
-const DROPBOX_SIGN_SIGNER_ROLE   = 'Authorized Rep'
+const { buildReferenceCustomFields } = require('./dropboxSignMapping')
+
+const DROPBOX_SIGN_TEMPLATE_ID            = '48801a508aa8d04b909f28d75eec410c3dc34e3e'
+const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
+const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
 async function sendSignatureRequest(formData, userEmail) {
   const api = new SignatureRequestApi()
   api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
-  const firstName = formData.authorizedRepFirstName || ''
-  const lastName  = formData.authorizedRepLastName  || ''
-  const repName   = [firstName, lastName].filter(Boolean).join(' ') || userEmail
+  const owners = formData.owners || []
+  const owner1 = owners[0] || {}
+  const repName = [owner1.firstName, owner1.lastName].filter(Boolean).join(' ') || userEmail
 
   const signer = new SubSignatureRequestTemplateSigner()
   signer.role         = DROPBOX_SIGN_SIGNER_ROLE
   signer.emailAddress = userEmail
   signer.name         = repName
 
-  const owner1 = (formData.owners        || [])[0] || {}
-  const owner2 = (formData.owners        || [])[1] || {}
-  const owner3 = (formData.owners        || [])[2] || {}
-  const bank1  = (formData.bankAccounts  || [])[0] || {}
-  const bank2  = (formData.bankAccounts  || [])[1] || {}
-  const bank3  = (formData.bankAccounts  || [])[2] || {}
-  const ach    = formData.achInfoFor     || {}
-  const own    = formData.ownershipType  || ''
-  const biz    = formData.businessType   || ''
-  const cond   = formData.storeCondition || ''
-  const prop   = formData.businessProperty || ''
+  const bank1 = (formData.bankAccounts || [])[0] || {}
+  const bank2 = (formData.bankAccounts || [])[1] || {}
+  const bank3 = (formData.bankAccounts || [])[2] || {}
+  const cards = formData.authorizedCardHolders || []
+  const card1 = cards[0] || {}
+  const card2 = cards[1] || {}
+  const card3 = cards[2] || {}
+  const ach   = formData.achInfoFor      || {}
+  const own   = formData.ownershipType   || ''
+  const biz   = formData.businessType    || ''
+  const cond  = formData.storeCondition  || ''
+  const prop  = formData.businessProperty || ''
 
-  // Build a SubCustomField — skip null/empty/false so DS doesn't error on blank required fields
+  // Skip null/empty/false — DS errors on unrecognised blank fields
   function cf(name, value) {
     if (value === undefined || value === null || value === '' || value === false) return null
     const f = new SubCustomField()
@@ -51,11 +55,18 @@ async function sendSignatureRequest(formData, userEmail) {
     f.value = String(value)
     return f
   }
-  // Checkbox helper — only send when checked (unchecked checkboxes are left blank)
+  // Checkboxes: only send when checked
   const chk = (name, checked) => checked ? cf(name, '1') : null
+  // Format ownership percent
+  const pct = (v) => (v != null && v !== '') ? `${v}%` : null
+  // Combine bank address parts into one string
+  const bankAddr = (b) => {
+    const parts = [b.bankAddress, b.bankCity, b.bankState, b.bankZip].filter(Boolean)
+    return parts.length ? parts.join(', ') : null
+  }
 
   const customFields = [
-    // ── Business identity ────────────────────────────────────────────────────
+    // ── Business identity ─────────────────────────────────────────────────────
     cf('CorpName',     formData.memberName),
     cf('StoreName',    formData.dbaName || formData.memberName),
     cf('CorpEIN',      formData.ein),
@@ -63,100 +74,182 @@ async function sendSignatureRequest(formData, userEmail) {
     cf('PrevGHRAAC',   formData.previousGhraNumber),
     cf('Leased Size',  formData.storeSize),
 
-    // ── Store address ────────────────────────────────────────────────────────
+    // ── Store address ─────────────────────────────────────────────────────────
     cf('StoreAddress', formData.storeAddress),
     cf('StoreCity',    formData.storeCity),
     cf('StoreZip',     formData.storeZip),
+    cf('StoreState',   formData.storeState),
     cf('StoreCounty',  formData.storeCounty),
 
-    // ── Mailing address ──────────────────────────────────────────────────────
+    // ── Mailing address ───────────────────────────────────────────────────────
     cf('MailAddress',  formData.mailingAddress),
     cf('MailCity',     formData.mailingCity),
+    //cf('MailState',    formData.mailingState),
     cf('MailZip',      formData.mailingZip),
     cf('MailCounty',   formData.mailingCounty),
 
-    // ── Contact ──────────────────────────────────────────────────────────────
-    cf('StorePhone',   formData.storePhone),
+    // ── Contact ───────────────────────────────────────────────────────────────
+    cf('StorePhone',   formData.officePhone),
+    cf('StoreFax',     formData.faxPhone),
     cf('StoreEmail',   formData.emailAddress),
 
-    // ── Authorized rep (owner 1) ─────────────────────────────────────────────
-    cf('AuthRep',      repName),
-    cf('AuthRepTitle', owner1.title),
-    cf('AuthRepPerc',  owner1.ownershipPercent != null ? `${owner1.ownershipPercent}%` : null),
-    cf('AuthRepCell',  owner1.mobilePhone),
-    cf('AuthRepDL',    owner1.driverLicense),
-    cf('AuthRepState', owner1.stateIssued),
+    // ── Owner 1 (AuthRep) ─────────────────────────────────────────────────────
+    cf('AuthRep',          repName),
+    cf('AuthRepFirstName', owner1.firstName),
+    cf('AuthRepLastName',  owner1.lastName),
+    cf('AuthRepTitle',     owner1.title),
+    cf('AuthRepPerc',      pct(owner1.ownershipPercent)),
+    cf('AuthRepCell',      owner1.mobilePhone),
+    cf('AuthRepDL',        owner1.driverLicense),
+    cf('AuthRepState',     owner1.stateIssued),
+    // AuthRepSS — not yet collected in form
 
-    // ── Owner 2 ──────────────────────────────────────────────────────────────
-    cf('Owner2Name',   [owner2.firstName, owner2.lastName].filter(Boolean).join(' ') || null),
-    cf('Owner2Title',  owner2.title),
-    cf('Owner2Perc',   owner2.ownershipPercent != null ? `${owner2.ownershipPercent}%` : null),
-    cf('Owner2Cell',   owner2.mobilePhone),
-    cf('Owner2DL',     owner2.driverLicense),
-    cf('Owner2State',  owner2.stateIssued),
+    // ── Owners 2–10 (dynamic) ─────────────────────────────────────────────────
+    ...Array.from({ length: 9 }, (_, i) => {
+      const n = i + 2
+      const o = owners[i + 1] || {}
+      return [
+        cf(`Owner${n}FirstName`, o.firstName),
+        cf(`Owner${n}LastName`,  o.lastName),
+        cf(`Owner${n}Title`,     o.title),
+        cf(`Owner${n}Percent`,   pct(o.ownershipPercent)),
+        cf(`Owner${n}Cell`,      o.mobilePhone),
+        cf(`Owner${n}DL`,        o.driverLicense),
+        cf(`Owner${n}State`,     o.stateIssued),
+        // Owner{n}SS — not yet collected in form
+      ]
+    }).flat(),
 
-    // ── Owner 3 ──────────────────────────────────────────────────────────────
-    cf('Owner3Name',   [owner3.firstName, owner3.lastName].filter(Boolean).join(' ') || null),
-    cf('Owner3Title',  owner3.title),
-    cf('Owner3Perc',   owner3.ownershipPercent != null ? `${owner3.ownershipPercent}%` : null),
-    cf('Owner3Cell',   owner3.mobilePhone),
-    cf('Owner3DL',     owner3.driverLicense),
-    cf('Owner3State',  owner3.stateIssued),
+    // ── Store manager ─────────────────────────────────────────────────────────
+    cf('StoreManagerFirstName', formData.storeManagerFirstName),
+    cf('StoreManagerLastName',  formData.storeManagerLastName),
+    cf('StoreManagerTitle',     formData.storeManagerTitle),
+    cf('StoreManagerDL',        formData.storeManagerDriverLicense),
+    cf('StoreManagerCell',      formData.storeManagerMobile),
 
-    // ── Bank accounts ────────────────────────────────────────────────────────
+    // ── Bank accounts (address = street + city + state + zip combined) ────────
     cf('Bank1Name',    bank1.bankName),
-    cf('Bank1Address', bank1.bankAddress),
+    cf('Bank1Address', bankAddr(bank1)),
     cf('Bank1Transit', bank1.transitAbaNumber),
     cf('Bank1Account', bank1.accountNumber),
     cf('Bank2Name',    bank2.bankName),
-    cf('Bank2Address', bank2.bankAddress),
+    cf('Bank2Address', bankAddr(bank2)),
     cf('Bank2Transit', bank2.transitAbaNumber),
     cf('Bank2Account', bank2.accountNumber),
     cf('Bank3Name',    bank3.bankName),
-    cf('Bank3Address', bank3.bankAddress),
+    cf('Bank3Address', bankAddr(bank3)),
     cf('Bank3Transit', bank3.transitAbaNumber),
     cf('Bank3Account', bank3.accountNumber),
 
-    // ── Ownership type ───────────────────────────────────────────────────────
-    chk('Sole',               own === 'sole-proprietor'),
-    chk('Partnership',        own === 'partnership'),
-    chk('LimitedPartnership', own === 'limited-partnership'),
-    chk('Corp',               own === 'corporation'),
-    chk('LLC',                own === 'llc'),
+    // ── References ────────────────────────────────────────────────────────────
+    /*cf('reference1Email',      formData.reference1Email),
+    cf('reference1Company',    formData.reference1Company),
+    cf('reference1GhraNumber', formData.reference1GhraNumber),
+    cf('reference1RepName',    formData.reference1RepName),
+    cf('reference2Email',      formData.reference2Email),
+    cf('reference2Company',    formData.reference2Company),
+    cf('reference2GhraNumber', formData.reference2GhraNumber),
+    cf('reference2RepName',    formData.reference2RepName),*/
 
-    // ── Business type ────────────────────────────────────────────────────────
+    // ── Donations ─────────────────────────────────────────────────────────────
+    chk('AKDNYES', formData.akdnContribute === 'yes'),
+    chk('AKDNNO',  formData.akdnContribute === 'no'),
+    cf('AKDNMore', formData.akdnContribute === 'yes' ? formData.akdnAmount : null),
+    chk('HFBYES',  formData.hfbContribute === 'yes'),
+    chk('HFBNO',   formData.hfbContribute === 'no'),
+    cf('HFBMORE',  formData.hfbContribute === 'yes' ? formData.hfbAmount : null),
+
+    // ── Warehouse delivery & card holders ─────────────────────────────────────
+    chk('WHDeliveryYes', !!formData.warehouseDelivery),
+    chk('WHDeliveryNo',  !formData.warehouseDelivery),
+    cf('WHCard1Name', [card1.firstName, card1.lastName].filter(Boolean).join(' ') || null),
+    cf('WHCard1DL',   card1.drivingLicense),
+    cf('WHCard2Name', [card2.firstName, card2.lastName].filter(Boolean).join(' ') || null),
+    cf('WHCard2DL',   card2.drivingLicense),
+    cf('WHCard3Name', [card3.firstName, card3.lastName].filter(Boolean).join(' ') || null),
+    cf('WHCard3DL',   card3.drivingLicense),
+
+    // ── Ownership type ────────────────────────────────────────────────────────
+    chk('Sole',        own === 'sole-proprietor'),
+    chk('Partnership', own === 'partnership'),
+    chk('Corp',        own === 'c-corp' || own === 'corporation'), // 'corporation' = legacy
+    chk('SCorp',       own === 's-corp'),
+    chk('SCCorp',      own === 'c-corp' || own === 'corporation' || own === 's-corp'),
+    chk('LLC',         own === 'llc'),
+
+    // ── Business type ─────────────────────────────────────────────────────────
     chk('StoreWithFuel',    biz === 'with-fuel'),
     chk('StoreWithoutFuel', biz === 'without-fuel'),
 
-    // ── Store condition / property ───────────────────────────────────────────
+    // ── Store condition / property ────────────────────────────────────────────
     chk('Existing Store', cond === 'existing'),
     chk('Remodeled',      cond === 'remodeled'),
     chk('BrandNew',       cond === 'brand-new'),
     chk('Owned',          prop === 'owned'),
     chk('Leased',         prop === 'leased'),
 
-    // ── Previous GHRA membership ─────────────────────────────────────────────
+    // ── Previous GHRA membership ──────────────────────────────────────────────
     chk('PrevGHRAYes', !!formData.previousMember),
     chk('PrevGHRANo',  !formData.previousMember),
 
-    // ── ACH bank checkboxes ──────────────────────────────────────────────────
-    chk('CorpBank1',  !!ach.corporate),
-    chk('WHBank',     !!ach.warehouse),
-    chk('FuelsBank1', !!ach.fuels),
-    chk('CorpBank2',  !!ach.corporate),
-    chk('WHBank2',    !!ach.warehouse),
-    chk('FuelsBank2', !!ach.fuels),
-    chk('CorpBank3',  !!ach.corporate),
-    chk('FuelsBank3', !!ach.fuels),
+    // ── ACH checkboxes: CorpBank{n} / WHBank{n} / FuelsBank{n} per bank slot ──
+    ...(formData.bankAccounts || []).flatMap((bank, idx) => {
+      const n = idx + 1
+      const m = formData.achToBankMapping || {}
+      return [
+        chk(`CorpBank${n}`,  !!(ach.corporate && m.corporate === bank.id)),
+        chk(`WHBank${n}`,    !!(ach.warehouse  && m.warehouse  === bank.id)),
+        chk(`FuelsBank${n}`, !!(ach.fuels      && m.fuels      === bank.id)),
+      ]
+    }),
 
-    // ── Other ────────────────────────────────────────────────────────────────
-    chk('OldSpanner', !!formData.storeSpannerBoard),
+    // ── Spanner Board ─────────────────────────────────────────────────────────
+    chk('SpannerYes',        formData.storeSpannerBoard === 'yes'),
+    chk('SpannerNo',         formData.storeSpannerBoard === 'no'),
+    chk('SpannerPrevMember', formData.storeSpannerBoard === 'prevMember'),
   ].filter(Boolean)
+
+  console.log('=== DS custom fields being sent ===')
+  console.log(JSON.stringify(customFields, null, 2))
+  console.log('===================================')
 
   const request = new SignatureRequestSendWithTemplateRequest()
   request.templateIds  = [DROPBOX_SIGN_TEMPLATE_ID]
   request.signers      = [signer]
   request.customFields = customFields
+  request.testMode     = true
+
+  const response = await api.signatureRequestSendWithTemplate(request)
+  return response.body.signatureRequest.signatureRequestId
+}
+
+async function sendReferencesRequest(formData) {
+  const ref1Email = (formData.reference1Email || '').trim()
+  const ref1Name  = (formData.reference1RepName || '').trim() || 'Reference 1'
+  const ref2Email = (formData.reference2Email || '').trim()
+  const ref2Name  = (formData.reference2RepName || '').trim() || 'Reference 2'
+
+  if (!ref1Email || !ref2Email) {
+    throw new Error('Both reference email addresses are required to send the references signature request')
+  }
+
+  const api = new SignatureRequestApi()
+  api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+  const signer1 = new SubSignatureRequestTemplateSigner()
+  signer1.role         = 'Reference 1'
+  signer1.emailAddress = ref1Email
+  signer1.name         = ref1Name
+
+  const signer2 = new SubSignatureRequestTemplateSigner()
+  signer2.role         = 'Reference 2'
+  signer2.emailAddress = ref2Email
+  signer2.name         = ref2Name
+
+  const request = new SignatureRequestSendWithTemplateRequest()
+  request.templateIds  = [DROPBOX_SIGN_REFERENCES_TEMPLATE_ID]
+  request.signers      = [signer1, signer2]
+  request.customFields = buildReferenceCustomFields(formData)
   request.testMode     = true
 
   const response = await api.signatureRequestSendWithTemplate(request)
@@ -276,6 +369,27 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'SignedAt'
       )
         ALTER TABLE Applications ADD SignedAt DATETIME NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ReferencesSignatureRequestId'
+      )
+        ALTER TABLE Applications ADD ReferencesSignatureRequestId NVARCHAR(255) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ReferencesSignatureStatus'
+      )
+        ALTER TABLE Applications ADD ReferencesSignatureStatus NVARCHAR(50) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ReferencesSignedAt'
+      )
+        ALTER TABLE Applications ADD ReferencesSignedAt DATETIME NULL
     `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
@@ -599,6 +713,19 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
           .input('sigId', sql.NVarChar, signatureRequestId)
           .input('id3', sql.Int, req.params.id)
           .query(`UPDATE Applications SET Status = 'pending_signature', SignatureRequestId = @sigId WHERE Id = @id3`)
+
+        // Send references signature request (non-fatal — errors are logged, not surfaced)
+        try {
+          const refSigId = await sendReferencesRequest(fd)
+          await db.request()
+            .input('refSigId', sql.NVarChar, refSigId)
+            .input('id4', sql.Int, req.params.id)
+            .query(`UPDATE Applications SET ReferencesSignatureRequestId = @refSigId, ReferencesSignatureStatus = 'sent' WHERE Id = @id4`)
+        } catch (refErr) {
+          const refDetail = refErr.body?.error?.errorMsg || refErr.message || 'Unknown error'
+          console.error('References signature request failed:', refDetail)
+        }
+
         return res.json({ success: true, status: 'pending_signature', signatureRequestId })
       } catch (dsErr) {
         const detail = dsErr.body?.error?.errorMsg || dsErr.message || 'Unknown error'
@@ -721,10 +848,12 @@ app.post('/api/test/dropbox-sign', authMiddleware, async (req, res) => {
     previousGhraNumber:        '',
     storeAddress:              '1234 Main Street',
     storeCity:                 'Houston',
+    storeState:                'TX',
     storeZip:                  '77001',
     storeCounty:               'Harris',
     mailingAddress:            '1234 Main Street',
     mailingCity:               'Houston',
+    mailingState:              'TX',
     mailingZip:                '77001',
     mailingCounty:             'Harris',
     storePhone:                '713-555-0100',
@@ -747,7 +876,7 @@ app.post('/api/test/dropbox-sign', authMiddleware, async (req, res) => {
       accountNumber:     '123456789',
     }],
     achInfoFor: { corporate: true, warehouse: false, fuels: false },
-    storeSpannerBoard: false,
+    storeSpannerBoard: 'yes',
   }
 
   try {
@@ -781,9 +910,16 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
     if (sigReqId) {
       try {
         const db = await getPool()
+        // Membership document — matches SignatureRequestId
         await db.request()
           .input('sigId', sql.NVarChar, sigReqId)
           .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE SignatureRequestId = @sigId`)
+        // References document — matches ReferencesSignatureRequestId (all_signed = both refs signed)
+        if (eventType === 'signature_request_all_signed') {
+          await db.request()
+            .input('sigId2', sql.NVarChar, sigReqId)
+            .query(`UPDATE Applications SET ReferencesSignatureStatus = 'signed', ReferencesSignedAt = GETDATE() WHERE ReferencesSignatureRequestId = @sigId2`)
+        }
       } catch (err) {
         console.error('Webhook DB update failed:', err.message)
       }

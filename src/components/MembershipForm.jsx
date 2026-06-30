@@ -62,10 +62,12 @@ const EMPTY_FORM_DATA = {
   dbaName: '',
   storeAddress: '',
   storeCity: '',
+  storeState: '',
   storeZip: '',
   storeCounty: '',
   mailingAddress: '',
   mailingCity: '',
+  mailingState: '',
   mailingZip: '',
   mailingCounty: '',
   storePhone: '',
@@ -98,7 +100,7 @@ const EMPTY_FORM_DATA = {
   walkInFreezer: '',
   freezerDoors: '',
   beerCave: '',
-  storeSpannerBoard: false,
+  storeSpannerBoard: '',
   owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '' }],
   authorizedRepFirstName: '',
   authorizedRepMiddleInitial: '',
@@ -171,7 +173,14 @@ function computeStepErrors(step, data) {
     case 3:
       if (!(data.storeAddress || '').trim()) errs.storeAddress = 'Store Address is required'
       if (!(data.storeCity || '').trim()) errs.storeCity = 'City is required'
+      if (!(data.storeState || '').trim()) errs.storeState = 'State is required'
       if (!(data.storeZip || '').trim()) errs.storeZip = 'Zip Code is required'
+      if (!(data.storeCounty || '').trim()) errs.storeCounty = 'County is required'
+      if (!(data.mailingAddress || '').trim()) errs.mailingAddress = 'Mailing Address is required'
+      if (!(data.mailingCity || '').trim()) errs.mailingCity = 'City is required'
+      if (!(data.mailingState || '').trim()) errs.mailingState = 'State is required'
+      if (!(data.mailingZip || '').trim()) errs.mailingZip = 'Zip Code is required'
+      if (!(data.mailingCounty || '').trim()) errs.mailingCounty = 'County is required'
       if (!(data.emailAddress || '').trim()) errs.emailAddress = 'Email Address is required'
       if (!data.fuelAvailable) errs.fuelAvailable = 'Please select an option'
       if (data.fuelAvailable === 'branded' && !(data.brandName || '').trim()) errs.brandName = 'Brand Name is required'
@@ -335,6 +344,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
       ...prev,
       mailingAddress: prev.storeAddress,
       mailingCity: prev.storeCity,
+      mailingState: prev.storeState,
       mailingZip: prev.storeZip,
       mailingCounty: prev.storeCounty,
     }))

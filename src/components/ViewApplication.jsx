@@ -9,11 +9,14 @@ import '../styles/ViewApplication.css'
 // ── Value → Display label lookup maps ────────────────────────────────────────
 
 const OWNERSHIP_TYPE = {
-  'sole-proprietor':   'Sole Proprietorship',
-  'partnership':       'Partnership',
+  'sole-proprietor':    'Sole Proprietorship',
+  'partnership':        'Partnership',
+  'c-corp':             'C-Corp',
+  's-corp':             'S-Corp',
+  'llc':                'LLC',
+  // legacy values — kept so existing saved applications still display correctly
+  'corporation':        'Corporation',
   'limited-partnership': 'Limited Partnership',
-  'corporation':       'Corporation',
-  'llc':               'LLC'
 }
 const BUSINESS_TYPE = {
   'with-fuel':    'Convenience Store with Fuel',
@@ -277,13 +280,18 @@ function ViewApplication() {
               <InfoRow><InfoField label="Does your store have a beer cave?" value={lbl(YES_NO, data.beerCave)} /></InfoRow>
             </Section>
             <Section title="Spanner Board">
-              <InfoRow><InfoField label="Spanner Board Available" value={data.storeSpannerBoard ? 'Yes' : 'No'} /></InfoRow>
+              <InfoRow><InfoField label="Spanner Board" value={
+                data.storeSpannerBoard === 'yes'        ? 'I do have permission to install a 15ft spanner board.' :
+                data.storeSpannerBoard === 'no'         ? 'I do not have permission from city, landlord or authority to install GHRA spanner frame. (Provide documentation)' :
+                data.storeSpannerBoard === 'prevMember' ? 'I have a spanner board from previous member in good condition (provide current photograph).' :
+                '-'
+              } /></InfoRow>
             </Section>
             <Section title="Store Address">
               <InfoRow><InfoField label="Store Address" value={data.storeAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.storeCity} />
-                <InfoField label="State" value="TX" />
+                <InfoField label="State" value={data.storeState} />
                 <InfoField label="Zip Code" value={data.storeZip} />
                 <InfoField label="County" value={data.storeCounty} />
               </InfoRow>
@@ -292,6 +300,7 @@ function ViewApplication() {
               <InfoRow><InfoField label="Mailing Address" value={data.mailingAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.mailingCity} />
+                <InfoField label="State" value={data.mailingState} />
                 <InfoField label="Zip Code" value={data.mailingZip} />
                 <InfoField label="County" value={data.mailingCounty} />
               </InfoRow>

@@ -302,7 +302,7 @@ export const generateApplicationPDF = (application) => {
             </div>
             <div class="info-item">
               <span class="info-label">Ownership Type</span>
-              <span class="info-value">${data.ownershipType || '-'}</span>
+              <span class="info-value">${{ 'sole-proprietor': 'Sole Proprietorship', 'partnership': 'Partnership', 'c-corp': 'C-Corp', 's-corp': 'S-Corp', 'llc': 'LLC', 'corporation': 'Corporation', 'limited-partnership': 'Limited Partnership' }[data.ownershipType] || data.ownershipType || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Business Type</span>
@@ -373,7 +373,7 @@ export const generateApplicationPDF = (application) => {
             </div>
             <div class="info-item">
               <span class="info-label">State</span>
-              <span class="info-value">TX</span>
+              <span class="info-value">${data.storeState || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Zip Code</span>
@@ -518,7 +518,12 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Spanner Board</span>
-              <span class="info-value">${data.storeSpannerBoard ? 'Yes' : 'No'}</span>
+              <span class="info-value">${
+                data.storeSpannerBoard === 'yes'        ? 'I do have permission to install a 15ft spanner board.' :
+                data.storeSpannerBoard === 'no'         ? 'I do not have permission from city, landlord or authority to install GHRA spanner frame. (Provide documentation)' :
+                data.storeSpannerBoard === 'prevMember' ? 'I have a spanner board from previous member in good condition (provide current photograph).' :
+                '-'
+              }</span>
             </div>
           </div>
         </div>

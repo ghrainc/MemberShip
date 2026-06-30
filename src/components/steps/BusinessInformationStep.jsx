@@ -44,12 +44,12 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
             Partnership
           </label>
           <label className="radio-label">
-            <input type="radio" name="ownershipType" value="limited-partnership" checked={formData.ownershipType === 'limited-partnership'} onChange={handleInputChange} />
-            Limited Partnership
+            <input type="radio" name="ownershipType" value="c-corp" checked={formData.ownershipType === 'c-corp' || formData.ownershipType === 'corporation'} onChange={handleInputChange} />
+            C-Corp
           </label>
           <label className="radio-label">
-            <input type="radio" name="ownershipType" value="corporation" checked={formData.ownershipType === 'corporation'} onChange={handleInputChange} />
-            Corporation
+            <input type="radio" name="ownershipType" value="s-corp" checked={formData.ownershipType === 's-corp'} onChange={handleInputChange} />
+            S-Corp
           </label>
           <label className="radio-label">
             <input type="radio" name="ownershipType" value="llc" checked={formData.ownershipType === 'llc'} onChange={handleInputChange} />

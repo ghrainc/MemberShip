@@ -369,10 +369,18 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
 
       <div className="form-section-inner">
         <span className="inner-legend">Spanner Board</span>
-        <div className="checkbox-group">
-          <label className="checkbox-label">
-            <input type="checkbox" name="storeSpannerBoard" checked={formData.storeSpannerBoard || false} onChange={handleInputChange} />
-            Spanner Board Available
+        <div className="radio-group">
+          <label className="radio-label">
+            <input type="radio" name="storeSpannerBoard" value="yes" checked={formData.storeSpannerBoard === 'yes'} onChange={handleInputChange} />
+            I do have permission to install a 15ft spanner board.
+          </label>
+          <label className="radio-label">
+            <input type="radio" name="storeSpannerBoard" value="no" checked={formData.storeSpannerBoard === 'no'} onChange={handleInputChange} />
+            I do not have permission from city, landlord or authority to install GHRA spanner frame. (Provide documentation)
+          </label>
+          <label className="radio-label">
+            <input type="radio" name="storeSpannerBoard" value="prevMember" checked={formData.storeSpannerBoard === 'prevMember'} onChange={handleInputChange} />
+            I have a spanner board from previous member in good condition (provide current photograph).
           </label>
         </div>
       </div>
@@ -413,6 +421,20 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
             {errors.storeCity && <span className="error-text">{errors.storeCity}</span>}
           </div>
           <div className="form-group">
+            <label htmlFor="storeState">State *</label>
+            <input
+              type="text"
+              id="storeState"
+              name="storeState"
+              value={formData.storeState}
+              onChange={handleInputChange}
+              className={`form-input ${errors.storeState ? 'input-error' : ''}`}
+              placeholder="State"
+              maxLength={50}
+            />
+            {errors.storeState && <span className="error-text">{errors.storeState}</span>}
+          </div>
+          <div className="form-group">
             <label htmlFor="storeZip">Zip Code *</label>
             <input
               type="text"
@@ -428,17 +450,18 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
             {errors.storeZip && <span className="error-text">{errors.storeZip}</span>}
           </div>
           <div className="form-group">
-            <label htmlFor="storeCounty">County</label>
+            <label htmlFor="storeCounty">County *</label>
             <input
               type="text"
               id="storeCounty"
               name="storeCounty"
               value={formData.storeCounty}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.storeCounty ? 'input-error' : ''}`}
               placeholder="County"
               maxLength={50}
             />
+            {errors.storeCounty && <span className="error-text">{errors.storeCounty}</span>}
           </div>
         </div>
       </div>
@@ -454,60 +477,78 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
 
         <div className="mailing-address-row-item">
           <div className="form-group">
-            <label htmlFor="mailingAddress">Mailing Address</label>
+            <label htmlFor="mailingAddress">Mailing Address *</label>
             <input
               type="text"
               id="mailingAddress"
               name="mailingAddress"
               value={formData.mailingAddress}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.mailingAddress ? 'input-error' : ''}`}
               placeholder="Street address"
               maxLength={50}
             />
+            {errors.mailingAddress && <span className="error-text">{errors.mailingAddress}</span>}
           </div>
         </div>
 
         <div className="mailing-address-row-item">
           <div className="form-group">
-            <label htmlFor="mailingCity">City</label>
+            <label htmlFor="mailingCity">City *</label>
             <input
               type="text"
               id="mailingCity"
               name="mailingCity"
               value={formData.mailingCity}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.mailingCity ? 'input-error' : ''}`}
               placeholder="City"
               maxLength={50}
             />
+            {errors.mailingCity && <span className="error-text">{errors.mailingCity}</span>}
           </div>
           <div className="form-group">
-            <label htmlFor="mailingZip">Zip Code</label>
+            <label htmlFor="mailingState">State *</label>
+            <input
+              type="text"
+              id="mailingState"
+              name="mailingState"
+              value={formData.mailingState}
+              onChange={handleInputChange}
+              className={`form-input ${errors.mailingState ? 'input-error' : ''}`}
+              placeholder="State"
+              maxLength={50}
+            />
+            {errors.mailingState && <span className="error-text">{errors.mailingState}</span>}
+          </div>
+          <div className="form-group">
+            <label htmlFor="mailingZip">Zip Code *</label>
             <input
               type="text"
               id="mailingZip"
               name="mailingZip"
               value={formData.mailingZip}
               onChange={numericInput(handleInputChange, 'mailingZip')}
-              className="form-input"
+              className={`form-input ${errors.mailingZip ? 'input-error' : ''}`}
               placeholder="Numbers only"
               maxLength={20}
               inputMode="numeric"
             />
+            {errors.mailingZip && <span className="error-text">{errors.mailingZip}</span>}
           </div>
           <div className="form-group">
-            <label htmlFor="mailingCounty">County</label>
+            <label htmlFor="mailingCounty">County *</label>
             <input
               type="text"
               id="mailingCounty"
               name="mailingCounty"
               value={formData.mailingCounty}
               onChange={handleInputChange}
-              className="form-input"
+              className={`form-input ${errors.mailingCounty ? 'input-error' : ''}`}
               placeholder="County"
               maxLength={50}
             />
+            {errors.mailingCounty && <span className="error-text">{errors.mailingCounty}</span>}
           </div>
         </div>
       </div>
