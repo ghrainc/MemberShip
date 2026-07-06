@@ -29,8 +29,12 @@ CREATE TABLE Applications (
   SignatureRequestId           NVARCHAR(255)  NULL,                       -- membership DS request
   SignedAt                     DATETIME       NULL,
   ReferencesSignatureRequestId NVARCHAR(255)  NULL,                       -- references DS request
-  ReferencesSignatureStatus    NVARCHAR(50)   NULL,                       -- sent | signed
+  ReferencesSignatureStatus    NVARCHAR(50)   NULL,                       -- sent | signed (aggregate)
   ReferencesSignedAt           DATETIME       NULL,
+  Ref1SignatureId              NVARCHAR(255)  NULL,                       -- DS signatureId for ref 1
+  Ref2SignatureId              NVARCHAR(255)  NULL,                       -- DS signatureId for ref 2
+  Ref1SignatureStatus          NVARCHAR(50)   NULL,                       -- per-signer DS statusCode
+  Ref2SignatureStatus          NVARCHAR(50)   NULL,
   CreatedAt                    DATETIME       NOT NULL DEFAULT GETDATE(),
   UpdatedAt                    DATETIME       NULL,
   FOREIGN KEY (UserEmail) REFERENCES Users(Email)

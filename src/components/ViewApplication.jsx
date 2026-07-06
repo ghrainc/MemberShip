@@ -93,6 +93,8 @@ function ViewApplication() {
   const [currentSection, setCurrentSection] = useState(1)
   const [approvalDialog, setApprovalDialog] = useState(null)
   const [historyOpen, setHistoryOpen]   = useState(false)
+  const [approvalError, setApprovalError] = useState(null)
+  const [approving, setApproving]       = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -103,13 +105,19 @@ function ViewApplication() {
   }, [id])
 
   const handleSectionClick = (sectionId) => { setCurrentSection(sectionId); window.scrollTo(0, 0) }
-  const handleApproveClick = () => setApprovalDialog({ action: 'approve' })
-  const handleRejectClick  = () => setApprovalDialog({ action: 'reject' })
+  const handleApproveClick = () => { setApprovalError(null); setApprovalDialog({ action: 'approve' }) }
+  const handleRejectClick  = () => { setApprovalError(null); setApprovalDialog({ action: 'reject' }) }
 
   const handleApprovalConfirm = async (comments) => {
     const newStatus = approvalDialog.action === 'approve' ? 'approved' : 'rejected'
-    await updateApplicationStatus(id, newStatus, comments)
+    setApproving(true)
+    const result = await updateApplicationStatus(id, newStatus, comments)
+    setApproving(false)
     setApprovalDialog(null)
+    if (!result.success) {
+      setApprovalError(result.error || 'Something went wrong.')
+      return
+    }
     navigate('/employee')
   }
 
@@ -678,10 +686,10 @@ function ViewApplication() {
               <button type="button" onClick={handleEdit} className="nav-button edit-action-button">
                 ✎ Edit
               </button>
-              <button type="button" onClick={handleApproveClick} disabled={application.Status !== 'submitted'} className="nav-button approve-action-button">
-                ✓ Approve
+              <button type="button" onClick={handleApproveClick} disabled={!['submitted', 'approved'].includes(application.Status) || approving} className="nav-button approve-action-button">
+                {approving ? 'Approving…' : '✓ Approve'}
               </button>
-              <button type="button" onClick={handleRejectClick} disabled={application.Status !== 'submitted'} className="nav-button reject-action-button">
+              <button type="button" onClick={handleRejectClick} disabled={['rejected', 'signed'].includes(application.Status) || approving} className="nav-button reject-action-button">
                 ✕ Reject
               </button>
             </>
@@ -690,6 +698,13 @@ function ViewApplication() {
             📥 Download PDF
           </button>
         </div>
+
+        {approvalError && (
+          <div className="approval-error-banner">
+            <strong>Approval failed:</strong> {approvalError}
+            <button className="approval-error-dismiss" onClick={() => setApprovalError(null)}>✕</button>
+          </div>
+        )}
       </div>
 
       <footer className="view-app-footer">

@@ -528,6 +528,141 @@
   margin: 20px;
 }
 
+/* ── Approval error banner ─────────────────────────────────────────────────── */
+
+.approval-error-banner {
+  margin: 12px 20px 0;
+  padding: 12px 16px;
+  background: #fdecea;
+  border: 1px solid #e74c3c;
+  border-radius: 6px;
+  color: #c0392b;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.approval-error-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #c0392b;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* ── Resend panel ──────────────────────────────────────────────────────────── */
+
+.resend-panel {
+  background: white;
+  border-top: 1px solid #e0e6ed;
+  padding: 24px 32px;
+}
+
+.resend-panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 16px;
+}
+
+.resend-loading {
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.resend-row {
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: #fafbfc;
+}
+
+.resend-row-signed {
+  background: #f0faf4;
+  border-color: #a8d5b5;
+}
+
+.resend-row-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.resend-row-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: #2c3e50;
+  min-width: 100px;
+}
+
+.sig-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sig-status-signed   { background: #d4edda; color: #155724; }
+.sig-status-waiting  { background: #fff3cd; color: #856404; }
+.sig-status-declined { background: #f8d7da; color: #721c24; }
+.sig-status-unknown  { background: #e9ecef; color: #495057; }
+
+.resend-row-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.resend-email-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #dce1e7;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #2c3e50;
+  background: white;
+}
+
+.resend-email-input:disabled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.resend-button {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.resend-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.resend-message {
+  margin: 8px 0 0;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.resend-message-ok  { background: #d4edda; color: #155724; }
+.resend-message-err { background: #f8d7da; color: #721c24; }
+
 .view-app-footer {
   background: white;
   border-top: 1px solid #e0e6ed;

@@ -11,6 +11,8 @@ require('dotenv').config()
 const {
   SignatureRequestApi,
   SignatureRequestSendWithTemplateRequest,
+  SignatureRequestRemindRequest,
+  SignatureRequestUpdateRequest,
   SubSignatureRequestTemplateSigner,
   SubCustomField,
 } = require('@dropbox/sign')
@@ -261,7 +263,15 @@ async function sendReferencesRequest(formData) {
   console.log('=============================')
 
   const response = await api.signatureRequestSendWithTemplate(request)
-  return response.body.signatureRequest.signatureRequestId
+  const sr   = response.body.signatureRequest
+  const sigs = sr.signatures || []
+  const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
+  const s2   = sigs.find(s => s.signerRole === 'Reference 2 - Membership Application')
+  return {
+    signatureRequestId: sr.signatureRequestId,
+    ref1SignatureId:    s1?.signatureId || null,
+    ref2SignatureId:    s2?.signatureId || null,
+  }
 }
 
 // nodemailer is optional — email notifications silently skipped if not installed or configured
@@ -315,7 +325,7 @@ const upload = multer({
 })
 
 const app = express()
-app.use(cors({ origin: /^http:\/\/localhost(:\d+)?$/ }))
+app.use(cors({ origin: /^http:\/\/(localhost|ghra-memb)(:\d+)?$/ }))
 app.use(express.json({ limit: '10mb' }))
 app.use('/uploads', express.static(path.join(__dirname, 'UploadedDocuments')))
 
@@ -398,6 +408,34 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'ReferencesSignedAt'
       )
         ALTER TABLE Applications ADD ReferencesSignedAt DATETIME NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'Ref1SignatureId'
+      )
+        ALTER TABLE Applications ADD Ref1SignatureId NVARCHAR(255) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'Ref2SignatureId'
+      )
+        ALTER TABLE Applications ADD Ref2SignatureId NVARCHAR(255) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'Ref1SignatureStatus'
+      )
+        ALTER TABLE Applications ADD Ref1SignatureStatus NVARCHAR(50) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'Ref2SignatureStatus'
+      )
+        ALTER TABLE Applications ADD Ref2SignatureStatus NVARCHAR(50) NULL
     `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
@@ -631,13 +669,69 @@ app.get('/api/applications/my', authMiddleware, async (req, res) => {
   }
 })
 
+// POST /api/applications/sync-statuses  — pull live DS signer status into DB (bypasses webhooks)
+app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .query(`SELECT Id, SignatureRequestId, ReferencesSignatureRequestId
+              FROM Applications
+              WHERE SignatureRequestId IS NOT NULL OR ReferencesSignatureRequestId IS NOT NULL`)
+
+    const api = new SignatureRequestApi()
+    api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+    for (const row of result.recordset) {
+      try {
+        // Membership signer
+        if (row.SignatureRequestId) {
+          const r    = await api.signatureRequestGet(row.SignatureRequestId)
+          const sigs = r.body.signatureRequest.signatures || []
+          const m    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+          if (m?.statusCode === 'signed') {
+            await db.request()
+              .input('id', sql.Int, row.Id)
+              .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE Id = @id AND Status != 'signed'`)
+          }
+        }
+
+        // Reference signers — update per-signer status and signatureId by role name
+        if (row.ReferencesSignatureRequestId) {
+          const r    = await api.signatureRequestGet(row.ReferencesSignatureRequestId)
+          const sigs = r.body.signatureRequest.signatures || []
+          const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
+          const s2   = sigs.find(s => s.signerRole === 'Reference 2 - Membership Application')
+          await db.request()
+            .input('ref1Status', sql.NVarChar, s1?.statusCode    || null)
+            .input('ref1SigId',  sql.NVarChar, s1?.signatureId   || null)
+            .input('ref2Status', sql.NVarChar, s2?.statusCode    || null)
+            .input('ref2SigId',  sql.NVarChar, s2?.signatureId   || null)
+            .input('id',         sql.Int,      row.Id)
+            .query(`UPDATE Applications
+                    SET Ref1SignatureStatus = @ref1Status, Ref1SignatureId = @ref1SigId,
+                        Ref2SignatureStatus = @ref2Status, Ref2SignatureId = @ref2SigId
+                    WHERE Id = @id`)
+        }
+      } catch {
+        // Non-fatal — continue syncing other applications
+      }
+    }
+    res.json({ success: true, synced: result.recordset.length })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/applications/all  — employee only
 app.get('/api/applications/all', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
   try {
     const db = await getPool()
     const result = await db.request()
-      .query(`SELECT Id, UserEmail, StoreName, StoreAddress, Status, CurrentStep, ReviewedBy, ReviewedAt, Notes, CreatedAt, FormData
+      .query(`SELECT Id, UserEmail, StoreName, StoreAddress, Status, CurrentStep, ReviewedBy, ReviewedAt, Notes, CreatedAt,
+                     SignatureRequestId, ReferencesSignatureRequestId,
+                     Ref1SignatureStatus, Ref2SignatureStatus, FormData
               FROM Applications ORDER BY CreatedAt DESC`)
     const rows = result.recordset.map(row => {
       let fd = {}
@@ -682,80 +776,245 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
     // Load existing history to append to it
     const existing = await db.request()
       .input('id', sql.Int, req.params.id)
-      .query('SELECT CommentsHistory FROM Applications WHERE Id = @id')
+      .query('SELECT CommentsHistory, FormData, UserEmail FROM Applications WHERE Id = @id')
+    if (!existing.recordset.length) return res.status(404).json({ error: 'Not found' })
+
     let history = []
     try { history = JSON.parse(existing.recordset[0]?.CommentsHistory || '[]') } catch {}
     if (notes) {
-      history.push({
-        status,
-        comment: notes,
-        reviewedBy: req.user.email,
-        reviewedAt: new Date().toISOString()
-      })
+      history.push({ status, comment: notes, reviewedBy: req.user.email, reviewedAt: new Date().toISOString() })
     }
-
-    await db.request()
-      .input('id', sql.Int, req.params.id)
-      .input('status', sql.NVarChar, status)
-      .input('notes', sql.NVarChar(sql.MAX), notes || '')
-      .input('reviewedBy', sql.NVarChar, req.user.email)
-      .input('history', sql.NVarChar(sql.MAX), JSON.stringify(history))
-      .query(`UPDATE Applications
-              SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
-              WHERE Id = @id`)
+    const historyJson = JSON.stringify(history)
 
     if (status === 'approved') {
-      // Load full FormData + email to build the signature request
-      const fullApp = await db.request()
-        .input('id2', sql.Int, req.params.id)
-        .query('SELECT FormData, UserEmail FROM Applications WHERE Id = @id2')
-
-      if (!fullApp.recordset.length) return res.status(404).json({ error: 'Not found' })
-      const { FormData: rawFormData, UserEmail } = fullApp.recordset[0]
+      // For approvals: DS send drives the status — do not set 'approved' unless send succeeds
       let fd = {}
-      try { fd = JSON.parse(rawFormData || '{}') } catch {}
+      try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
+      const { UserEmail } = existing.recordset[0]
 
       try {
         const signatureRequestId = await sendSignatureRequest(fd, UserEmail)
-        await db.request()
-          .input('sigId', sql.NVarChar, signatureRequestId)
-          .input('id3', sql.Int, req.params.id)
-          .query(`UPDATE Applications SET Status = 'pending_signature', SignatureRequestId = @sigId WHERE Id = @id3`)
 
-        // Send references signature request (non-fatal — errors are logged, not surfaced)
+        // DS succeeded — now commit status = pending_signature along with reviewer fields
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .input('sigId', sql.NVarChar, signatureRequestId)
+          .input('notes', sql.NVarChar(sql.MAX), notes || '')
+          .input('reviewedBy', sql.NVarChar, req.user.email)
+          .input('history', sql.NVarChar(sql.MAX), historyJson)
+          .query(`UPDATE Applications
+                  SET Status = 'pending_signature', SignatureRequestId = @sigId,
+                      Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
+                  WHERE Id = @id2`)
+
+        // Send references signature request (non-fatal)
         try {
-          const refSigId = await sendReferencesRequest(fd)
+          const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd)
           await db.request()
-            .input('refSigId', sql.NVarChar, refSigId)
-            .input('id4', sql.Int, req.params.id)
-            .query(`UPDATE Applications SET ReferencesSignatureRequestId = @refSigId, ReferencesSignatureStatus = 'sent' WHERE Id = @id4`)
+            .input('refSigId',    sql.NVarChar, refSigId)
+            .input('ref1SigId',   sql.NVarChar, ref1SignatureId || null)
+            .input('ref2SigId',   sql.NVarChar, ref2SignatureId || null)
+            .input('id3',         sql.Int,      req.params.id)
+            .query(`UPDATE Applications
+                    SET ReferencesSignatureRequestId = @refSigId,
+                        ReferencesSignatureStatus    = 'sent',
+                        Ref1SignatureId              = @ref1SigId,
+                        Ref2SignatureId              = @ref2SigId,
+                        Ref1SignatureStatus          = 'awaiting_signature',
+                        Ref2SignatureStatus          = 'awaiting_signature'
+                    WHERE Id = @id3`)
         } catch (refErr) {
-          const refDetail = refErr.body?.error?.errorMsg || refErr.message || 'Unknown error'
-          console.error('References signature request failed:', refDetail)
+          console.error('References signature request failed:', refErr.body?.error?.errorMsg || refErr.message)
         }
 
         return res.json({ success: true, status: 'pending_signature', signatureRequestId })
       } catch (dsErr) {
         const detail = dsErr.body?.error?.errorMsg || dsErr.message || 'Unknown error'
         console.error('Dropbox Sign send failed:', detail)
-        return res.status(500).json({
-          error: `Application approved but signature request failed to send: ${detail}`
-        })
+
+        // DS failed — record reviewer fields but leave Status unchanged (stays 'submitted')
+        await db.request()
+          .input('id4', sql.Int, req.params.id)
+          .input('notes', sql.NVarChar(sql.MAX), notes || '')
+          .input('reviewedBy', sql.NVarChar, req.user.email)
+          .input('history', sql.NVarChar(sql.MAX), historyJson)
+          .query(`UPDATE Applications
+                  SET Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
+                  WHERE Id = @id4`)
+
+        return res.status(500).json({ success: false, error: `Signature request failed: ${detail}` })
       }
     }
 
-    // For rejected / any other status — send email and return success
-    const appRow = await db.request()
-      .input('id4', sql.Int, req.params.id)
-      .query('SELECT UserEmail, StoreName FROM Applications WHERE Id = @id4')
-    if (appRow.recordset.length > 0) {
-      const { UserEmail, StoreName } = appRow.recordset[0]
-      sendStatusEmail(UserEmail, StoreName, status, notes).catch(() => {})
-    }
+    // rejected / any other status — update status directly then send notification email
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .input('status', sql.NVarChar, status)
+      .input('notes', sql.NVarChar(sql.MAX), notes || '')
+      .input('reviewedBy', sql.NVarChar, req.user.email)
+      .input('history', sql.NVarChar(sql.MAX), historyJson)
+      .query(`UPDATE Applications
+              SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
+              WHERE Id = @id`)
+
+    const { UserEmail, StoreName } = existing.recordset[0]
+    sendStatusEmail(UserEmail, StoreName, status, notes).catch(() => {})
 
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/applications/:id/signature-status  — fetch live signer statuses from DS
+app.get('/api/applications/:id/signature-status', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query('SELECT SignatureRequestId, ReferencesSignatureRequestId, UserEmail FROM Applications WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
+    const { SignatureRequestId, ReferencesSignatureRequestId, UserEmail } = result.recordset[0]
+
+    const api = new SignatureRequestApi()
+    api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+    const out = {}
+
+    if (SignatureRequestId) {
+      const r = await api.signatureRequestGet(SignatureRequestId)
+      const sigs = r.body.signatureRequest.signatures || []
+      const s = sigs.find(x => x.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+      if (s) out.member = { email: s.signerEmailAddress, status: s.statusCode, signatureId: s.signatureId }
+    } else {
+      out.member = { email: UserEmail, status: null, signatureId: null }
+    }
+
+    if (ReferencesSignatureRequestId) {
+      const r = await api.signatureRequestGet(ReferencesSignatureRequestId)
+      const sigs = r.body.signatureRequest.signatures || []
+      const s1 = sigs.find(x => x.signerRole === 'Reference 1 - Membership Application')
+      const s2 = sigs.find(x => x.signerRole === 'Reference 2 - Membership Application')
+      if (s1) out.reference1 = { email: s1.signerEmailAddress, status: s1.statusCode, signatureId: s1.signatureId }
+      if (s2) out.reference2 = { email: s2.signerEmailAddress, status: s2.statusCode, signatureId: s2.signatureId }
+    }
+
+    res.json(out)
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
+    res.status(500).json({ error: detail })
+  }
+})
+
+// POST /api/applications/:id/resend/:target  — resend or redirect a DS signing email
+// target: member | reference1 | reference2 ; body: { email? }
+app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { target } = req.params
+  const newEmail = (req.body.email || '').trim()
+
+  const ROLE_MAP = {
+    member:     { col: 'SignatureRequestId',           role: DROPBOX_SIGN_SIGNER_ROLE },
+    reference1: { col: 'ReferencesSignatureRequestId', role: 'Reference 1 - Membership Application' },
+    reference2: { col: 'ReferencesSignatureRequestId', role: 'Reference 2 - Membership Application' },
+  }
+  if (!ROLE_MAP[target]) return res.status(400).json({ error: 'Invalid target. Use member, reference1, or reference2.' })
+  const { col, role } = ROLE_MAP[target]
+
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query('SELECT SignatureRequestId, ReferencesSignatureRequestId, FormData FROM Applications WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
+
+    const row = result.recordset[0]
+    const sigReqId = row[col]
+    if (!sigReqId) return res.status(400).json({ error: `No signature request found for "${target}". Has the application been approved yet?` })
+
+    const api = new SignatureRequestApi()
+    api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+    // Fetch live signer list to find signatureId and current email
+    const dsRes = await api.signatureRequestGet(sigReqId)
+    const sigs = dsRes.body.signatureRequest.signatures || []
+    const signer = sigs.find(s => s.signerRole === role)
+    if (!signer) return res.status(404).json({ error: `Signer role "${role}" not found in signature request.` })
+
+    if (signer.statusCode === 'signed') {
+      return res.status(400).json({ error: 'This signer has already signed the document and cannot be reminded.' })
+    }
+
+    const currentEmail = signer.signerEmailAddress
+
+    if (newEmail && newEmail !== currentEmail) {
+      // Change email → DS update triggers a new signing email automatically
+      const updateReq = new SignatureRequestUpdateRequest()
+      updateReq.signatureId  = signer.signatureId
+      updateReq.emailAddress = newEmail
+      const updateRes = await api.signatureRequestUpdate(sigReqId, updateReq)
+
+      // Grab the new signatureId DS assigns to the updated signer
+      const updatedSigs = updateRes.body?.signatureRequest?.signatures || []
+      const updatedSigner = updatedSigs.find(s => s.signerRole === role)
+      const newSigId = updatedSigner?.signatureId || null
+
+      if (target === 'reference1') {
+        await db.request()
+          .input('newSigId',  sql.NVarChar, newSigId)
+          .input('id2',       sql.Int,      req.params.id)
+          .query(`UPDATE Applications
+                  SET Ref1SignatureId = @newSigId, Ref1SignatureStatus = 'awaiting_signature'
+                  WHERE Id = @id2`)
+        // Persist updated email into FormData
+        let fd = {}
+        try { fd = JSON.parse(row.FormData || '{}') } catch {}
+        fd.reference1Email = newEmail
+        await db.request()
+          .input('fd',  sql.NVarChar(sql.MAX), JSON.stringify(fd))
+          .input('id3', sql.Int,               req.params.id)
+          .query('UPDATE Applications SET FormData = @fd WHERE Id = @id3')
+      } else if (target === 'reference2') {
+        await db.request()
+          .input('newSigId',  sql.NVarChar, newSigId)
+          .input('id2',       sql.Int,      req.params.id)
+          .query(`UPDATE Applications
+                  SET Ref2SignatureId = @newSigId, Ref2SignatureStatus = 'awaiting_signature'
+                  WHERE Id = @id2`)
+        let fd = {}
+        try { fd = JSON.parse(row.FormData || '{}') } catch {}
+        fd.reference2Email = newEmail
+        await db.request()
+          .input('fd',  sql.NVarChar(sql.MAX), JSON.stringify(fd))
+          .input('id3', sql.Int,               req.params.id)
+          .query('UPDATE Applications SET FormData = @fd WHERE Id = @id3')
+      }
+      // member target — no per-signer DB field; status is derived from app.Status
+
+      return res.json({ success: true, message: `Email updated to ${newEmail} — a new signing link has been sent.` })
+    } else {
+      // Same email → just remind
+      const remindReq = new SignatureRequestRemindRequest()
+      remindReq.emailAddress = currentEmail
+      await api.signatureRequestRemind(sigReqId, remindReq)
+
+      // Reset per-signer status back to awaiting so it reflects the resend
+      if (target === 'reference1') {
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET Ref1SignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
+      } else if (target === 'reference2') {
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET Ref2SignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
+      }
+
+      return res.json({ success: true, message: `Reminder sent to ${currentEmail}.` })
+    }
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
+    res.status(500).json({ error: detail })
   }
 })
 
@@ -918,15 +1177,48 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
     if (sigReqId) {
       try {
         const db = await getPool()
-        // Membership document — matches SignatureRequestId
+
+        // ── Membership document: update Status on both signed + all_signed ────
+        // Idempotent — safe for the single-signer membership template
         await db.request()
           .input('sigId', sql.NVarChar, sigReqId)
           .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE SignatureRequestId = @sigId`)
-        // References document — matches ReferencesSignatureRequestId (all_signed = both refs signed)
-        if (eventType === 'signature_request_all_signed') {
+
+        // ── References document: fetch live signer data via DS API ────────────
+        // Avoids reliance on webhook payload field names (which vary); SDK returns
+        // reliable camelCase fields (signerRole, statusCode, signatureId).
+        const refMatch = await db.request()
+          .input('sigId2', sql.NVarChar, sigReqId)
+          .query(`SELECT Id FROM Applications WHERE ReferencesSignatureRequestId = @sigId2`)
+
+        if (refMatch.recordset.length > 0) {
+          const api = new SignatureRequestApi()
+          api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+          const r    = await api.signatureRequestGet(sigReqId)
+          const sigs = r.body.signatureRequest.signatures || []
+          const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
+          const s2   = sigs.find(s => s.signerRole === 'Reference 2 - Membership Application')
+          const appId = refMatch.recordset[0].Id
+
           await db.request()
-            .input('sigId2', sql.NVarChar, sigReqId)
-            .query(`UPDATE Applications SET ReferencesSignatureStatus = 'signed', ReferencesSignedAt = GETDATE() WHERE ReferencesSignatureRequestId = @sigId2`)
+            .input('ref1Status', sql.NVarChar, s1?.statusCode  || null)
+            .input('ref1SigId',  sql.NVarChar, s1?.signatureId || null)
+            .input('ref2Status', sql.NVarChar, s2?.statusCode  || null)
+            .input('ref2SigId',  sql.NVarChar, s2?.signatureId || null)
+            .input('id',         sql.Int,      appId)
+            .query(`UPDATE Applications
+                    SET Ref1SignatureStatus = @ref1Status,
+                        Ref1SignatureId     = COALESCE(@ref1SigId, Ref1SignatureId),
+                        Ref2SignatureStatus = @ref2Status,
+                        Ref2SignatureId     = COALESCE(@ref2SigId, Ref2SignatureId)
+                    WHERE Id = @id`)
+
+          // Aggregate field for backward compat
+          if (eventType === 'signature_request_all_signed') {
+            await db.request()
+              .input('id2', sql.Int, appId)
+              .query(`UPDATE Applications SET ReferencesSignatureStatus = 'signed', ReferencesSignedAt = GETDATE() WHERE Id = @id2`)
+          }
         }
       } catch (err) {
         console.error('Webhook DB update failed:', err.message)

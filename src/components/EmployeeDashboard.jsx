@@ -2,12 +2,13 @@ import { useState, useContext, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
+import ResendSignatureModal from './ResendSignatureModal'
 import '../styles/EmployeeDashboard.css'
 
 const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '' }
 
 function EmployeeDashboard() {
-  const { currentUser, getAllApplications, createMember, testDropboxSign, logout } = useContext(AuthContext)
+  const { currentUser, getAllApplications, syncSignatureStatuses, createMember, testDropboxSign, logout } = useContext(AuthContext)
   const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
@@ -19,6 +20,9 @@ function EmployeeDashboard() {
     key: 'CreatedAt',
     direction: 'desc'
   })
+
+  // Resend modal state
+  const [resendApp, setResendApp] = useState(null) // { Id, UserEmail }
 
   // Dropbox Sign test modal state
   const [showDsTest, setShowDsTest] = useState(false)
@@ -50,6 +54,7 @@ function EmployeeDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
+    await syncSignatureStatuses()
     const data = await getAllApplications()
     setApplications(data || [])
     setRefreshing(false)
@@ -120,18 +125,28 @@ function EmployeeDashboard() {
     return 0
   })
 
-  const getStatusBadge = (status) => {
-    const statusMap = {
-      submitted:           { label: 'Submitted',          class: 'status-submitted' },
-      approved:            { label: 'Approved',           class: 'status-approved' },
-      pending:             { label: 'Pending Review',     class: 'status-pending' },
-      rejected:            { label: 'Rejected',           class: 'status-rejected' },
-      draft:               { label: 'Draft',              class: 'status-pending' },
-      pending_signature:   { label: 'Awaiting Signature', class: 'status-pending-signature' },
-      signed:              { label: 'Signed by Member',   class: 'status-signed' }
-    }
-    const info = statusMap[status] || { label: status, class: 'status-unknown' }
-    return <span className={`status-badge ${info.class}`}>{info.label}</span>
+  const APP_STATUS_MAP = {
+    submitted:         { label: 'Submitted',          cls: 'status-submitted' },
+    approved:          { label: 'Approved',           cls: 'status-approved' },
+    pending:           { label: 'Pending Review',     cls: 'status-pending' },
+    rejected:          { label: 'Rejected',           cls: 'status-rejected' },
+    draft:             { label: 'Draft',              cls: 'status-pending' },
+    pending_signature: { label: 'Awaiting Signature', cls: 'status-pending-signature' },
+    signed:            { label: 'Signed',             cls: 'status-signed' },
+  }
+
+  const getAppStatusBadge = (status) => {
+    const info = APP_STATUS_MAP[status] || { label: status, cls: 'status-unknown' }
+    return <span className={`status-badge ${info.cls}`}>{info.label}</span>
+  }
+
+  const getSigStatusBadge = (statusCode) => {
+    if (!statusCode) return <span className="sig-status-badge sig-status-unknown">Not Sent</span>
+    if (statusCode === 'signed')             return <span className="sig-status-badge sig-status-signed">Signed</span>
+    if (statusCode === 'awaiting_signature') return <span className="sig-status-badge sig-status-waiting">Awaiting</span>
+    if (statusCode === 'declined')           return <span className="sig-status-badge sig-status-declined">Declined</span>
+    if (statusCode === 'viewed')             return <span className="sig-status-badge sig-status-waiting">Viewed</span>
+    return <span className="sig-status-badge sig-status-unknown">{statusCode}</span>
   }
 
   const formatDate = (dateString) => {
@@ -376,7 +391,22 @@ function EmployeeDashboard() {
                           <td className="email-cell">{app.UserEmail}</td>
                           <td>{repFullName || 'Not provided'}</td>
                           <td>{formatDate(app.CreatedAt)}</td>
-                          <td>{getStatusBadge(app.Status)}</td>
+                          <td>
+                            <div className="sig-status-cell">
+                              <div className="sig-status-row">
+                                <span className="sig-status-label">App</span>
+                                {getAppStatusBadge(app.Status)}
+                              </div>
+                              <div className="sig-status-row sig-status-row-sub">
+                                <span className="sig-status-label">Ref 1</span>
+                                {getSigStatusBadge(app.Ref1SignatureStatus)}
+                              </div>
+                              <div className="sig-status-row sig-status-row-sub">
+                                <span className="sig-status-label">Ref 2</span>
+                                {getSigStatusBadge(app.Ref2SignatureStatus)}
+                              </div>
+                            </div>
+                          </td>
                           <td className="action-cell">
                             <button
                               className="view-button"
@@ -390,6 +420,14 @@ function EmployeeDashboard() {
                             >
                               Edit
                             </button>
+                            {['pending_signature', 'signed', 'approved'].includes(app.Status) && (
+                              <button
+                                className="resend-action-button"
+                                onClick={() => setResendApp({ Id: app.Id, UserEmail: app.UserEmail })}
+                              >
+                                Resend
+                              </button>
+                            )}
                           </td>
                         </tr>
                       )
@@ -458,6 +496,14 @@ function EmployeeDashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {resendApp && (
+        <ResendSignatureModal
+          appId={resendApp.Id}
+          userEmail={resendApp.UserEmail}
+          onClose={() => setResendApp(null)}
+        />
       )}
 
       {showCreateMember && (

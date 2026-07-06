@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API = 'http://localhost:3001/api'
+const API = 'http://ghra-memb:3001/api'
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -214,16 +214,57 @@ export const AuthProvider = ({ children }) => {
   }, [token])
 
   const updateApplicationStatus = useCallback(async (appId, status, notes = '') => {
-    if (!token) return false
+    if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/applications/${appId}/status`, {
         method: 'PATCH',
         headers: authHeaders(token),
         body: JSON.stringify({ status, notes })
       })
-      return res.ok
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Request failed' }
+      return { success: true, ...data }
     } catch {
-      return false
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const syncSignatureStatuses = useCallback(async () => {
+    if (!token) return
+    try {
+      await fetch(`${API}/applications/sync-statuses`, {
+        method: 'POST',
+        headers: authHeaders(token)
+      })
+    } catch {}
+  }, [token])
+
+  const getSignatureStatus = useCallback(async (appId) => {
+    if (!token) return null
+    try {
+      const res = await fetch(`${API}/applications/${appId}/signature-status`, {
+        headers: authHeaders(token)
+      })
+      if (!res.ok) return null
+      return await res.json()
+    } catch {
+      return null
+    }
+  }, [token])
+
+  const resendSignature = useCallback(async (appId, target, email = '') => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/resend/${target}`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ email })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Request failed' }
+      return { success: true, message: data.message }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
     }
   }, [token])
 
@@ -310,6 +351,9 @@ export const AuthProvider = ({ children }) => {
       getAllApplications,
       updateApplicationStatus,
       employeeUpdateApplication,
+      syncSignatureStatuses,
+      getSignatureStatus,
+      resendSignature,
       changePassword,
       createMember,
       uploadDocument,
