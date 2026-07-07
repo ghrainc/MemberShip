@@ -566,6 +566,191 @@ app.post('/api/auth/create-member', authMiddleware, async (req, res) => {
   }
 })
 
+// ── Member account management (employee-only) ────────────────────────────────
+
+// GET /api/employees/members — list all member accounts (with app count + store name)
+app.get('/api/employees/members', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .query(`SELECT u.Id, u.Email, u.MustChangePassword, u.CreatedAt,
+                     COUNT(a.Id) AS ApplicationCount,
+                     MAX(a.StoreName) AS StoreName
+              FROM Users u
+              LEFT JOIN Applications a ON a.UserEmail = u.Email
+              WHERE u.Role = 'member'
+              GROUP BY u.Id, u.Email, u.MustChangePassword, u.CreatedAt
+              ORDER BY u.CreatedAt DESC`)
+    res.json(result.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/employees/members  — employee creates a member login with employee-chosen password
+app.post('/api/employees/members', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { email, password } = req.body
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+
+  try {
+    const db = await getPool()
+    const existing = await db.request()
+      .input('email', sql.NVarChar, email.toLowerCase())
+      .query('SELECT Id FROM Users WHERE Email = @email')
+    if (existing.recordset.length > 0)
+      return res.status(400).json({ error: 'An account with that email already exists' })
+
+    const passwordHash = await bcrypt.hash(password, 10)
+    await db.request()
+      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('passwordHash', sql.NVarChar, passwordHash)
+      .input('role', sql.NVarChar, 'member')
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword) VALUES (@email, @passwordHash, @role, 1)')
+
+    res.json({ success: true, email: email.toLowerCase() })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/employees/members/:id/reset-password  — employee resets a member's password
+app.post('/api/employees/members/:id/reset-password', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { password } = req.body
+  if (!password) return res.status(400).json({ error: 'Password is required' })
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id FROM Users WHERE Id = @id AND Role = 'member'`)
+    if (!result.recordset.length)
+      return res.status(404).json({ error: 'Member account not found' })
+
+    const passwordHash = await bcrypt.hash(password, 10)
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .input('passwordHash', sql.NVarChar, passwordHash)
+      .query('UPDATE Users SET PasswordHash = @passwordHash, MustChangePassword = 1 WHERE Id = @id')
+
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// DELETE /api/employees/members/:id — delete a member account (blocked if they have applications)
+app.delete('/api/employees/members/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const memberResult = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id, Email FROM Users WHERE Id = @id AND Role = 'member'`)
+    if (!memberResult.recordset.length)
+      return res.status(404).json({ error: 'Member account not found' })
+
+    const memberEmail = memberResult.recordset[0].Email
+    const appResult = await db.request()
+      .input('email', sql.NVarChar, memberEmail)
+      .query(`SELECT COUNT(*) AS cnt FROM Applications WHERE UserEmail = @email`)
+    const appCount = appResult.recordset[0].cnt
+    if (appCount > 0)
+      return res.status(400).json({ error: `Cannot delete: this member has ${appCount} existing application${appCount !== 1 ? 's' : ''}` })
+
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`DELETE FROM Users WHERE Id = @id AND Role = 'member'`)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Employee account management (employee-only) ───────────────────────────────
+
+// GET /api/employees — list all employee accounts
+app.get('/api/employees', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .query(`SELECT Id, Email, CreatedAt FROM Users WHERE Role = 'employee' ORDER BY CreatedAt DESC`)
+    res.json(result.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/employees — create a new employee account
+app.post('/api/employees', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { email, password } = req.body
+  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  try {
+    const db = await getPool()
+    const existing = await db.request()
+      .input('email', sql.NVarChar, email.toLowerCase())
+      .query('SELECT Id FROM Users WHERE Email = @email')
+    if (existing.recordset.length > 0)
+      return res.status(400).json({ error: 'An account with that email already exists' })
+    const passwordHash = await bcrypt.hash(password, 10)
+    await db.request()
+      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('passwordHash', sql.NVarChar, passwordHash)
+      .input('role', sql.NVarChar, 'employee')
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword) VALUES (@email, @passwordHash, @role, 1)')
+    res.json({ success: true, email: email.toLowerCase() })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/employees/:id/reset-password — reset an employee's password
+const ADMIN_EMAIL = 'admin@ghraonline.com'
+
+app.post('/api/employees/:id/reset-password', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { password } = req.body
+  if (!password) return res.status(400).json({ error: 'Password is required' })
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id, Email FROM Users WHERE Id = @id AND Role = 'employee'`)
+    if (!result.recordset.length)
+      return res.status(404).json({ error: 'Employee account not found' })
+    if (result.recordset[0].Email.toLowerCase() === ADMIN_EMAIL)
+      return res.status(403).json({ error: 'The admin account cannot be reset' })
+    const passwordHash = await bcrypt.hash(password, 10)
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .input('passwordHash', sql.NVarChar, passwordHash)
+      .query('UPDATE Users SET PasswordHash = @passwordHash, MustChangePassword = 1 WHERE Id = @id')
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/employees/:id — delete an employee account
+app.delete('/api/employees/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id, Email FROM Users WHERE Id = @id AND Role = 'employee'`)
+    if (!result.recordset.length)
+      return res.status(404).json({ error: 'Employee account not found' })
+    const targetEmail = result.recordset[0].Email.toLowerCase()
+    if (targetEmail === ADMIN_EMAIL)
+      return res.status(403).json({ error: 'The admin account cannot be deleted' })
+    if (targetEmail === req.user.email.toLowerCase())
+      return res.status(400).json({ error: 'You cannot delete your own account' })
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`DELETE FROM Users WHERE Id = @id AND Role = 'employee'`)
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // ── Application routes ───────────────────────────────────────────────────────
 
 // POST /api/applications/draft  — create or update draft on each Next press
@@ -729,10 +914,13 @@ app.get('/api/applications/all', authMiddleware, async (req, res) => {
   try {
     const db = await getPool()
     const result = await db.request()
-      .query(`SELECT Id, UserEmail, StoreName, StoreAddress, Status, CurrentStep, ReviewedBy, ReviewedAt, Notes, CreatedAt,
-                     SignatureRequestId, ReferencesSignatureRequestId,
-                     Ref1SignatureStatus, Ref2SignatureStatus, FormData
-              FROM Applications ORDER BY CreatedAt DESC`)
+      .query(`SELECT a.Id, a.UserEmail, u.Id AS UserId,
+                     a.StoreName, a.StoreAddress, a.Status, a.CurrentStep, a.ReviewedBy, a.ReviewedAt, a.Notes, a.CreatedAt,
+                     a.SignatureRequestId, a.ReferencesSignatureRequestId,
+                     a.Ref1SignatureStatus, a.Ref2SignatureStatus, a.FormData
+              FROM Applications a
+              LEFT JOIN Users u ON u.Email = a.UserEmail
+              ORDER BY a.CreatedAt DESC`)
     const rows = result.recordset.map(row => {
       let fd = {}
       try { fd = JSON.parse(row.FormData || '{}') } catch {}

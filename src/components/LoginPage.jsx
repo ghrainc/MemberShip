@@ -29,8 +29,12 @@ function LoginPage() {
 
     if (isEmployee) {
       const result = await employeeLogin(email, password)
-      if (result === true) navigate('/employee')
-      else setLocalError(result)
+      if (result?.success) {
+        if (result.mustChangePassword) navigate('/change-password')
+        else navigate('/employee')
+      } else {
+        setLocalError(result?.error || 'Login failed')
+      }
     } else if (isSignup) {
       const result = await signup(email, password, confirmPassword)
       if (result === true) {

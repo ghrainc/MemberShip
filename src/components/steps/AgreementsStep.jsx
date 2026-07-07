@@ -14,7 +14,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
         </div>
 
         <div className="form-section-inner">
-          <span className="inner-legend">Documents</span>
+          <span className="inner-legend">Documents <span className="required-star">*</span></span>
 
           <div className="agreements-content">
             <div className="agreement-item">
@@ -22,7 +22,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                 <input
                   type="checkbox"
                   name="membershipAgreement"
-                  checked={formData.membershipAgreement}
+                  checked={!!formData.membershipAgreement}
                   onChange={handleInputChange}
                 />
                 <span>
@@ -31,6 +31,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                   </a>
                 </span>
               </label>
+              {errors.membershipAgreement && <span className="error-text">{errors.membershipAgreement}</span>}
             </div>
 
             <div className="agreement-item">
@@ -38,7 +39,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                 <input
                   type="checkbox"
                   name="memberRequirements"
-                  checked={formData.memberRequirements}
+                  checked={!!formData.memberRequirements}
                   onChange={handleInputChange}
                 />
                 <span>
@@ -47,6 +48,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                   </a>
                 </span>
               </label>
+              {errors.memberRequirements && <span className="error-text">{errors.memberRequirements}</span>}
             </div>
 
             <div className="agreement-item">
@@ -54,7 +56,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                 <input
                   type="checkbox"
                   name="rebateConsent"
-                  checked={formData.rebateConsent}
+                  checked={!!formData.rebateConsent}
                   onChange={handleInputChange}
                 />
                 <span>
@@ -63,6 +65,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                   </a>
                 </span>
               </label>
+              {errors.rebateConsent && <span className="error-text">{errors.rebateConsent}</span>}
             </div>
           </div>
         </div>
@@ -99,7 +102,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
               <input
                 type="checkbox"
                 name="acknowledgement"
-                checked={formData.acknowledgement}
+                checked={!!formData.acknowledgement}
                 onChange={handleInputChange}
               />
               <span>
@@ -116,6 +119,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
               <input
                 type="checkbox"
                 name="authorizationConsent"
+                checked={!!formData.authorizationConsent}
                 onChange={handleInputChange}
               />
               <span>
@@ -124,6 +128,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                 my point-of-sale system to fully exercise its purchasing power.
               </span>
             </label>
+            {errors.authorizationConsent && <span className="error-text">{errors.authorizationConsent}</span>}
           </div>
 
           <div className="form-group">
@@ -131,6 +136,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
               <input
                 type="checkbox"
                 name="indemnificationConsent"
+                checked={!!formData.indemnificationConsent}
                 onChange={handleInputChange}
               />
               <span>
@@ -139,6 +145,7 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
                 actions arising from my membership or participation in GHRA programs.
               </span>
             </label>
+            {errors.indemnificationConsent && <span className="error-text">{errors.indemnificationConsent}</span>}
           </div>
         </div>
       </fieldset>

@@ -34,7 +34,7 @@ function ChangePasswordPage() {
     setLoading(false)
 
     if (result === true) {
-      navigate('/dashboard')
+      navigate(currentUser?.role === 'employee' ? '/employee' : '/dashboard')
     } else {
       setError(result || 'Failed to change password. Please try again.')
     }

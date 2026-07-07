@@ -147,7 +147,12 @@ const EMPTY_FORM_DATA = {
   hfbAmount: '',
   donationAuthRepFirstName: '',
   donationAuthRepLastName: '',
+  membershipAgreement: false,
+  memberRequirements: false,
+  rebateConsent: false,
   acknowledgement: false,
+  authorizationConsent: false,
+  indemnificationConsent: false,
   warehouseDelivery: false,
   authorizedCardHolders: [{ firstName: '', lastName: '', drivingLicense: '' }]
 }
@@ -214,6 +219,17 @@ function computeStepErrors(step, data) {
       break
     }
 
+    case 5:
+      if (!(data.reference1Email || '').trim()) errs.reference1Email = 'Email is required'
+      if (!(data.reference1Company || '').trim()) errs.reference1Company = 'Company Name is required'
+      if (!(data.reference1GhraNumber || '').toString().trim()) errs.reference1GhraNumber = 'GHRA Membership # is required'
+      if (!(data.reference1RepName || '').trim()) errs.reference1RepName = 'Authorized Representative Name is required'
+      if (!(data.reference2Email || '').trim()) errs.reference2Email = 'Email is required'
+      if (!(data.reference2Company || '').trim()) errs.reference2Company = 'Company Name is required'
+      if (!(data.reference2GhraNumber || '').toString().trim()) errs.reference2GhraNumber = 'GHRA Membership # is required'
+      if (!(data.reference2RepName || '').trim()) errs.reference2RepName = 'Authorized Representative Name is required'
+      break
+
     case 6: {
       const selectedTypes = Object.keys(data.achInfoFor || {}).filter(k => data.achInfoFor[k])
       if (selectedTypes.length > 0) {
@@ -241,7 +257,12 @@ function computeStepErrors(step, data) {
       break
 
     case 10:
-      if (!data.acknowledgement) errs.acknowledgement = 'You must acknowledge the membership requirements'
+      if (!data.membershipAgreement) errs.membershipAgreement = 'You must check Membership Agreement'
+      if (!data.memberRequirements) errs.memberRequirements = 'You must check Requirements to be a Member'
+      if (!data.rebateConsent) errs.rebateConsent = 'You must check Financial Information & Rebate Consent'
+      if (!data.acknowledgement) errs.acknowledgement = 'You must check this acknowledgement'
+      if (!data.authorizationConsent) errs.authorizationConsent = 'You must check this authorization'
+      if (!data.indemnificationConsent) errs.indemnificationConsent = 'You must check this indemnification'
       break
 
     default:

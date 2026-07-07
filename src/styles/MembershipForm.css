@@ -196,6 +196,12 @@
   color: #e74c3c;
   font-size: 12px;
   margin-top: 4px;
+  display: block;
+}
+
+.required-star {
+  color: #e74c3c;
+  margin-left: 2px;
 }
 
 .validation-toast {

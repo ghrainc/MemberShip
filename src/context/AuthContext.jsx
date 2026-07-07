@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API = 'http://ghra-memb:3001/api'
+const API = 'http://localhost:3001/api'
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -75,18 +75,18 @@ export const AuthProvider = ({ children }) => {
       if (!res.ok || data.role !== 'employee') {
         const msg = data.error || 'Invalid employee credentials'
         setError(msg)
-        return msg
+        return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
       saveAuthToStorage(data.token, user)
-      return true
+      return { success: true, mustChangePassword: !!data.mustChangePassword }
     } catch {
       const msg = 'Unable to connect to server'
       setError(msg)
-      return msg
+      return { success: false, error: msg }
     }
   }, [])
 
@@ -319,6 +319,114 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const createMemberAccount = useCallback(async (email, password) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/members`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ email, password })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to create member' }
+      return { success: true, email: data.email }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const resetMemberPassword = useCallback(async (memberId, password) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/members/${memberId}/reset-password`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ password })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to reset password' }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const getMembers = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/employees/members`, { headers: authHeaders(token) })
+      return res.ok ? await res.json() : []
+    } catch { return [] }
+  }, [token])
+
+  const deleteMember = useCallback(async (id) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/members/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to delete member' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const deleteEmployee = useCallback(async (id) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to delete employee' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const getEmployees = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/employees`, { headers: authHeaders(token) })
+      return res.ok ? await res.json() : []
+    } catch {
+      return []
+    }
+  }, [token])
+
+  const createEmployeeAccount = useCallback(async (email, password) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ email, password })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to create employee' }
+      return { success: true, email: data.email }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const resetEmployeePassword = useCallback(async (employeeId, password) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/${employeeId}/reset-password`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ password })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to reset password' }
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
   const createMember = useCallback(async (email, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
@@ -358,7 +466,15 @@ export const AuthProvider = ({ children }) => {
       createMember,
       uploadDocument,
       removeDocument,
-      testDropboxSign
+      testDropboxSign,
+      createMemberAccount,
+      resetMemberPassword,
+      getMembers,
+      deleteMember,
+      deleteEmployee,
+      getEmployees,
+      createEmployeeAccount,
+      resetEmployeePassword
     }}>
       {children}
     </AuthContext.Provider>

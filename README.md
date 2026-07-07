@@ -18,3 +18,9 @@ If you are developing a production application, we recommend using TypeScript wi
 
 
 claude --resume 43246889-f9c4-4309-b9e7-6adeb82f70d3
+
+
+Changes Deployment on SERVER 
+copy files from server to Live Server folder.
+ pm2 restart ghra-api
+ pm2 logs ghra-api
