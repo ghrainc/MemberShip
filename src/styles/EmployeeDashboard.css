@@ -1129,6 +1129,184 @@
   background: #7f8c8d;
 }
 
+/* ── Board signer status ─────────────────────────────────────────────────── */
+
+.sig-status-divider {
+  border-top: 1px solid #e8e8e8;
+  margin: 4px 0;
+}
+
+.sig-status-queued {
+  background: #e9ecef;
+  color: #495057;
+}
+
+/* ── Vertical action cell ────────────────────────────────────────────────── */
+
+.action-cell--column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.action-cell--column button {
+  width: 100%;
+  text-align: center;
+}
+
+/* ── Board action button ─────────────────────────────────────────────────── */
+
+.board-action-button {
+  background: #343a40;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.board-action-button:hover {
+  background: #23272b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 58, 64, 0.4);
+}
+
+/* ── Board signers modal ─────────────────────────────────────────────────── */
+
+.board-signers-modal {
+  width: 500px;
+}
+
+.board-signer-section-block {
+  padding: 8px 0;
+}
+
+.board-signer-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.board-signer-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #2c3e50;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.board-signer-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-signer-name-row {
+  display: flex;
+  gap: 10px;
+}
+
+.board-signer-name-row .signer-field {
+  flex: 1;
+}
+
+.signer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.signer-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.signer-input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #2c3e50;
+  transition: border-color 0.2s;
+}
+
+.signer-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.15);
+}
+
+.board-signer-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 0;
+  color: #2c3e50;
+  font-size: 14px;
+}
+
+.board-signer-email {
+  color: #667eea;
+  font-size: 13px;
+}
+
+.board-signer-resend-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.board-signer-resend-confirm {
+  font-size: 13px;
+  color: #495057;
+}
+
+.board-resend-yes {
+  background: #e67e22;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.board-resend-yes:hover:not(:disabled) {
+  background: #ca6f1e;
+}
+
+.board-resend-cancel {
+  background: #95a5a6;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.board-resend-cancel:hover {
+  background: #7f8c8d;
+}
+
+.board-signer-hr {
+  border: none;
+  border-top: 1px solid #e0e6ed;
+  margin: 12px 0;
+}
+
 /* ── Delete error banner ─────────────────────────────────────────────────── */
 
 .member-delete-error {

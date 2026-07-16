@@ -3,7 +3,21 @@ import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import ResendSignatureModal from './ResendSignatureModal'
+import BoardSignersModal from './BoardSignersModal'
 import '../styles/EmployeeDashboard.css'
+
+function getBoardVerifyState(app) {
+  if (!app.SignatureRequestId)  return 'not_sent'
+  if (app.VerificationSignedAt) return 'signed'
+  return 'awaiting'
+}
+
+function getBoardApproveState(app) {
+  if (!app.SignatureRequestId)   return 'not_sent'
+  if (app.ApprovedSignedAt)      return 'signed'
+  if (!app.VerificationSignedAt) return 'queued'
+  return 'awaiting'
+}
 
 const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '' }
 
@@ -25,6 +39,9 @@ function EmployeeDashboard() {
 
   // Resend modal
   const [resendApp, setResendApp] = useState(null)
+
+  // Board signers modal
+  const [boardApp, setBoardApp] = useState(null)
 
   // Dropbox Sign test modal
   const [showDsTest, setShowDsTest] = useState(false)
@@ -106,6 +123,11 @@ function EmployeeDashboard() {
     setRefreshing(false)
   }
 
+  const handleBoardSaved = async () => {
+    const data = await getAllApplications()
+    setApplications(data || [])
+  }
+
   const handleSearchChange = (field, value) => setSearchTerms(prev => ({ ...prev, [field]: value }))
   const handleClearFilters = () => setSearchTerms(EMPTY_FILTERS)
   const handleSort = (key) => setSortConfig(prev => ({
@@ -118,10 +140,16 @@ function EmployeeDashboard() {
   const filteredApplications = applications.filter(app => {
     const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
     const dateStr = app.CreatedAt ? app.CreatedAt.slice(0, 10) : ''
+    let statusMatch = true
+    if (searchTerms.status !== '') {
+      if (searchTerms.status === 'verification_signed') statusMatch = getBoardVerifyState(app) === 'signed'
+      else if (searchTerms.status === 'board_approved')  statusMatch = getBoardApproveState(app) === 'signed'
+      else                                               statusMatch = (app.Status || '') === searchTerms.status
+    }
     return (
       (searchTerms.storeName === '' || (app.StoreName || '').toLowerCase().includes(searchTerms.storeName.toLowerCase())) &&
       (searchTerms.submittedDate === '' || dateStr.includes(searchTerms.submittedDate)) &&
-      (searchTerms.status === '' || (app.Status || '') === searchTerms.status) &&
+      statusMatch &&
       (searchTerms.email === '' || (app.UserEmail || '').toLowerCase().includes(searchTerms.email.toLowerCase())) &&
       (searchTerms.repName === '' || repFullName.toLowerCase().includes(searchTerms.repName.toLowerCase()))
     )
@@ -158,6 +186,17 @@ function EmployeeDashboard() {
   const getAppStatusBadge = (status) => {
     const info = APP_STATUS_MAP[status] || { label: status, cls: 'status-unknown' }
     return <span className={`status-badge ${info.cls}`}>{info.label}</span>
+  }
+
+  const getBoardStatusBadge = (state, signedAt) => {
+    if (state === 'not_sent') return <span className="sig-status-badge sig-status-unknown">Not Sent</span>
+    if (state === 'queued')   return <span className="sig-status-badge sig-status-queued">Queued</span>
+    if (state === 'awaiting') return <span className="sig-status-badge sig-status-waiting">Awaiting</span>
+    if (state === 'signed') {
+      const dateStr = signedAt ? new Date(signedAt).toLocaleDateString() : ''
+      return <span className="sig-status-badge sig-status-signed" title={dateStr ? `Signed ${dateStr}` : undefined}>Signed</span>
+    }
+    return <span className="sig-status-badge sig-status-unknown">{state}</span>
   }
 
   const getSigStatusBadge = (statusCode) => {
@@ -513,6 +552,8 @@ function EmployeeDashboard() {
                           <option value="draft">Draft</option>
                           <option value="pending_signature">Awaiting Signature</option>
                           <option value="signed">Signed by Member</option>
+                          <option value="verification_signed">Verification Signed</option>
+                          <option value="board_approved">Board Approved</option>
                         </select>
                         <button className="sort-button" onClick={() => handleSort('Status')}><SortIcon column="Status" /></button>
                       </div>
@@ -552,9 +593,18 @@ function EmployeeDashboard() {
                                 <span className="sig-status-label">Ref 2</span>
                                 {getSigStatusBadge(app.Ref2SignatureStatus)}
                               </div>
+                              <div className="sig-status-divider" />
+                              <div className="sig-status-row sig-status-row-sub">
+                                <span className="sig-status-label">Verify</span>
+                                {getBoardStatusBadge(getBoardVerifyState(app), app.VerificationSignedAt)}
+                              </div>
+                              <div className="sig-status-row sig-status-row-sub">
+                                <span className="sig-status-label">Approve</span>
+                                {getBoardStatusBadge(getBoardApproveState(app), app.ApprovedSignedAt)}
+                              </div>
                             </div>
                           </td>
-                          <td className="action-cell">
+                          <td className="action-cell action-cell--column">
                             <button className="view-button" onClick={() => navigate(`/employee/application/${app.Id}`)}>
                               View
                             </button>
@@ -564,6 +614,11 @@ function EmployeeDashboard() {
                             {['pending_signature', 'signed', 'approved'].includes(app.Status) && (
                               <button className="resend-action-button" onClick={() => setResendApp({ Id: app.Id, UserEmail: app.UserEmail })}>
                                 Resend
+                              </button>
+                            )}
+                            {app.SignatureRequestId && (
+                              <button className="board-action-button" onClick={() => setBoardApp(app)}>
+                                Board
                               </button>
                             )}
                           </td>
@@ -724,6 +779,15 @@ function EmployeeDashboard() {
           appId={resendApp.Id}
           userEmail={resendApp.UserEmail}
           onClose={() => setResendApp(null)}
+        />
+      )}
+
+      {/* ── Board signers modal ──────────────────────────────────────────── */}
+      {boardApp && (
+        <BoardSignersModal
+          app={boardApp}
+          onClose={() => setBoardApp(null)}
+          onSaved={handleBoardSaved}
         />
       )}
 

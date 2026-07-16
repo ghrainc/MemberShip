@@ -108,10 +108,10 @@ function ViewApplication() {
   const handleApproveClick = () => { setApprovalError(null); setApprovalDialog({ action: 'approve' }) }
   const handleRejectClick  = () => { setApprovalError(null); setApprovalDialog({ action: 'reject' }) }
 
-  const handleApprovalConfirm = async (comments) => {
+  const handleApprovalConfirm = async (comments, boardSigners) => {
     const newStatus = approvalDialog.action === 'approve' ? 'approved' : 'rejected'
     setApproving(true)
-    const result = await updateApplicationStatus(id, newStatus, comments)
+    const result = await updateApplicationStatus(id, newStatus, comments, boardSigners)
     setApproving(false)
     setApprovalDialog(null)
     if (!result.success) {

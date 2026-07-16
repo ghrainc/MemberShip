@@ -15,6 +15,7 @@ const {
   SignatureRequestUpdateRequest,
   SubSignatureRequestTemplateSigner,
   SubCustomField,
+  TemplateApi,
 } = require('@dropbox/sign')
 
 const { buildReferenceCustomFields } = require('./dropboxSignMapping')
@@ -23,9 +24,40 @@ const DROPBOX_SIGN_TEMPLATE_ID            = '48801a508aa8d04b909f28d75eec410c3dc
 const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
 const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
-async function sendSignatureRequest(formData, userEmail) {
+// boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email } }
+// reviewerEmail = employee who approved the application (used in the signing request message)
+async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail) {
   const api = new SignatureRequestApi()
   api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+  // Verify template has the expected signer roles AND required custom fields
+  const REQUIRED_ROLES = [
+    DROPBOX_SIGN_SIGNER_ROLE,
+    'Verification: Elected Board Signer',
+    'Approved: Elected Board Signer',
+  ]
+  const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName']
+  const templateApi = new TemplateApi()
+  templateApi.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+  const tmplRes = await templateApi.templateGet(DROPBOX_SIGN_TEMPLATE_ID)
+  const presentRoles      = (tmplRes.body.template.signerRoles   || []).map(r => r.name)
+  const presentFieldNames = (tmplRes.body.template.customFields  || []).map(f => f.name)
+  for (const required of REQUIRED_ROLES) {
+    if (!presentRoles.includes(required)) {
+      throw new Error(
+        `Template is missing required signer role "${required}". ` +
+        `Template has: ${presentRoles.length ? presentRoles.join(', ') : '(none)'}`
+      )
+    }
+  }
+  for (const required of REQUIRED_CUSTOM_FIELDS) {
+    if (!presentFieldNames.includes(required)) {
+      throw new Error(
+        `Template is missing required custom field "${required}". ` +
+        `Ensure the field exists as an API-fillable (no signer assigned) text field in the Dropbox Sign template.`
+      )
+    }
+  }
 
   const owners = formData.owners || []
   const owner1 = owners[0] || {}
@@ -209,20 +241,48 @@ async function sendSignatureRequest(formData, userEmail) {
     chk('SpannerYes',        formData.storeSpannerBoard === 'yes'),
     chk('SpannerNo',         formData.storeSpannerBoard === 'no'),
     chk('SpannerPrevMember', formData.storeSpannerBoard === 'prevMember'),
+
+    // Board signer names — pre-filled into the document from our DB values
+    cf('VerificationFirstName', boardSigners?.verification?.firstName),
+    cf('VerificationLastName',  boardSigners?.verification?.lastName),
+    cf('ApprovedFirstName',     boardSigners?.approved?.firstName),
+    cf('ApprovedLastName',      boardSigners?.approved?.lastName),
   ].filter(Boolean)
 
   console.log('=== DS custom fields being sent ===')
   console.log(JSON.stringify(customFields, null, 2))
   console.log('===================================')
 
+  const verificationSigner = new SubSignatureRequestTemplateSigner()
+  verificationSigner.role         = 'Verification: Elected Board Signer'
+  verificationSigner.emailAddress = boardSigners.verification.email
+  verificationSigner.name         = [boardSigners.verification.firstName, boardSigners.verification.lastName].filter(Boolean).join(' ')
+
+  const approvedSigner = new SubSignatureRequestTemplateSigner()
+  approvedSigner.role         = 'Approved: Elected Board Signer'
+  approvedSigner.emailAddress = boardSigners.approved.email
+  approvedSigner.name         = [boardSigners.approved.firstName, boardSigners.approved.lastName].filter(Boolean).join(' ')
+
   const request = new SignatureRequestSendWithTemplateRequest()
   request.templateIds  = [DROPBOX_SIGN_TEMPLATE_ID]
-  request.signers      = [signer]
+  request.signers      = [signer, verificationSigner, approvedSigner]
   request.customFields = customFields
   request.testMode     = true
+  if (reviewerEmail) {
+    request.subject = 'GHRA Membership Application — Signature Required'
+    request.message = `Your signature is required for the GHRA Membership Application. This request was sent by ${reviewerEmail}.`
+  }
 
   const response = await api.signatureRequestSendWithTemplate(request)
-  return response.body.signatureRequest.signatureRequestId
+  const sr   = response.body.signatureRequest
+  const sigs = sr.signatures || []
+  const vSig = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
+  const aSig = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+  return {
+    signatureRequestId:      sr.signatureRequestId,
+    verificationSignatureId: vSig?.signatureId || null,
+    approvedSignatureId:     aSig?.signatureId || null,
+  }
 }
 
 async function sendReferencesRequest(formData) {
@@ -437,6 +497,30 @@ async function ensureSchema() {
       )
         ALTER TABLE Applications ADD Ref2SignatureStatus NVARCHAR(50) NULL
     `)
+    // Board signer columns (on the main membership signature request)
+    const boardCols = [
+      ['BoardSignerVerificationFirstName', 'NVARCHAR(100)'],
+      ['BoardSignerVerificationLastName',  'NVARCHAR(100)'],
+      ['BoardSignerVerificationEmail',     'NVARCHAR(255)'],
+      ['VerificationSignatureId',          'NVARCHAR(255)'],
+      ['VerificationSignatureStatus',      'NVARCHAR(50)'],
+      ['VerificationSignedAt',             'DATETIME'],
+      ['BoardSignerApprovedFirstName',     'NVARCHAR(100)'],
+      ['BoardSignerApprovedLastName',      'NVARCHAR(100)'],
+      ['BoardSignerApprovedEmail',         'NVARCHAR(255)'],
+      ['ApprovedSignatureId',              'NVARCHAR(255)'],
+      ['ApprovedSignatureStatus',          'NVARCHAR(50)'],
+      ['ApprovedSignedAt',                 'DATETIME'],
+    ]
+    for (const [col, type] of boardCols) {
+      await db.request().query(`
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.columns
+          WHERE object_id = OBJECT_ID('Applications') AND name = '${col}'
+        )
+          ALTER TABLE Applications ADD ${col} ${type} NULL
+      `)
+    }
   } catch (err) {
     console.error('Schema migration failed:', err.message)
   }
@@ -869,16 +953,33 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
 
     for (const row of result.recordset) {
       try {
-        // Membership signer
+        // Membership + board signers
         if (row.SignatureRequestId) {
           const r    = await api.signatureRequestGet(row.SignatureRequestId)
           const sigs = r.body.signatureRequest.signatures || []
-          const m    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
-          if (m?.statusCode === 'signed') {
+          const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+          const verify = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
+          const appr   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+
+          if (rep?.statusCode === 'signed') {
             await db.request()
               .input('id', sql.Int, row.Id)
-              .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE Id = @id AND Status != 'signed'`)
+              .query(`UPDATE Applications SET Status = 'signed', SignedAt = COALESCE(SignedAt, GETDATE()) WHERE Id = @id AND Status != 'signed'`)
           }
+          await db.request()
+            .input('vStatus', sql.NVarChar, verify?.statusCode  || null)
+            .input('vSigId',  sql.NVarChar, verify?.signatureId || null)
+            .input('aStatus', sql.NVarChar, appr?.statusCode    || null)
+            .input('aSigId',  sql.NVarChar, appr?.signatureId   || null)
+            .input('id',      sql.Int,      row.Id)
+            .query(`UPDATE Applications
+                    SET VerificationSignatureStatus = COALESCE(@vStatus, VerificationSignatureStatus),
+                        VerificationSignatureId     = COALESCE(@vSigId,  VerificationSignatureId),
+                        VerificationSignedAt        = CASE WHEN @vStatus = 'signed' AND VerificationSignedAt IS NULL THEN GETDATE() ELSE VerificationSignedAt END,
+                        ApprovedSignatureStatus     = COALESCE(@aStatus, ApprovedSignatureStatus),
+                        ApprovedSignatureId         = COALESCE(@aSigId,  ApprovedSignatureId),
+                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END
+                    WHERE Id = @id`)
         }
 
         // Reference signers — update per-signer status and signatureId by role name
@@ -917,7 +1018,11 @@ app.get('/api/applications/all', authMiddleware, async (req, res) => {
       .query(`SELECT a.Id, a.UserEmail, u.Id AS UserId,
                      a.StoreName, a.StoreAddress, a.Status, a.CurrentStep, a.ReviewedBy, a.ReviewedAt, a.Notes, a.CreatedAt,
                      a.SignatureRequestId, a.ReferencesSignatureRequestId,
-                     a.Ref1SignatureStatus, a.Ref2SignatureStatus, a.FormData
+                     a.Ref1SignatureStatus, a.Ref2SignatureStatus, a.FormData,
+                     a.BoardSignerVerificationFirstName, a.BoardSignerVerificationLastName, a.BoardSignerVerificationEmail,
+                     a.VerificationSignatureId, a.VerificationSignatureStatus, a.VerificationSignedAt,
+                     a.BoardSignerApprovedFirstName, a.BoardSignerApprovedLastName, a.BoardSignerApprovedEmail,
+                     a.ApprovedSignatureId, a.ApprovedSignatureStatus, a.ApprovedSignedAt
               FROM Applications a
               LEFT JOIN Users u ON u.Email = a.UserEmail
               ORDER BY a.CreatedAt DESC`)
@@ -957,7 +1062,7 @@ app.get('/api/applications/:id', authMiddleware, async (req, res) => {
 // PATCH /api/applications/:id/status  — employee review
 app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { status, notes } = req.body
+  const { status, notes, boardSigners } = req.body
   try {
     const db = await getPool()
 
@@ -975,24 +1080,56 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
     const historyJson = JSON.stringify(history)
 
     if (status === 'approved') {
+      // Validate board signer details — required before any DS call
+      const v = boardSigners?.verification
+      const a = boardSigners?.approved
+      const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!v?.firstName?.trim() || !v?.lastName?.trim() || !v?.email?.trim() ||
+          !a?.firstName?.trim() || !a?.lastName?.trim() || !a?.email?.trim()) {
+        return res.status(400).json({ error: 'First name, last name, and email are required for both board signers' })
+      }
+      if (!emailRx.test(v.email)) return res.status(400).json({ error: 'Invalid Verification signer email address' })
+      if (!emailRx.test(a.email)) return res.status(400).json({ error: 'Invalid Approved signer email address' })
+      if (v.email.toLowerCase() === a.email.toLowerCase()) {
+        return res.status(400).json({ error: 'Verification and Approved signer email addresses must be different' })
+      }
+
       // For approvals: DS send drives the status — do not set 'approved' unless send succeeds
       let fd = {}
       try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
       const { UserEmail } = existing.recordset[0]
 
       try {
-        const signatureRequestId = await sendSignatureRequest(fd, UserEmail)
+        const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
+          await sendSignatureRequest(fd, UserEmail, boardSigners, req.user.email)
 
-        // DS succeeded — now commit status = pending_signature along with reviewer fields
+        // DS succeeded — commit status = pending_signature with reviewer + board signer fields
         await db.request()
-          .input('id2', sql.Int, req.params.id)
-          .input('sigId', sql.NVarChar, signatureRequestId)
-          .input('notes', sql.NVarChar(sql.MAX), notes || '')
-          .input('reviewedBy', sql.NVarChar, req.user.email)
-          .input('history', sql.NVarChar(sql.MAX), historyJson)
+          .input('id2',        sql.Int,            req.params.id)
+          .input('sigId',      sql.NVarChar,        signatureRequestId)
+          .input('notes',      sql.NVarChar(sql.MAX), notes || '')
+          .input('reviewedBy', sql.NVarChar,        req.user.email)
+          .input('history',    sql.NVarChar(sql.MAX), historyJson)
+          .input('vFirstName', sql.NVarChar,        v.firstName)
+          .input('vLastName',  sql.NVarChar,        v.lastName)
+          .input('vEmail',     sql.NVarChar,        v.email)
+          .input('vSigId',     sql.NVarChar,        verificationSignatureId || null)
+          .input('aFirstName', sql.NVarChar,        a.firstName)
+          .input('aLastName',  sql.NVarChar,        a.lastName)
+          .input('aEmail',     sql.NVarChar,        a.email)
+          .input('aSigId',     sql.NVarChar,        approvedSignatureId || null)
           .query(`UPDATE Applications
                   SET Status = 'pending_signature', SignatureRequestId = @sigId,
-                      Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
+                      Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history,
+                      BoardSignerVerificationFirstName = @vFirstName,
+                      BoardSignerVerificationLastName  = @vLastName,
+                      BoardSignerVerificationEmail     = @vEmail,
+                      VerificationSignatureId          = @vSigId,
+                      VerificationSignatureStatus      = 'awaiting_signature',
+                      BoardSignerApprovedFirstName     = @aFirstName,
+                      BoardSignerApprovedLastName      = @aLastName,
+                      BoardSignerApprovedEmail         = @aEmail,
+                      ApprovedSignatureId              = @aSigId
                   WHERE Id = @id2`)
 
         // Send references signature request (non-fatal)
@@ -1074,7 +1211,11 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
       const r = await api.signatureRequestGet(SignatureRequestId)
       const sigs = r.body.signatureRequest.signatures || []
       const s = sigs.find(x => x.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+      const v = sigs.find(x => x.signerRole === 'Verification: Elected Board Signer')
+      const a = sigs.find(x => x.signerRole === 'Approved: Elected Board Signer')
       if (s) out.member = { email: s.signerEmailAddress, status: s.statusCode, signatureId: s.signatureId }
+      if (v) out.verification_board_signer = { email: v.signerEmailAddress, status: v.statusCode, signatureId: v.signatureId }
+      if (a) out.approved_board_signer     = { email: a.signerEmailAddress, status: a.statusCode, signatureId: a.signatureId }
     } else {
       out.member = { email: UserEmail, status: null, signatureId: null }
     }
@@ -1103,11 +1244,13 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
   const newEmail = (req.body.email || '').trim()
 
   const ROLE_MAP = {
-    member:     { col: 'SignatureRequestId',           role: DROPBOX_SIGN_SIGNER_ROLE },
-    reference1: { col: 'ReferencesSignatureRequestId', role: 'Reference 1 - Membership Application' },
-    reference2: { col: 'ReferencesSignatureRequestId', role: 'Reference 2 - Membership Application' },
+    member:                    { col: 'SignatureRequestId',           role: DROPBOX_SIGN_SIGNER_ROLE },
+    reference1:                { col: 'ReferencesSignatureRequestId', role: 'Reference 1 - Membership Application' },
+    reference2:                { col: 'ReferencesSignatureRequestId', role: 'Reference 2 - Membership Application' },
+    verification_board_signer: { col: 'SignatureRequestId',           role: 'Verification: Elected Board Signer' },
+    approved_board_signer:     { col: 'SignatureRequestId',           role: 'Approved: Elected Board Signer' },
   }
-  if (!ROLE_MAP[target]) return res.status(400).json({ error: 'Invalid target. Use member, reference1, or reference2.' })
+  if (!ROLE_MAP[target]) return res.status(400).json({ error: 'Invalid target. Use member, reference1, reference2, verification_board_signer, or approved_board_signer.' })
   const { col, role } = ROLE_MAP[target]
 
   try {
@@ -1131,7 +1274,17 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
     if (!signer) return res.status(404).json({ error: `Signer role "${role}" not found in signature request.` })
 
     if (signer.statusCode === 'signed') {
-      return res.status(400).json({ error: 'This signer has already signed the document and cannot be reminded.' })
+      return res.status(400).json({ error: 'This signer has already signed and cannot be reminded.' })
+    }
+
+    // For the Approved board signer, verify it's their turn (Verification must have signed first)
+    if (target === 'approved_board_signer') {
+      const turnRow = await db.request()
+        .input('id', sql.Int, req.params.id)
+        .query('SELECT VerificationSignedAt FROM Applications WHERE Id = @id')
+      if (!turnRow.recordset[0]?.VerificationSignedAt) {
+        return res.status(400).json({ error: "The Verification signer hasn't signed yet — it's not the Approved signer's turn." })
+      }
     }
 
     const currentEmail = signer.signerEmailAddress
@@ -1177,8 +1330,28 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
           .input('fd',  sql.NVarChar(sql.MAX), JSON.stringify(fd))
           .input('id3', sql.Int,               req.params.id)
           .query('UPDATE Applications SET FormData = @fd WHERE Id = @id3')
+      } else if (target === 'verification_board_signer') {
+        await db.request()
+          .input('newSigId', sql.NVarChar, newSigId)
+          .input('email',    sql.NVarChar, newEmail)
+          .input('id2',      sql.Int,      req.params.id)
+          .query(`UPDATE Applications
+                  SET VerificationSignatureId = @newSigId,
+                      VerificationSignatureStatus = 'awaiting_signature',
+                      BoardSignerVerificationEmail = @email
+                  WHERE Id = @id2`)
+      } else if (target === 'approved_board_signer') {
+        await db.request()
+          .input('newSigId', sql.NVarChar, newSigId)
+          .input('email',    sql.NVarChar, newEmail)
+          .input('id2',      sql.Int,      req.params.id)
+          .query(`UPDATE Applications
+                  SET ApprovedSignatureId = @newSigId,
+                      ApprovedSignatureStatus = 'awaiting_signature',
+                      BoardSignerApprovedEmail = @email
+                  WHERE Id = @id2`)
       }
-      // member target — no per-signer DB field; status is derived from app.Status
+      // member target — status is derived from app.Status, no per-signer DB column
 
       return res.json({ success: true, message: `Email updated to ${newEmail} — a new signing link has been sent.` })
     } else {
@@ -1196,12 +1369,103 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
         await db.request()
           .input('id2', sql.Int, req.params.id)
           .query(`UPDATE Applications SET Ref2SignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
+      } else if (target === 'verification_board_signer') {
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET VerificationSignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
+      } else if (target === 'approved_board_signer') {
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET ApprovedSignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
       }
 
       return res.json({ success: true, message: `Reminder sent to ${currentEmail}.` })
     }
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
+    res.status(500).json({ error: detail })
+  }
+})
+
+// PATCH /api/applications/:id/board-signers  — update board signer names/emails (employee only)
+// Uses signatureRequestUpdate (same approach as reference email changes in resend endpoint)
+app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { verification, approved } = req.body
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT SignatureRequestId,
+                     VerificationSignatureId, VerificationSignedAt, BoardSignerVerificationEmail,
+                     ApprovedSignatureId,     ApprovedSignedAt,     BoardSignerApprovedEmail
+              FROM Applications WHERE Id = @id`)
+    if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
+    const row = result.recordset[0]
+
+    if (!row.SignatureRequestId)
+      return res.status(400).json({ error: 'No signature request exists for this application yet' })
+
+    const api = new SignatureRequestApi()
+    api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+    // ── Update Verification signer ──────────────────────────────────────────
+    if (verification && !row.VerificationSignedAt) {
+      let newSigId = row.VerificationSignatureId
+      if (verification.email && verification.email.toLowerCase() !== (row.BoardSignerVerificationEmail || '').toLowerCase()) {
+        const updateReq = new SignatureRequestUpdateRequest()
+        updateReq.signatureId  = row.VerificationSignatureId
+        updateReq.emailAddress = verification.email
+        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
+          .find(s => s.signerRole === 'Verification: Elected Board Signer')
+        newSigId = updatedSig?.signatureId || newSigId
+      }
+      await db.request()
+        .input('firstName', sql.NVarChar, (verification.firstName || '').trim() || null)
+        .input('lastName',  sql.NVarChar, (verification.lastName  || '').trim() || null)
+        .input('email',     sql.NVarChar, (verification.email     || '').trim() || null)
+        .input('sigId',     sql.NVarChar, newSigId)
+        .input('id',        sql.Int,      req.params.id)
+        .query(`UPDATE Applications
+                SET BoardSignerVerificationFirstName = ISNULL(@firstName, BoardSignerVerificationFirstName),
+                    BoardSignerVerificationLastName  = ISNULL(@lastName,  BoardSignerVerificationLastName),
+                    BoardSignerVerificationEmail     = ISNULL(@email,     BoardSignerVerificationEmail),
+                    VerificationSignatureId          = @sigId,
+                    VerificationSignatureStatus      = 'awaiting_signature'
+                WHERE Id = @id`)
+    }
+
+    // ── Update Approved signer ──────────────────────────────────────────────
+    if (approved && !row.ApprovedSignedAt) {
+      let newSigId = row.ApprovedSignatureId
+      if (approved.email && approved.email.toLowerCase() !== (row.BoardSignerApprovedEmail || '').toLowerCase()) {
+        const updateReq = new SignatureRequestUpdateRequest()
+        updateReq.signatureId  = row.ApprovedSignatureId
+        updateReq.emailAddress = approved.email
+        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
+          .find(s => s.signerRole === 'Approved: Elected Board Signer')
+        newSigId = updatedSig?.signatureId || newSigId
+      }
+      await db.request()
+        .input('firstName', sql.NVarChar, (approved.firstName || '').trim() || null)
+        .input('lastName',  sql.NVarChar, (approved.lastName  || '').trim() || null)
+        .input('email',     sql.NVarChar, (approved.email     || '').trim() || null)
+        .input('sigId',     sql.NVarChar, newSigId)
+        .input('id',        sql.Int,      req.params.id)
+        .query(`UPDATE Applications
+                SET BoardSignerApprovedFirstName = ISNULL(@firstName, BoardSignerApprovedFirstName),
+                    BoardSignerApprovedLastName  = ISNULL(@lastName,  BoardSignerApprovedLastName),
+                    BoardSignerApprovedEmail     = ISNULL(@email,     BoardSignerApprovedEmail),
+                    ApprovedSignatureId          = @sigId,
+                    ApprovedSignatureStatus      = 'awaiting_signature'
+                WHERE Id = @id`)
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message
     res.status(500).json({ error: detail })
   }
 })
@@ -1334,9 +1598,15 @@ app.post('/api/test/dropbox-sign', authMiddleware, async (req, res) => {
     storeSpannerBoard: 'yes',
   }
 
+  const dummyBoardSigners = {
+    verification: { firstName: 'Verification', lastName: 'Signer', email: req.body.verificationEmail || `verify.${Date.now()}@example.com` },
+    approved:     { firstName: 'Approved',     lastName: 'Signer', email: req.body.approvedEmail    || `approved.${Date.now()}@example.com` },
+  }
+
   try {
-    const signatureRequestId = await sendSignatureRequest(dummyFormData, signerEmail)
-    res.json({ success: true, signatureRequestId })
+    const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
+      await sendSignatureRequest(dummyFormData, signerEmail, dummyBoardSigners, req.user.email)
+    res.json({ success: true, signatureRequestId, verificationSignatureId, approvedSignatureId })
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
     console.error('Dropbox Sign test failed:', detail)
@@ -1365,12 +1635,45 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
     if (sigReqId) {
       try {
         const db = await getPool()
+        const api = new SignatureRequestApi()
+        api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
-        // ── Membership document: update Status on both signed + all_signed ────
-        // Idempotent — safe for the single-signer membership template
-        await db.request()
+        // ── Membership + board signers ────────────────────────────────────────
+        // Fetch live signer state from DS; check who signed before flipping Status.
+        // Status = 'signed' flips only when the Authorized Rep signs.
+        // Board signer signed timestamps are updated independently.
+        const memMatch = await db.request()
           .input('sigId', sql.NVarChar, sigReqId)
-          .query(`UPDATE Applications SET Status = 'signed', SignedAt = GETDATE() WHERE SignatureRequestId = @sigId`)
+          .query(`SELECT Id FROM Applications WHERE SignatureRequestId = @sigId`)
+
+        if (memMatch.recordset.length > 0) {
+          const r    = await api.signatureRequestGet(sigReqId)
+          const sigs = r.body.signatureRequest.signatures || []
+          const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+          const verify = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
+          const appr   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+          const appId  = memMatch.recordset[0].Id
+
+          if (rep?.statusCode === 'signed') {
+            await db.request()
+              .input('id', sql.Int, appId)
+              .query(`UPDATE Applications SET Status = 'signed', SignedAt = COALESCE(SignedAt, GETDATE()) WHERE Id = @id`)
+          }
+          await db.request()
+            .input('vStatus', sql.NVarChar, verify?.statusCode  || null)
+            .input('vSigId',  sql.NVarChar, verify?.signatureId || null)
+            .input('aStatus', sql.NVarChar, appr?.statusCode    || null)
+            .input('aSigId',  sql.NVarChar, appr?.signatureId   || null)
+            .input('id',      sql.Int,      appId)
+            .query(`UPDATE Applications
+                    SET VerificationSignatureStatus = @vStatus,
+                        VerificationSignatureId     = COALESCE(@vSigId, VerificationSignatureId),
+                        VerificationSignedAt        = CASE WHEN @vStatus = 'signed' AND VerificationSignedAt IS NULL THEN GETDATE() ELSE VerificationSignedAt END,
+                        ApprovedSignatureStatus     = @aStatus,
+                        ApprovedSignatureId         = COALESCE(@aSigId, ApprovedSignatureId),
+                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END
+                    WHERE Id = @id`)
+        }
 
         // ── References document: fetch live signer data via DS API ────────────
         // Avoids reliance on webhook payload field names (which vary); SDK returns
@@ -1380,8 +1683,6 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
           .query(`SELECT Id FROM Applications WHERE ReferencesSignatureRequestId = @sigId2`)
 
         if (refMatch.recordset.length > 0) {
-          const api = new SignatureRequestApi()
-          api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
           const r    = await api.signatureRequestGet(sigReqId)
           const sigs = r.body.signatureRequest.signatures || []
           const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
@@ -1401,7 +1702,6 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
                         Ref2SignatureId     = COALESCE(@ref2SigId, Ref2SignatureId)
                     WHERE Id = @id`)
 
-          // Aggregate field for backward compat
           if (eventType === 'signature_request_all_signed') {
             await db.request()
               .input('id2', sql.Int, appId)

@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API = 'http://localhost:3001/api'
+const API = 'http://ghra-memb:3001/api'
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -213,17 +213,33 @@ export const AuthProvider = ({ children }) => {
     return data // { filename, originalName, url }
   }, [token])
 
-  const updateApplicationStatus = useCallback(async (appId, status, notes = '') => {
+  const updateApplicationStatus = useCallback(async (appId, status, notes = '', boardSigners = null) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/applications/${appId}/status`, {
         method: 'PATCH',
         headers: authHeaders(token),
-        body: JSON.stringify({ status, notes })
+        body: JSON.stringify({ status, notes, boardSigners })
       })
       const data = await res.json()
       if (!res.ok) return { success: false, error: data.error || 'Request failed' }
       return { success: true, ...data }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const updateBoardSigners = useCallback(async (appId, verification, approved) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/board-signers`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ verification, approved })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Request failed' }
+      return { success: true }
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
@@ -458,6 +474,7 @@ export const AuthProvider = ({ children }) => {
       getApplicationById,
       getAllApplications,
       updateApplicationStatus,
+      updateBoardSigners,
       employeeUpdateApplication,
       syncSignatureStatuses,
       getSignatureStatus,

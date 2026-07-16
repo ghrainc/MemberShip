@@ -226,6 +226,91 @@
   box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
 }
 
+/* ── Wide dialog (approve action) ────────────────────────────────────────── */
+
+.approval-dialog--wide {
+  max-width: 640px;
+}
+
+/* ── Board signer section ─────────────────────────────────────────────────── */
+
+.board-signers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e6ed;
+}
+
+.board-signer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board-signers-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.board-signer-name-row {
+  display: flex;
+  gap: 10px;
+}
+
+.board-signer-name-row .signer-field {
+  flex: 1;
+}
+
+.signer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.signer-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.signer-input {
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #2c3e50;
+  transition: border-color 0.2s;
+}
+
+.signer-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.signer-input--error {
+  border-color: #e74c3c;
+}
+
+.signer-input--error:focus {
+  border-color: #e74c3c;
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+}
+
+.board-field-error {
+  font-size: 11px;
+  color: #e74c3c;
+  margin: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 480px) {
   .approval-dialog {
