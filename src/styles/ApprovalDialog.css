@@ -152,8 +152,8 @@
 
 .comments-textarea:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--ghra-navy);
+  box-shadow: 0 0 0 3px rgba(27, 42, 91, 0.1);
 }
 
 .comments-textarea:disabled {
@@ -199,9 +199,9 @@
 }
 
 .cancel-button:hover:not(:disabled) {
-  background: #e8eef5;
-  border-color: #667eea;
-  color: #667eea;
+  background: var(--ghra-mist);
+  border-color: var(--ghra-navy);
+  color: var(--ghra-navy);
 }
 
 .approve-button {
@@ -292,8 +292,8 @@
 
 .signer-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--ghra-navy);
+  box-shadow: 0 0 0 3px rgba(27, 42, 91, 0.1);
 }
 
 .signer-input--error {

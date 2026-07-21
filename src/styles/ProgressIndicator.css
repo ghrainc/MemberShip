@@ -1,15 +1,16 @@
 .progress-container {
-  margin-bottom: 25px;
-  background: white;
-  padding: 20px;
+  margin-bottom: 20px;
+  background: var(--ghra-white);
+  padding: 20px 24px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(27, 42, 91, 0.1);
 }
 
+/* Thin progress bar — solid navy, no gradient */
 .progress-bar {
   width: 100%;
-  height: 4px;
-  background: #e0e6ed;
+  height: 3px;
+  background: var(--ghra-line);
   border-radius: 2px;
   margin-bottom: 20px;
   overflow: hidden;
@@ -17,14 +18,15 @@
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-navy);
   transition: width 0.3s ease;
 }
 
+/* Step grid */
 .steps-indicator {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
-  gap: 15px;
+  gap: 12px;
 }
 
 .step-indicator {
@@ -32,70 +34,71 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  opacity: 0.6;
-  transition: opacity 0.3s ease;
+  opacity: 0.45;
+  transition: opacity 0.2s;
 }
 
 .step-indicator.completed {
   cursor: pointer;
-}
-
-.step-indicator.completed:hover {
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .step-indicator.completed:hover .step-circle {
-  transform: scale(1.15);
+  box-shadow: 0 0 0 3px rgba(27, 42, 91, 0.15);
 }
 
 .step-indicator.active {
   opacity: 1;
 }
 
-.step-indicator.completed {
-  opacity: 1;
-}
-
+/* Step circle */
 .step-circle {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  color: white;
-  background: #ddd;
-  font-size: 16px;
-  transition: background 0.3s ease, transform 0.3s ease;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ghra-white);
+  background: var(--ghra-line);
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
 }
 
+/* Active step: red circle so it reads as "your action needed here" */
 .step-indicator.active .step-circle {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-red);
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.3);
 }
 
+/* Completed step: navy — done and settled */
 .step-indicator.completed .step-circle {
-  background: #27ae60;
+  background: var(--ghra-navy);
+  transform: none;
 }
 
+/* Step labels */
 .step-title {
   font-size: 11px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ghra-muted);
   text-align: center;
   margin: 0;
   line-height: 1.2;
 }
 
+/* Active label: red, matches the active circle */
 .step-indicator.active .step-title {
-  color: #667eea;
-  font-weight: 600;
+  color: var(--ghra-red);
+  font-weight: 700;
 }
 
+/* Completed label: navy */
 .step-indicator.completed .step-title {
-  color: #27ae60;
+  color: var(--ghra-navy);
+  font-weight: 600;
 }
 
 @media (max-width: 768px) {
@@ -105,9 +108,9 @@
   }
 
   .step-circle {
-    width: 36px;
-    height: 36px;
-    font-size: 14px;
+    width: 32px;
+    height: 32px;
+    font-size: 13px;
   }
 
   .step-title {
@@ -115,8 +118,8 @@
   }
 
   .progress-container {
-    padding: 20px;
-    margin-bottom: 30px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
   }
 }
 
@@ -127,8 +130,8 @@
   }
 
   .step-circle {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     font-size: 12px;
   }
 
@@ -138,7 +141,7 @@
   }
 
   .progress-container {
-    padding: 15px;
-    margin-bottom: 20px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
   }
 }

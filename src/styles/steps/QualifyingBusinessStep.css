@@ -9,10 +9,10 @@
 }
 
 .section-header h2 {
-  color: #2c3e50;
-  font-size: 20px;
+  color: var(--ghra-navy);
+  font-size: 18px;
   margin: 0 0 10px 0;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .section-description {
@@ -119,7 +119,7 @@
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  accent-color: #667eea;
+  accent-color: var(--ghra-navy);
 }
 
 .categories-count {
@@ -149,14 +149,14 @@
 }
 
 .certification-text {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   font-style: italic;
   margin: 0 0 20px 0;
   padding: 15px;
-  background: #f8f9fa;
+  background: #F8F9FB;
   border-radius: 6px;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--ghra-navy);
 }
 
 

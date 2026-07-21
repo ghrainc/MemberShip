@@ -1,15 +1,15 @@
 .dashboard-container {
   min-height: 100vh;
-  background: #f5f7fa;
+  background: var(--ghra-mist);
   display: flex;
   flex-direction: column;
 }
 
 /* Header */
 .dashboard-header {
-  background: white;
-  border-bottom: 1px solid #e0e6ed;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--ghra-white);
+  border-bottom: 1px solid var(--ghra-line);
+  box-shadow: 0 1px 4px rgba(27, 42, 91, 0.08);
 }
 
 .header-content {
@@ -36,14 +36,14 @@
 }
 
 .header-info h1 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 24px;
   margin: 0;
   font-weight: 600;
 }
 
 .header-info p {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 13px;
   margin: 2px 0 0 0;
 }
@@ -61,13 +61,13 @@
 }
 
 .user-email {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   font-weight: 500;
 }
 
 .logout-button {
-  background: #e74c3c;
+  background: var(--ghra-red);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -75,12 +75,11 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
 }
 
 .logout-button:hover {
-  background: #c0392b;
-  transform: translateY(-2px);
+  background: #a50d25;
 }
 
 /* Main Content */
@@ -106,20 +105,20 @@
 }
 
 .section-title h2 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 28px;
   margin: 0;
   font-weight: 600;
 }
 
 .section-subtitle {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 14px;
   margin: 8px 0 0 0;
 }
 
 .new-app-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-red);
   color: white;
   border: none;
   padding: 12px 24px;
@@ -130,13 +129,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.3s ease;
+  transition: background 0.2s, box-shadow 0.2s;
   white-space: nowrap;
 }
 
 .new-app-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 10px rgba(200, 16, 46, 0.3);
 }
 
 .new-app-button span {
@@ -147,9 +146,9 @@
 .empty-state {
   text-align: center;
   padding: 80px 40px;
-  background: white;
+  background: var(--ghra-white);
   border-radius: 12px;
-  border: 2px dashed #e0e6ed;
+  border: 2px dashed var(--ghra-line);
 }
 
 .empty-icon {
@@ -158,19 +157,19 @@
 }
 
 .empty-state h3 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 22px;
   margin: 0 0 10px 0;
 }
 
 .empty-state p {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 15px;
   margin: 0 0 30px 0;
 }
 
 .empty-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-red);
   color: white;
   border: none;
   padding: 12px 32px;
@@ -178,12 +177,12 @@
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
 .empty-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 10px rgba(200, 16, 46, 0.3);
 }
 
 /* Applications Grid */
@@ -194,22 +193,21 @@
 }
 
 .application-card {
-  background: white;
+  background: var(--ghra-white);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  border: 1px solid #e0e6ed;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.08);
+  transition: box-shadow 0.2s;
+  border: 1px solid var(--ghra-line);
 }
 
 .application-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 16px rgba(27, 42, 91, 0.14);
 }
 
 .card-header {
   padding: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-navy);
   color: white;
 }
 
@@ -240,6 +238,7 @@
   white-space: nowrap;
 }
 
+/* On a navy card header, submitted badge keeps white/transparent */
 .status-submitted {
   background: rgba(255, 255, 255, 0.2);
   color: white;
@@ -293,7 +292,7 @@
 }
 
 .info-label {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -301,14 +300,14 @@
 }
 
 .info-value {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   word-break: break-word;
 }
 
 .card-actions {
   padding: 16px 20px;
-  border-top: 1px solid #e0e6ed;
+  border-top: 1px solid var(--ghra-line);
   display: flex;
   gap: 10px;
 }
@@ -321,29 +320,29 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
 .view-button {
-  background: #667eea;
+  background: var(--ghra-navy);
   color: white;
 }
 
 .view-button:hover {
-  background: #764ba2;
-  transform: translateY(-1px);
+  background: #243575;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.25);
 }
 
 .download-button {
-  background: #f8f9fa;
-  color: #667eea;
-  border: 1px solid #e0e6ed;
+  background: var(--ghra-mist);
+  color: var(--ghra-navy);
+  border: 1px solid var(--ghra-line);
 }
 
 .download-button:hover {
-  background: #667eea;
+  background: var(--ghra-navy);
   color: white;
-  border-color: #667eea;
+  border-color: var(--ghra-navy);
 }
 
 .resubmit-button {
@@ -359,11 +358,11 @@
 
 /* Footer */
 .dashboard-footer {
-  background: white;
-  border-top: 1px solid #e0e6ed;
+  background: var(--ghra-white);
+  border-top: 1px solid var(--ghra-line);
   padding: 20px;
   text-align: center;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 12px;
 }
 

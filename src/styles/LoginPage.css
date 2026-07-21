@@ -1,7 +1,7 @@
-/* Design Selector */
+/* ── Design Selector (legacy A/B testing UI) ─────────────────────────────── */
 .design-selector {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-navy);
   display: flex;
   flex-direction: column;
   padding: 40px 20px;
@@ -48,18 +48,17 @@
   border-radius: 12px;
   padding: 30px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
 .design-card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 }
 
 .design-preview-1,
 .design-preview-2 {
-  background: #f5f7fa;
+  background: var(--ghra-mist);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 20px;
@@ -94,7 +93,7 @@
 .preview-brand {
   width: 60px;
   height: 60px;
-  background: #667eea;
+  background: var(--ghra-navy);
   border-radius: 8px;
 }
 
@@ -116,25 +115,25 @@
 
 .preview-input {
   height: 10px;
-  background: #ddd;
+  background: var(--ghra-line);
   border-radius: 4px;
 }
 
 .preview-button {
   height: 12px;
-  background: #667eea;
+  background: var(--ghra-red);
   border-radius: 4px;
   margin-top: 5px;
 }
 
 .design-card h3 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 18px;
   margin: 0 0 10px 0;
 }
 
 .design-card p {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 14px;
   margin: 0 0 20px 0;
   line-height: 1.6;
@@ -143,25 +142,25 @@
 .select-button {
   width: 100%;
   padding: 12px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-red);
   color: white;
   border: none;
   border-radius: 6px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
 .select-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.3);
 }
 
-/* Design 1: Modern Minimal */
+/* ── Design 1: Centered card on navy ─────────────────────────────────────── */
 .login-container.design-1 {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-navy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -174,7 +173,7 @@
   background: white;
   border-radius: 12px;
   padding: 50px 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
 .login-header {
@@ -189,14 +188,14 @@
 }
 
 .login-header h1 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 28px;
   margin: 0 0 10px 0;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .login-subtitle {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 16px;
   margin: 0;
 }
@@ -215,30 +214,29 @@
 }
 
 .form-label {
-  font-weight: 500;
-  color: #2c3e50;
-  font-size: 14px;
+  font-weight: 600;
+  color: var(--ghra-slate);
+  font-size: 13px;
 }
 
 .form-input {
   padding: 12px 14px;
-  border: 2px solid #e0e6ed;
+  border: 2px solid var(--ghra-line);
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
-  transition: all 0.3s ease;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .form-input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--ghra-navy);
+  box-shadow: 0 0 0 3px rgba(27, 42, 91, 0.1);
 }
 
 .form-input::placeholder {
   color: #bdc3c7;
 }
-
 
 .error-message {
   background-color: #fee;
@@ -258,11 +256,12 @@
   border-left: 4px solid #1a7f1a;
 }
 
+/* ── Member / Employee mode selector ─────────────────────────────────────── */
 .login-mode-selector {
   display: flex;
   gap: 12px;
   margin-bottom: 25px;
-  background: #f8f9fa;
+  background: var(--ghra-mist);
   padding: 8px;
   border-radius: 8px;
 }
@@ -276,24 +275,25 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  color: #7f8c8d;
-  transition: all 0.2s;
+  color: var(--ghra-muted);
+  transition: color 0.2s, border-color 0.2s;
 }
 
 .mode-button:hover:not(.active) {
-  background: #f5f7fa;
-  color: #667eea;
+  background: var(--ghra-mist);
+  color: var(--ghra-navy);
 }
 
 .mode-button.active {
   background: white;
-  color: #667eea;
-  border-color: #667eea;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+  color: var(--ghra-navy);
+  border-color: var(--ghra-navy);
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.1);
 }
 
+/* ── Primary login button ─────────────────────────────────────────────────── */
 .login-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-red);
   color: white;
   padding: 12px 20px;
   border: none;
@@ -301,27 +301,27 @@
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
 .login-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.3);
 }
 
 .login-button:active {
-  transform: translateY(0);
+  box-shadow: none;
 }
 
 .login-footer {
   text-align: center;
   padding-top: 20px;
-  border-top: 1px solid #e0e6ed;
+  border-top: 1px solid var(--ghra-line);
   margin-bottom: 20px;
 }
 
 .login-footer p {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 14px;
   margin: 0;
 }
@@ -329,7 +329,7 @@
 .toggle-button {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--ghra-navy);
   cursor: pointer;
   font-weight: 600;
   padding: 0;
@@ -338,7 +338,7 @@
 }
 
 .toggle-button:hover {
-  color: #764ba2;
+  color: var(--ghra-red);
 }
 
 .employee-login-section {
@@ -350,7 +350,7 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
-  color: #bdc3c7;
+  color: var(--ghra-muted);
   font-size: 13px;
 }
 
@@ -359,7 +359,7 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: #e0e6ed;
+  background: var(--ghra-line);
 }
 
 .employee-toggle-button {
@@ -369,20 +369,20 @@
   justify-content: center;
   gap: 8px;
   padding: 11px 16px;
-  background: #f8f9fa;
-  color: #7f8c8d;
-  border: 1px solid #e0e6ed;
+  background: var(--ghra-mist);
+  color: var(--ghra-muted);
+  border: 1px solid var(--ghra-line);
   border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
 }
 
 .employee-toggle-button:hover {
-  background: #f0f4ff;
-  color: #667eea;
-  border-color: #667eea;
+  background: #EEF2FA;
+  color: var(--ghra-navy);
+  border-color: var(--ghra-navy);
 }
 
 .employee-toggle-icon {
@@ -392,7 +392,7 @@
   flex-shrink: 0;
 }
 
-/* Design 2: Professional Split */
+/* ── Design 2: Split layout — navy left panel, white right ───────────────── */
 .login-container.design-2 {
   min-height: 100vh;
   background: white;
@@ -407,7 +407,7 @@
 
 .login-left {
   flex: 1;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--ghra-navy);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -460,14 +460,14 @@
 }
 
 .login-card h1 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 28px;
   margin: 0 0 10px 0;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .card-subtitle {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 16px;
   margin: 0 0 30px 0;
 }

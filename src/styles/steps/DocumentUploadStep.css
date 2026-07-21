@@ -9,10 +9,10 @@
 }
 
 .section-header h2 {
-  color: #2c3e50;
-  font-size: 20px;
+  color: var(--ghra-navy);
+  font-size: 18px;
   margin: 0 0 8px 0;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .section-description {
@@ -37,7 +37,7 @@
 }
 
 .document-item.required {
-  border-left: 4px solid #667eea;
+  border-left: 4px solid var(--ghra-navy);
 }
 
 .document-item.optional {
@@ -129,19 +129,19 @@
 }
 
 .file-input-wrapper:hover .file-label {
-  border-color: #667eea;
+  border-color: var(--ghra-navy);
   background: #f0f4ff;
 }
 
 .file-input:focus + .file-label {
-  border-color: #667eea;
+  border-color: var(--ghra-navy);
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
 .upload-icon {
   width: 32px;
   height: 32px;
-  color: #667eea;
+  color: var(--ghra-navy);
   stroke-width: 2;
 }
 
@@ -172,7 +172,7 @@
   width: 24px;
   height: 24px;
   border: 3px solid #e0e6ed;
-  border-top-color: #667eea;
+  border-top-color: var(--ghra-navy);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -187,7 +187,7 @@
   gap: 6px;
   padding: 0 16px;
   height: 40px;
-  background: #667eea;
+  background: var(--ghra-navy);
   color: white;
   border: none;
   border-radius: 6px;
@@ -201,7 +201,7 @@
 }
 
 .preview-button:hover {
-  background: #5a6fd6;
+  background: #243575;
 }
 
 .remove-button {

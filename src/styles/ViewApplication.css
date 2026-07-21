@@ -12,8 +12,8 @@
   gap: 10px;
   padding: 10px 14px;
   border-radius: 6px;
-  background: #f8f9fa;
-  border: 1px solid #e0e6ed;
+  background: var(--ghra-mist);
+  border: 1px solid var(--ghra-line);
 }
 
 .doc-status-icon {
@@ -41,13 +41,13 @@
 .doc-review-label {
   font-size: 13px;
   font-weight: 500;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   flex: 1;
 }
 
 .doc-review-filename {
   font-size: 12px;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-style: italic;
   max-width: 200px;
   overflow: hidden;
@@ -57,7 +57,7 @@
 
 .doc-preview-link {
   font-size: 12px;
-  color: #667eea;
+  color: var(--ghra-navy);
   text-decoration: none;
   font-weight: 500;
   white-space: nowrap;
@@ -74,17 +74,17 @@
   max-width: 900px;
   margin: 0 auto;
   padding: 40px 20px;
-  background: #f5f7fa;
+  background: var(--ghra-mist);
   min-height: 100vh;
 }
 
 .membership-container.view-app-mode .membership-header {
-  background: white;
+  background: var(--ghra-white);
   padding: 20px;
   border-radius: 8px;
   margin-bottom: 20px;
   text-align: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(27, 42, 91, 0.1);
 }
 
 .membership-container.view-app-mode .membership-logo {
@@ -97,20 +97,20 @@
 }
 
 .membership-container.view-app-mode .membership-header h1 {
-  color: #2c3e50;
+  color: var(--ghra-navy);
   font-size: 28px;
   margin: 0 0 6px 0;
 }
 
 .membership-container.view-app-mode .header-subtitle {
-  color: #667eea;
+  color: var(--ghra-navy);
   font-size: 18px;
   margin: 0 0 6px 0;
   font-weight: 600;
 }
 
 .membership-container.view-app-mode .submitted-info {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 13px;
   margin: 6px 0 0 0;
 }
@@ -133,8 +133,8 @@
 }
 
 .banner-info {
-  background: #f0f4ff;
-  border-color: #667eea;
+  background: #EEF2FA;
+  border-color: var(--ghra-navy);
 }
 
 .reviewer-comments-header {
@@ -158,19 +158,19 @@
 }
 
 .banner-info .reviewer-comments-header strong {
-  color: #4a5568;
+  color: var(--ghra-navy);
 }
 
 .reviewer-meta {
   font-size: 12px;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   margin-left: auto;
 }
 
 .reviewer-comments-text {
   margin: 0;
   font-size: 14px;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   white-space: pre-wrap;
   line-height: 1.6;
 }
@@ -178,9 +178,9 @@
 /* ── Review history collapsible panel ─────────────────────────────────────── */
 
 .review-history-panel {
-  background: white;
+  background: var(--ghra-white);
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 1px 4px rgba(27, 42, 91, 0.08);
   margin-bottom: 20px;
   overflow: hidden;
 }
@@ -196,18 +196,18 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .review-history-toggle:hover {
-  background: #f8f9fa;
+  background: var(--ghra-mist);
 }
 
 .toggle-arrow {
   font-size: 11px;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
 }
 
 .comments-history-list {
@@ -265,7 +265,7 @@
 .history-comment {
   margin: 0 0 8px 0;
   font-size: 13px;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   white-space: pre-wrap;
   line-height: 1.5;
 }
@@ -274,14 +274,14 @@
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
 }
 
 .membership-form.view-app-form {
-  background: white;
+  background: var(--ghra-white);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(27, 42, 91, 0.1);
   display: flex;
   flex-direction: column;
 }
@@ -302,36 +302,36 @@
 .view-app-form .step-content > fieldset + fieldset {
   margin-top: 28px;
   padding-top: 24px;
-  border-top: 1px solid #e0e6ed;
+  border-top: 1px solid var(--ghra-line);
 }
 
 .form-section legend {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
-  color: #2c3e50;
+  color: var(--ghra-navy);
   margin-bottom: 16px;
   display: block;
   padding-bottom: 10px;
-  border-bottom: 2px solid #667eea;
+  border-bottom: 2px solid var(--ghra-navy);
   width: 100%;
 }
 
 .form-section-inner {
-  background: #f8f9fa;
+  background: #F8F9FB;
   padding: 18px 20px;
   border-radius: 6px;
-  border-left: 3px solid #667eea;
+  border: 1px solid var(--ghra-line);
   margin-bottom: 16px;
 }
 
 .form-section-inner .inner-legend {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  color: #667eea;
+  color: var(--ghra-navy);
   margin-bottom: 14px;
   display: block;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
 .info-field {
@@ -341,7 +341,7 @@
 }
 
 .info-field-label {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -349,7 +349,7 @@
 }
 
 .info-field-value {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   font-weight: 500;
   word-break: break-word;
@@ -374,12 +374,13 @@
 }
 
 .category-tag {
-  background: #e8eef5;
-  color: #667eea;
+  background: var(--ghra-mist);
+  color: var(--ghra-navy);
   padding: 6px 12px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: 500;
+  border: 1px solid var(--ghra-line);
 }
 
 .owners-list {
@@ -389,21 +390,21 @@
 }
 
 .owner-subsection {
-  background: white;
+  background: var(--ghra-white);
   padding: 15px;
   border-radius: 6px;
-  border-left: 3px solid #667eea;
+  border-left: 3px solid var(--ghra-navy);
 }
 
 .owner-subsection h4 {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   margin: 0 0 12px 0;
   font-weight: 600;
 }
 
 .card-holder-display {
-  background: white;
+  background: var(--ghra-white);
   padding: 15px;
   border-radius: 6px;
   border-left: 3px solid #27ae60;
@@ -411,19 +412,19 @@
 }
 
 .card-holder-title {
-  color: #2c3e50;
+  color: var(--ghra-slate);
   font-size: 14px;
   margin: 0 0 12px 0;
   font-weight: 600;
 }
 
 .form-navigation {
-  padding: 30px;
-  background: #f8f9fa;
+  padding: 24px 30px;
+  background: var(--ghra-mist);
   display: flex;
-  gap: 15px;
+  gap: 12px;
   justify-content: space-between;
-  border-top: 1px solid #e0e6ed;
+  border-top: 1px solid var(--ghra-line);
 }
 
 .nav-button {
@@ -434,66 +435,75 @@
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
-.nav-button.prev-button,
-.nav-button.next-button {
-  background: #667eea;
-  color: white;
+/* In view-app context prev/next buttons match the form's conventions */
+.nav-button.prev-button {
+  background: var(--ghra-white);
+  color: var(--ghra-slate);
+  border: 1px solid var(--ghra-line);
 }
 
-.nav-button.prev-button:hover:not(:disabled),
-.nav-button.next-button:hover:not(:disabled) {
-  background: #764ba2;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.nav-button.prev-button:hover:not(:disabled) {
+  background: var(--ghra-mist);
+  border-color: #B0BAD0;
 }
 
 .nav-button.prev-button:disabled {
-  background: #ccc;
+  background: var(--ghra-mist);
+  color: #B0BAD0;
   cursor: not-allowed;
-  color: #999;
+}
+
+.nav-button.next-button {
+  background: var(--ghra-navy);
+  color: var(--ghra-white);
+}
+
+.nav-button.next-button:hover:not(:disabled) {
+  background: #243575;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.25);
 }
 
 .nav-button.submit-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--ghra-red);
+  color: var(--ghra-white);
 }
 
 .nav-button.submit-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.3);
 }
 
 .nav-button.download-button {
-  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-  color: white;
+  background: #27ae60;
+  color: var(--ghra-white);
 }
 
 .nav-button.download-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+  background: #229954;
+  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
 }
 
 .nav-button.edit-action-button {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--ghra-navy);
+  color: var(--ghra-white);
 }
 
 .nav-button.edit-action-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: #243575;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.25);
 }
 
 .nav-button.approve-action-button {
-  background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
-  color: white;
+  background: #27ae60;
+  color: var(--ghra-white);
 }
 
 .nav-button.approve-action-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(39, 174, 96, 0.4);
+  background: #229954;
+  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
 }
 
 .nav-button.approve-action-button:disabled {
@@ -503,13 +513,13 @@
 }
 
 .nav-button.reject-action-button {
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-  color: white;
+  background: var(--ghra-red);
+  color: var(--ghra-white);
 }
 
 .nav-button.reject-action-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(231, 76, 60, 0.4);
+  background: #a50d25;
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.3);
 }
 
 .nav-button.reject-action-button:disabled {
@@ -557,29 +567,29 @@
 /* ── Resend panel ──────────────────────────────────────────────────────────── */
 
 .resend-panel {
-  background: white;
-  border-top: 1px solid #e0e6ed;
+  background: var(--ghra-white);
+  border-top: 1px solid var(--ghra-line);
   padding: 24px 32px;
 }
 
 .resend-panel-title {
   font-size: 16px;
   font-weight: 600;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   margin: 0 0 16px;
 }
 
 .resend-loading {
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 14px;
 }
 
 .resend-row {
-  border: 1px solid #e0e6ed;
+  border: 1px solid var(--ghra-line);
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 12px;
-  background: #fafbfc;
+  background: var(--ghra-mist);
 }
 
 .resend-row-signed {
@@ -597,7 +607,7 @@
 .resend-row-label {
   font-weight: 600;
   font-size: 14px;
-  color: #2c3e50;
+  color: var(--ghra-slate);
   min-width: 100px;
 }
 
@@ -624,28 +634,34 @@
 .resend-email-input {
   flex: 1;
   padding: 8px 12px;
-  border: 1px solid #dce1e7;
+  border: 1px solid var(--ghra-line);
   border-radius: 6px;
   font-size: 14px;
-  color: #2c3e50;
-  background: white;
+  color: var(--ghra-slate);
+  background: var(--ghra-white);
 }
 
 .resend-email-input:disabled {
-  background: #f5f5f5;
-  color: #999;
+  background: var(--ghra-mist);
+  color: #B0BAD0;
 }
 
 .resend-button {
   padding: 8px 18px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--ghra-navy);
+  color: var(--ghra-white);
   border: none;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.resend-button:hover:not(:disabled) {
+  background: #243575;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.25);
 }
 
 .resend-button:disabled {
@@ -664,11 +680,11 @@
 .resend-message-err { background: #f8d7da; color: #721c24; }
 
 .view-app-footer {
-  background: white;
-  border-top: 1px solid #e0e6ed;
+  background: var(--ghra-white);
+  border-top: 1px solid var(--ghra-line);
   padding: 20px;
   text-align: center;
-  color: #7f8c8d;
+  color: var(--ghra-muted);
   font-size: 13px;
 }
 
@@ -679,18 +695,18 @@
 .back-button {
   background: none;
   border: none;
-  color: #667eea;
+  color: var(--ghra-navy);
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
   padding: 8px 12px;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: background 0.2s, color 0.2s;
 }
 
 .back-button:hover {
-  background: #f8f9fa;
-  color: #764ba2;
+  background: var(--ghra-mist);
+  color: var(--ghra-red);
 }
 
 /* Responsive Design */
@@ -709,11 +725,6 @@
 
   .view-app-form .step-content {
     padding: 20px;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 15px;
   }
 
   .form-navigation {
@@ -749,7 +760,7 @@
   }
 
   .form-section legend {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .form-navigation {
@@ -767,4 +778,3 @@
     gap: 12px;
   }
 }
-

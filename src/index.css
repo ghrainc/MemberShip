@@ -1,4 +1,13 @@
 :root {
+  /* ── GHRA brand tokens — single source of truth for the whole app ── */
+  --ghra-red:   #C8102E;
+  --ghra-navy:  #1B2A5B;
+  --ghra-slate: #2C3E50;
+  --ghra-mist:  #F2F4F8;
+  --ghra-line:  #DDE2EC;
+  --ghra-white: #FFFFFF;
+  --ghra-muted: #6B7A99;
+
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
