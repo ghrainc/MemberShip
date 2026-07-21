@@ -23,12 +23,12 @@ function SignerField({ role, field, label, type = 'text', value, error, onChange
   )
 }
 
-function ApprovalDialog({ application, action, onConfirm, onCancel }) {
+function ApprovalDialog({ application, action, onConfirm, onCancel, initialBoardSigners }) {
   const [comments, setComments] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [boardSigners, setBoardSigners] = useState({
-    verification: { firstName: '', lastName: '', email: '' },
-    approved:     { firstName: '', lastName: '', email: '' },
+    verification: initialBoardSigners?.verification ?? { firstName: '', lastName: '', email: '' },
+    approved:     initialBoardSigners?.approved     ?? { firstName: '', lastName: '', email: '' },
   })
   const [boardErrors, setBoardErrors] = useState({})
 

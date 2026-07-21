@@ -398,6 +398,7 @@ export const generateApplicationPDF = (application) => {
               <span class="info-value">${data.businessProperty || '-'}</span>
             </div>
           </div>
+          ${data.businessType !== 'without-fuel' ? `
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">If with fuel</span>
@@ -432,6 +433,13 @@ export const generateApplicationPDF = (application) => {
               <span class="info-value">${data.tceqNumber || '-'}</span>
             </div>
           </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">GHRA Fuel Opt-In</span>
+              <span class="info-value">${data.ghraFuelOptIn !== false ? 'Yes — opted in' : 'No — opted out'}</span>
+            </div>
+          </div>
+          ` : ''}
 
           <div class="info-grid">
             <div class="info-item">
@@ -703,6 +711,56 @@ export const generateApplicationPDF = (application) => {
             <div class="info-item">
               <span class="info-label">Authorized Representative - Last Name</span>
               <span class="info-value">${data.donationAuthRepLastName || '-'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 9: Documents -->
+        <div class="section">
+          <div class="section-title"><span class="section-number">9</span>Uploaded Documents</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Void Check</span>
+              <span class="info-value">${data.voidCheck ? (typeof data.voidCheck === 'object' ? data.voidCheck.originalName : 'Uploaded') : 'Not provided'}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 10: Agreements -->
+        <div class="section">
+          <div class="section-title"><span class="section-number">10</span>Agreements</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Membership Agreement</span>
+              <span class="info-value">${data.membershipAgreement ? 'Agreed' : 'Not agreed'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Requirements to be a Member</span>
+              <span class="info-value">${data.memberRequirements ? 'Agreed' : 'Not agreed'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Financial Information & Rebate Consent</span>
+              <span class="info-value">${data.rebateConsent ? 'Agreed' : 'Not agreed'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Annual membership fee of $400.00</span>
+              <span class="info-value">${data.membershipFeeAgreement ? 'Agreed' : 'Not agreed'}</span>
+            </div>
+          </div>
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Final Acknowledgement</span>
+              <span class="info-value">${data.acknowledgement ? 'Acknowledged' : 'Not acknowledged'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Authorization Consent</span>
+              <span class="info-value">${data.authorizationConsent ? 'Agreed' : 'Not agreed'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Indemnification Consent</span>
+              <span class="info-value">${data.indemnificationConsent ? 'Agreed' : 'Not agreed'}</span>
             </div>
           </div>
         </div>

@@ -81,6 +81,7 @@ const EMPTY_FORM_DATA = {
   businessProperty: 'leased',
   storeSize: '',
   fuelAvailable: '',
+  ghraFuelOptIn: true,
   brandName: '',
   numberOfTanks: '',
   tankCapacity: '',
@@ -147,9 +148,11 @@ const EMPTY_FORM_DATA = {
   hfbAmount: '',
   donationAuthRepFirstName: '',
   donationAuthRepLastName: '',
+  voidCheck: '',
   membershipAgreement: false,
   memberRequirements: false,
   rebateConsent: false,
+  membershipFeeAgreement: false,
   acknowledgement: false,
   authorizationConsent: false,
   indemnificationConsent: false,
@@ -187,13 +190,15 @@ function computeStepErrors(step, data) {
       if (!(data.mailingZip || '').trim()) errs.mailingZip = 'Zip Code is required'
       if (!(data.mailingCounty || '').trim()) errs.mailingCounty = 'County is required'
       if (!(data.emailAddress || '').trim()) errs.emailAddress = 'Email Address is required'
-      if (!data.fuelAvailable) errs.fuelAvailable = 'Please select an option'
-      if (data.fuelAvailable === 'branded' && !(data.brandName || '').trim()) errs.brandName = 'Brand Name is required'
-      if (!(data.numberOfTanks || '').toString().trim()) errs.numberOfTanks = 'Number of Tanks is required'
-      if (!(data.tankCapacity || '').toString().trim()) errs.tankCapacity = 'Tank Capacity is required'
-      if (!(data.estimatedFuelSales || '').toString().trim()) errs.estimatedFuelSales = 'Estimated Fuel Sales is required'
-      if (!(data.currentFuelSupplier || '').trim()) errs.currentFuelSupplier = 'Current Fuel Supplier is required'
-      if (!(data.tceqNumber || '').trim()) errs.tceqNumber = 'TCEQ Number is required'
+      if (data.businessType !== 'without-fuel') {
+        if (!data.fuelAvailable) errs.fuelAvailable = 'Please select an option'
+        if (data.fuelAvailable === 'branded' && !(data.brandName || '').trim()) errs.brandName = 'Brand Name is required'
+        if (!(data.numberOfTanks || '').toString().trim()) errs.numberOfTanks = 'Number of Tanks is required'
+        if (!(data.tankCapacity || '').toString().trim()) errs.tankCapacity = 'Tank Capacity is required'
+        if (!(data.estimatedFuelSales || '').toString().trim()) errs.estimatedFuelSales = 'Estimated Fuel Sales is required'
+        if (!(data.currentFuelSupplier || '').trim()) errs.currentFuelSupplier = 'Current Fuel Supplier is required'
+        if (!(data.tceqNumber || '').trim()) errs.tceqNumber = 'TCEQ Number is required'
+      }
       if (!data.scanPOS) errs.scanPOS = 'Please select an option'
       if (!(data.backOfficeProvider || '').trim()) errs.backOfficeProvider = 'Back Office Provider is required'
       if (!data.posSystem) errs.posSystem = 'Please select a POS system'
@@ -254,12 +259,14 @@ function computeStepErrors(step, data) {
       if (!data.salesTaxPermit) errs.salesTaxPermit = 'Sales Tax Permit is required'
       if (!data.articlesOfIncorporation) errs.articlesOfIncorporation = 'Articles of Incorporation/Certificate of Formation is required'
       if (!data.irsDocument) errs.irsDocument = 'IRS Document is required'
+      if (!data.voidCheck) errs.voidCheck = 'Void Check is required'
       break
 
     case 10:
       if (!data.membershipAgreement) errs.membershipAgreement = 'You must check Membership Agreement'
       if (!data.memberRequirements) errs.memberRequirements = 'You must check Requirements to be a Member'
       if (!data.rebateConsent) errs.rebateConsent = 'You must check Financial Information & Rebate Consent'
+      if (!data.membershipFeeAgreement) errs.membershipFeeAgreement = 'You must agree to the annual membership fee'
       if (!data.acknowledgement) errs.acknowledgement = 'You must check this acknowledgement'
       if (!data.authorizationConsent) errs.authorizationConsent = 'You must check this authorization'
       if (!data.indemnificationConsent) errs.indemnificationConsent = 'You must check this indemnification'

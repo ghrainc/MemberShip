@@ -2,7 +2,18 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API = 'http://ghra-memb:3001/api'
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://ghra-memb:3001'
+const API = `${API_ORIGIN}/api`
+
+// Normalizes any stored document URL (relative /uploads/... or old absolute localhost URL)
+// to the correct absolute URL for the current API host.
+export function resolveDocumentUrl(storedUrl) {
+  if (!storedUrl) return null
+  if (storedUrl.startsWith('/uploads/')) return `${API_ORIGIN}${storedUrl}`
+  const m = storedUrl.match(/^https?:\/\/[^/]+(\/uploads\/.+)$/)
+  if (m) return `${API_ORIGIN}${m[1]}`
+  return storedUrl
+}
 
 function authHeaders(token) {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
@@ -245,6 +256,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const getLastBoardSigners = useCallback(async () => {
+    if (!token) return null
+    try {
+      const res = await fetch(`${API}/applications/last-board-signers`, { headers: authHeaders(token) })
+      if (!res.ok) return null
+      return await res.json()
+    } catch { return null }
+  }, [token])
+
   const syncSignatureStatuses = useCallback(async () => {
     if (!token) return
     try {
@@ -476,6 +496,7 @@ export const AuthProvider = ({ children }) => {
       updateApplicationStatus,
       updateBoardSigners,
       employeeUpdateApplication,
+      getLastBoardSigners,
       syncSignatureStatuses,
       getSignatureStatus,
       resendSignature,

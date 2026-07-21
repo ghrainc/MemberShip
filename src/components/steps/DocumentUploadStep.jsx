@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { resolveDocumentUrl } from '../../context/AuthContext'
 import '../../styles/steps/DocumentUploadStep.css'
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
@@ -63,6 +64,12 @@ function DocumentUploadStep({ formData, errors, handleInputChange, applicationId
       title: 'Beer License',
       description: 'Beer License (if not provided, must be submitted within 90 days)',
       required: false
+    },
+    {
+      id: 'voidCheck',
+      title: 'Void Check',
+      description: 'Void check for each bank account listed in ACH Authorization',
+      required: true
     }
   ]
 
@@ -103,7 +110,7 @@ function DocumentUploadStep({ formData, errors, handleInputChange, applicationId
   }
 
   const handlePreview = (docValue) => {
-    const url = typeof docValue === 'object' ? docValue.url : null
+    const url = typeof docValue === 'object' ? resolveDocumentUrl(docValue.url) : null
     if (url) window.open(url, '_blank', 'noopener,noreferrer')
   }
 
@@ -129,7 +136,7 @@ function DocumentUploadStep({ formData, errors, handleInputChange, applicationId
 
   const getPreviewUrl = (docValue) => {
     if (!docValue) return null
-    if (typeof docValue === 'object') return docValue.url
+    if (typeof docValue === 'object') return resolveDocumentUrl(docValue.url)
     return null
   }
 

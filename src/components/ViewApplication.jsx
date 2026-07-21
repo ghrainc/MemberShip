@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { AuthContext } from '../context/AuthContext'
+import { AuthContext, resolveDocumentUrl } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import ProgressIndicator from './ProgressIndicator'
 import ApprovalDialog from './ApprovalDialog'
@@ -85,13 +85,14 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
   const [loading, setLoading]           = useState(true)
   const [currentSection, setCurrentSection] = useState(1)
   const [approvalDialog, setApprovalDialog] = useState(null)
+  const [lastBoardSigners, setLastBoardSigners] = useState(null)
   const [historyOpen, setHistoryOpen]   = useState(false)
   const [approvalError, setApprovalError] = useState(null)
   const [approving, setApproving]       = useState(false)
@@ -105,7 +106,11 @@ function ViewApplication() {
   }, [id])
 
   const handleSectionClick = (sectionId) => { setCurrentSection(sectionId); window.scrollTo(0, 0) }
-  const handleApproveClick = () => { setApprovalError(null); setApprovalDialog({ action: 'approve' }) }
+  const handleApproveClick = () => {
+    setApprovalError(null)
+    getLastBoardSigners().then(signers => setLastBoardSigners(signers))
+    setApprovalDialog({ action: 'approve' })
+  }
   const handleRejectClick  = () => { setApprovalError(null); setApprovalDialog({ action: 'reject' }) }
 
   const handleApprovalConfirm = async (comments, boardSigners) => {
@@ -241,19 +246,22 @@ function ViewApplication() {
                 <InfoField label="Store Size" value={data.storeSize} />
               </InfoRow>
             </Section>
-            <Section title="Fuel">
-              <InfoRow>
-                <InfoField label="If with fuel" value={lbl(FUEL_AVAILABLE, data.fuelAvailable)} />
-                {data.fuelAvailable === 'branded' && <InfoField label="Brand Name" value={data.brandName} />}
-                <InfoField label="Number of Tanks" value={data.numberOfTanks} />
-              </InfoRow>
-              <InfoRow>
-                <InfoField label="Tank Capacity" value={data.tankCapacity} />
-                <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
-                <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
-              </InfoRow>
-              <InfoRow><InfoField label="TCEQ number" value={data.tceqNumber} /></InfoRow>
-            </Section>
+            {data.businessType !== 'without-fuel' && (
+              <Section title="Fuel">
+                <InfoRow>
+                  <InfoField label="If with fuel" value={lbl(FUEL_AVAILABLE, data.fuelAvailable)} />
+                  {data.fuelAvailable === 'branded' && <InfoField label="Brand Name" value={data.brandName} />}
+                  <InfoField label="Number of Tanks" value={data.numberOfTanks} />
+                </InfoRow>
+                <InfoRow>
+                  <InfoField label="Tank Capacity" value={data.tankCapacity} />
+                  <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
+                  <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
+                </InfoRow>
+                <InfoRow><InfoField label="TCEQ number" value={data.tceqNumber} /></InfoRow>
+                <InfoRow><InfoField label="GHRA Fuel Opt-In" value={data.ghraFuelOptIn !== false ? 'Yes — opted in' : 'No — opted out'} /></InfoRow>
+              </Section>
+            )}
             <Section title="POS System">
               <InfoRow>
                 <InfoField label="Do you scan your products at the POS?" value={lbl(YES_NO, data.scanPOS)} />
@@ -391,7 +399,9 @@ function ViewApplication() {
         const achOptions = [
           { id: 'corporate', label: 'GHRA Corporate' },
           { id: 'warehouse', label: 'GHRA Warehouse' },
-          { id: 'fuels',     label: 'GHRA Fuels' }
+          ...(data.businessType !== 'without-fuel' && data.fuelAvailable !== 'branded' && data.ghraFuelOptIn !== false
+            ? [{ id: 'fuels', label: 'GHRA Fuels' }]
+            : [])
         ]
         const achInfoFor   = data.achInfoFor || {}
         const bankAccounts = data.bankAccounts || []
@@ -493,7 +503,8 @@ function ViewApplication() {
           { key: 'articlesOfIncorporation', label: 'Articles of Incorporation/Certificate of Formation' },
           { key: 'irsDocument',             label: 'IRS Document' },
           { key: 'tobaccoPermit',           label: 'Tobacco Permit' },
-          { key: 'beerLicense',             label: 'Beer License' }
+          { key: 'beerLicense',             label: 'Beer License' },
+          { key: 'voidCheck',               label: 'Void Check' }
         ]
         return (
           <fieldset className="form-section">
@@ -504,7 +515,7 @@ function ViewApplication() {
                   const val = data[key]
                   const uploaded = !!val
                   const originalName = typeof val === 'object' ? val.originalName : (val || null)
-                  const url = typeof val === 'object' ? val.url : null
+                  const url = typeof val === 'object' ? resolveDocumentUrl(val.url) : null
                   return (
                     <div key={key} className="document-review-item">
                       <span className={`doc-status-icon ${uploaded ? 'uploaded' : 'missing'}`}>
@@ -541,6 +552,9 @@ function ViewApplication() {
               </InfoRow>
               <InfoRow>
                 <InfoField label="Financial Information & Rebate Consent" value={data.rebateConsent ? 'Agreed' : 'Not agreed'} />
+              </InfoRow>
+              <InfoRow>
+                <InfoField label="Annual membership fee of $400.00" value={data.membershipFeeAgreement ? 'Agreed' : 'Not agreed'} />
               </InfoRow>
             </Section>
             <Section title="Final Acknowledgement">
@@ -717,6 +731,7 @@ function ViewApplication() {
           action={approvalDialog.action}
           onConfirm={handleApprovalConfirm}
           onCancel={() => setApprovalDialog(null)}
+          initialBoardSigners={approvalDialog.action === 'approve' ? lastBoardSigners : null}
         />
       )}
     </div>

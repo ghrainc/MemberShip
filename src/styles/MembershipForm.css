@@ -290,6 +290,14 @@
   margin-bottom: -12px;
 }
 
+.fuel-optin-group {
+  justify-content: flex-end;
+}
+
+.fuel-optin-group .checkbox-label {
+  padding-bottom: 10px; /* matches select's bottom padding so the text sits in line with the select text, not the border */
+}
+
 .pos-row-item {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));

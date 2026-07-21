@@ -1,3 +1,5 @@
+import { ghraFuelsApplies } from '../../utils/fuelUtils'
+
 function AchAuthorizationStep({
   formData,
   errors = {},
@@ -9,7 +11,7 @@ function AchAuthorizationStep({
   const achOptions = [
     { id: 'corporate', label: 'GHRA Corporate' },
     { id: 'warehouse', label: 'GHRA Warehouse' },
-    { id: 'fuels', label: 'GHRA Fuels' }
+    ...(ghraFuelsApplies(formData) ? [{ id: 'fuels', label: 'GHRA Fuels' }] : [])
   ]
 
   const selectedAchTypes = Object.keys(formData.achInfoFor).filter(key => formData.achInfoFor[key])

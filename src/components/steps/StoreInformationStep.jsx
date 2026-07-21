@@ -5,6 +5,8 @@ const numericInput = (handleInputChange, name) => (e) => {
 }
 
 function StoreInformationStep({ formData, errors, handleInputChange, copyStoreToMailing }) {
+  const withoutFuel = formData.businessType === 'without-fuel'
+
   return (
     <fieldset className="form-section">
       <legend>Store Information</legend>
@@ -54,120 +56,137 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
         </div>
       </div>
 
-      <div className="form-section-inner">
-        <span className="inner-legend">Fuel</span>
+      {!withoutFuel && (
+        <div className="form-section-inner">
+          <span className="inner-legend">Fuel</span>
 
-        <div className="fuel-row-item">
-          <div className="form-group">
-            <label htmlFor="fuelAvailable">If with fuel *</label>
-            <select id="fuelAvailable" name="fuelAvailable" value={formData.fuelAvailable || ''} onChange={handleInputChange} className={`form-select ${errors.fuelAvailable ? 'input-error' : ''}`}>
-              <option value="">Select one option</option>
-              <option value="branded">Branded</option>
-              <option value="unbranded">Unbranded</option>
-            </select>
-            {errors.fuelAvailable && <span className="error-text">{errors.fuelAvailable}</span>}
-          </div>
-
-          {formData.fuelAvailable === 'branded' && (
+          <div className="fuel-row-item">
             <div className="form-group">
-              <label htmlFor="brandName">Brand Name *</label>
+              <label htmlFor="fuelAvailable">If with fuel *</label>
+              <select id="fuelAvailable" name="fuelAvailable" value={formData.fuelAvailable || ''} onChange={handleInputChange} className={`form-select ${errors.fuelAvailable ? 'input-error' : ''}`}>
+                <option value="">Select one option</option>
+                <option value="branded">Branded</option>
+                <option value="unbranded">Unbranded</option>
+              </select>
+              {errors.fuelAvailable && <span className="error-text">{errors.fuelAvailable}</span>}
+            </div>
+
+            {formData.fuelAvailable === 'unbranded' && (
+              <div className="form-group fuel-optin-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    name="ghraFuelOptIn"
+                    checked={formData.ghraFuelOptIn !== false}
+                    onChange={handleInputChange}
+                  />
+                  I want to OPT-IN to receive pricing for GHRA Fuel.
+                </label>
+              </div>
+            )}
+
+            {formData.fuelAvailable === 'branded' && (
+              <div className="form-group">
+                <label htmlFor="brandName">Brand Name *</label>
+                <input
+                  type="text"
+                  id="brandName"
+                  name="brandName"
+                  value={formData.brandName || ''}
+                  onChange={handleInputChange}
+                  className={`form-input ${errors.brandName ? 'input-error' : ''}`}
+                  placeholder="Enter brand name"
+                  maxLength={50}
+                />
+                {errors.brandName && <span className="error-text">{errors.brandName}</span>}
+              </div>
+            )}
+
+            <div className="form-group">
+              <label htmlFor="numberOfTanks">Number of Tanks *</label>
               <input
                 type="text"
-                id="brandName"
-                name="brandName"
-                value={formData.brandName || ''}
+                id="numberOfTanks"
+                name="numberOfTanks"
+                value={formData.numberOfTanks || ''}
+                onChange={numericInput(handleInputChange, 'numberOfTanks')}
+                className={`form-input ${errors.numberOfTanks ? 'input-error' : ''}`}
+                placeholder="Numbers only"
+                maxLength={20}
+                inputMode="numeric"
+              />
+              {errors.numberOfTanks && <span className="error-text">{errors.numberOfTanks}</span>}
+            </div>
+          </div>
+
+          <div className="fuel-row-item">
+            <div className="form-group">
+              <label htmlFor="tankCapacity">Tank Capacity *</label>
+              <input
+                type="text"
+                id="tankCapacity"
+                name="tankCapacity"
+                value={formData.tankCapacity || ''}
+                onChange={numericInput(handleInputChange, 'tankCapacity')}
+                className={`form-input ${errors.tankCapacity ? 'input-error' : ''}`}
+                placeholder="Numbers only"
+                maxLength={20}
+                inputMode="numeric"
+              />
+              {errors.tankCapacity && <span className="error-text">{errors.tankCapacity}</span>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="estimatedFuelSales">Estimated Fuels Sales per month *</label>
+              <input
+                type="text"
+                id="estimatedFuelSales"
+                name="estimatedFuelSales"
+                value={formData.estimatedFuelSales || ''}
+                onChange={numericInput(handleInputChange, 'estimatedFuelSales')}
+                className={`form-input ${errors.estimatedFuelSales ? 'input-error' : ''}`}
+                placeholder="Numbers only"
+                maxLength={20}
+                inputMode="numeric"
+              />
+              {errors.estimatedFuelSales && <span className="error-text">{errors.estimatedFuelSales}</span>}
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="currentFuelSupplier">Current Fuel Supplier(s) *</label>
+              <input
+                type="text"
+                id="currentFuelSupplier"
+                name="currentFuelSupplier"
+                value={formData.currentFuelSupplier || ''}
                 onChange={handleInputChange}
-                className={`form-input ${errors.brandName ? 'input-error' : ''}`}
-                placeholder="Enter brand name"
+                className={`form-input ${errors.currentFuelSupplier ? 'input-error' : ''}`}
+                placeholder="Supplier name"
                 maxLength={50}
               />
-              {errors.brandName && <span className="error-text">{errors.brandName}</span>}
+              {errors.currentFuelSupplier && <span className="error-text">{errors.currentFuelSupplier}</span>}
             </div>
-          )}
-
-          <div className="form-group">
-            <label htmlFor="numberOfTanks">Number of Tanks *</label>
-            <input
-              type="text"
-              id="numberOfTanks"
-              name="numberOfTanks"
-              value={formData.numberOfTanks || ''}
-              onChange={numericInput(handleInputChange, 'numberOfTanks')}
-              className={`form-input ${errors.numberOfTanks ? 'input-error' : ''}`}
-              placeholder="Numbers only"
-              maxLength={20}
-              inputMode="numeric"
-            />
-            {errors.numberOfTanks && <span className="error-text">{errors.numberOfTanks}</span>}
           </div>
+
+          <div className="fuel-row-item">
+            <div className="form-group">
+              <label htmlFor="tceqNumber">TCEQ number *</label>
+              <input
+                type="text"
+                id="tceqNumber"
+                name="tceqNumber"
+                value={formData.tceqNumber || ''}
+                onChange={handleInputChange}
+                className={`form-input ${errors.tceqNumber ? 'input-error' : ''}`}
+                placeholder="TCEQ number"
+                maxLength={50}
+              />
+              {errors.tceqNumber && <span className="error-text">{errors.tceqNumber}</span>}
+            </div>
+          </div>
+
         </div>
-
-        <div className="fuel-row-item">
-          <div className="form-group">
-            <label htmlFor="tankCapacity">Tank Capacity *</label>
-            <input
-              type="text"
-              id="tankCapacity"
-              name="tankCapacity"
-              value={formData.tankCapacity || ''}
-              onChange={numericInput(handleInputChange, 'tankCapacity')}
-              className={`form-input ${errors.tankCapacity ? 'input-error' : ''}`}
-              placeholder="Numbers only"
-              maxLength={20}
-              inputMode="numeric"
-            />
-            {errors.tankCapacity && <span className="error-text">{errors.tankCapacity}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="estimatedFuelSales">Estimated Fuels Sales per month *</label>
-            <input
-              type="text"
-              id="estimatedFuelSales"
-              name="estimatedFuelSales"
-              value={formData.estimatedFuelSales || ''}
-              onChange={numericInput(handleInputChange, 'estimatedFuelSales')}
-              className={`form-input ${errors.estimatedFuelSales ? 'input-error' : ''}`}
-              placeholder="Numbers only"
-              maxLength={20}
-              inputMode="numeric"
-            />
-            {errors.estimatedFuelSales && <span className="error-text">{errors.estimatedFuelSales}</span>}
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="currentFuelSupplier">Current Fuel Supplier(s) *</label>
-            <input
-              type="text"
-              id="currentFuelSupplier"
-              name="currentFuelSupplier"
-              value={formData.currentFuelSupplier || ''}
-              onChange={handleInputChange}
-              className={`form-input ${errors.currentFuelSupplier ? 'input-error' : ''}`}
-              placeholder="Supplier name"
-              maxLength={50}
-            />
-            {errors.currentFuelSupplier && <span className="error-text">{errors.currentFuelSupplier}</span>}
-          </div>
-        </div>
-
-        <div className="fuel-row-item">
-          <div className="form-group">
-            <label htmlFor="tceqNumber">TCEQ number *</label>
-            <input
-              type="text"
-              id="tceqNumber"
-              name="tceqNumber"
-              value={formData.tceqNumber || ''}
-              onChange={handleInputChange}
-              className={`form-input ${errors.tceqNumber ? 'input-error' : ''}`}
-              placeholder="TCEQ number"
-              maxLength={50}
-            />
-            {errors.tceqNumber && <span className="error-text">{errors.tceqNumber}</span>}
-          </div>
-        </div>
-      </div>
+      )}
 
       <div className="form-section-inner">
         <span className="inner-legend">POS System</span>

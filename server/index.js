@@ -1009,6 +1009,42 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
   }
 })
 
+// GET /api/applications/last-board-signers  — employee only; returns board signer fields from the most recently approved application that has them populated
+app.get('/api/applications/last-board-signers', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request().query(`
+      SELECT TOP 1
+        BoardSignerVerificationFirstName, BoardSignerVerificationLastName, BoardSignerVerificationEmail,
+        BoardSignerApprovedFirstName,     BoardSignerApprovedLastName,     BoardSignerApprovedEmail
+      FROM Applications
+      WHERE Status IN ('approved', 'pending_signature', 'signed')
+        AND BoardSignerVerificationFirstName IS NOT NULL AND BoardSignerVerificationFirstName <> ''
+        AND BoardSignerVerificationEmail     IS NOT NULL AND BoardSignerVerificationEmail     <> ''
+        AND BoardSignerApprovedFirstName     IS NOT NULL AND BoardSignerApprovedFirstName     <> ''
+        AND BoardSignerApprovedEmail         IS NOT NULL AND BoardSignerApprovedEmail         <> ''
+      ORDER BY ReviewedAt DESC
+    `)
+    if (result.recordset.length === 0) return res.json(null)
+    const row = result.recordset[0]
+    res.json({
+      verification: {
+        firstName: row.BoardSignerVerificationFirstName || '',
+        lastName:  row.BoardSignerVerificationLastName  || '',
+        email:     row.BoardSignerVerificationEmail     || ''
+      },
+      approved: {
+        firstName: row.BoardSignerApprovedFirstName || '',
+        lastName:  row.BoardSignerApprovedLastName  || '',
+        email:     row.BoardSignerApprovedEmail     || ''
+      }
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/applications/all  — employee only
 app.get('/api/applications/all', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
@@ -1514,7 +1550,7 @@ app.post('/api/documents/upload', authMiddleware, (req, res) => {
     res.json({
       filename,
       originalName: req.file.originalname,
-      url: `http://localhost:${PORT}/uploads/${applicationId}/${filename}`
+      url: `/uploads/${applicationId}/${filename}`
     })
   })
 })

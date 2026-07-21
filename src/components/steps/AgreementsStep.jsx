@@ -101,6 +101,19 @@ function AgreementsStep({ formData, errors, handleInputChange }) {
             <label className="checkbox-label checkbox-large">
               <input
                 type="checkbox"
+                name="membershipFeeAgreement"
+                checked={!!formData.membershipFeeAgreement}
+                onChange={handleInputChange}
+              />
+              <span>I agree to pay an annual membership fee of $400.00 for each approved Member store and business location.</span>
+            </label>
+            {errors.membershipFeeAgreement && <span className="error-text">{errors.membershipFeeAgreement}</span>}
+          </div>
+
+          <div className="form-group">
+            <label className="checkbox-label checkbox-large">
+              <input
+                type="checkbox"
                 name="acknowledgement"
                 checked={!!formData.acknowledgement}
                 onChange={handleInputChange}
