@@ -1,6 +1,6 @@
 import { useState, useEffect, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router'
-import { AuthContext, resolveDocumentUrl } from '../context/AuthContext'
+import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
 import ProgressIndicator from './ProgressIndicator'
@@ -86,7 +86,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -519,7 +519,7 @@ function ViewApplication() {
                   const val = data[key]
                   const uploaded = !!val
                   const originalName = typeof val === 'object' ? val.originalName : (val || null)
-                  const url = typeof val === 'object' ? resolveDocumentUrl(val.url) : null
+                  const hasUrl = typeof val === 'object' && !!val.url
                   return (
                     <div key={key} className="document-review-item">
                       <span className={`doc-status-icon ${uploaded ? 'uploaded' : 'missing'}`}>
@@ -529,10 +529,10 @@ function ViewApplication() {
                       {uploaded && originalName && (
                         <span className="doc-review-filename">{originalName}</span>
                       )}
-                      {url && (
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="doc-preview-link">
+                      {hasUrl && (
+                        <button type="button" className="doc-preview-link" onClick={() => openDocument(val.url)}>
                           Preview
-                        </a>
+                        </button>
                       )}
                     </div>
                   )

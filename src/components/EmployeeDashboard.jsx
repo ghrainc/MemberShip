@@ -2,8 +2,10 @@ import { useState, useContext, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
+import PasswordStrengthChecklist from './PasswordStrengthChecklist'
 import ResendSignatureModal from './ResendSignatureModal'
 import BoardSignersModal from './BoardSignersModal'
+import { isEmployeePasswordValid } from '../utils/passwordValidation'
 import '../styles/EmployeeDashboard.css'
 
 function getBoardVerifyState(app) {
@@ -285,7 +287,11 @@ function EmployeeDashboard() {
       setResetError('Passwords do not match')
       return
     }
-    if (resetPassword.length < 6) {
+    if (resetTarget.mode === 'employee' && !isEmployeePasswordValid(resetPassword)) {
+      setResetError('Password does not meet all requirements listed below')
+      return
+    }
+    if (resetTarget.mode !== 'employee' && resetPassword.length < 6) {
       setResetError('Password must be at least 6 characters')
       return
     }
@@ -404,8 +410,8 @@ function EmployeeDashboard() {
       setCreateEmployeeError('Passwords do not match')
       return
     }
-    if (newEmployeePassword.length < 6) {
-      setCreateEmployeeError('Password must be at least 6 characters')
+    if (!isEmployeePasswordValid(newEmployeePassword)) {
+      setCreateEmployeeError('Password does not meet all requirements listed below')
       return
     }
     setCreateEmployeeLoading(true)
@@ -941,7 +947,8 @@ function EmployeeDashboard() {
                 <div className="form-group">
                   <label>Password *</label>
                   <PasswordInput value={newEmployeePassword} onChange={(e) => setNewEmployeePassword(e.target.value)}
-                    className="form-input" placeholder="Min 6 characters" />
+                    className="form-input" placeholder="Min 8 characters" />
+                  <PasswordStrengthChecklist password={newEmployeePassword} />
                 </div>
                 <div className="form-group">
                   <label>Confirm Password *</label>
@@ -982,7 +989,11 @@ function EmployeeDashboard() {
               <div className="form-group">
                 <label>New Password *</label>
                 <PasswordInput value={resetPassword} onChange={(e) => setResetPassword(e.target.value)}
-                  className="form-input" placeholder="Min 6 characters" />
+                  className="form-input"
+                  placeholder={resetTarget.mode === 'employee' ? 'Min 8 characters' : 'Min 6 characters'} />
+                {resetTarget.mode === 'employee' && (
+                  <PasswordStrengthChecklist password={resetPassword} />
+                )}
               </div>
               <div className="form-group">
                 <label>Confirm Password *</label>

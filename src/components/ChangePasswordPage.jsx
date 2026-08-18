@@ -2,6 +2,8 @@ import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
+import PasswordStrengthChecklist from './PasswordStrengthChecklist'
+import { isEmployeePasswordValid } from '../utils/passwordValidation'
 import '../styles/ChangePasswordPage.css'
 
 function ChangePasswordPage() {
@@ -20,9 +22,16 @@ function ChangePasswordPage() {
       setError('Both fields are required')
       return
     }
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters')
-      return
+    if (currentUser?.role === 'employee') {
+      if (!isEmployeePasswordValid(newPassword)) {
+        setError('Password does not meet all requirements listed below')
+        return
+      }
+    } else {
+      if (newPassword.length < 6) {
+        setError('Password must be at least 6 characters')
+        return
+      }
     }
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match')
@@ -68,9 +77,12 @@ function ChangePasswordPage() {
               id="newPassword"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Min 6 characters"
+              placeholder={currentUser?.role === 'employee' ? 'Min 8 characters' : 'Min 6 characters'}
               className="form-input"
             />
+            {currentUser?.role === 'employee' && (
+              <PasswordStrengthChecklist password={newPassword} />
+            )}
           </div>
 
           <div className="form-group">

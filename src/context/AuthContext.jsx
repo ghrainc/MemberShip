@@ -5,13 +5,15 @@ export const AuthContext = createContext()
 const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://ghra-memb:3001'
 const API = `${API_ORIGIN}/api`
 
-// Normalizes any stored document URL (relative /uploads/... or old absolute localhost URL)
-// to the correct absolute URL for the current API host.
+// Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
+// API endpoint URL (/api/documents/{appId}/{file}) on the correct host.
 export function resolveDocumentUrl(storedUrl) {
   if (!storedUrl) return null
-  if (storedUrl.startsWith('/uploads/')) return `${API_ORIGIN}${storedUrl}`
+  if (storedUrl.startsWith('/uploads/')) {
+    return `${API_ORIGIN}/api/documents/${storedUrl.slice('/uploads/'.length)}`
+  }
   const m = storedUrl.match(/^https?:\/\/[^/]+(\/uploads\/.+)$/)
-  if (m) return `${API_ORIGIN}${m[1]}`
+  if (m) return `${API_ORIGIN}/api/documents/${m[1].slice('/uploads/'.length)}`
   return storedUrl
 }
 
@@ -194,6 +196,21 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return []
     }
+  }, [token])
+
+  // Fetches a document with the auth token and opens it in a new tab as a blob URL.
+  const openDocument = useCallback(async (storedUrl) => {
+    if (!token || !storedUrl) return
+    const url = resolveDocumentUrl(storedUrl)
+    if (!url) return
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    } catch {}
   }, [token])
 
   const removeDocument = useCallback(async (applicationId, docId) => {
@@ -504,6 +521,7 @@ export const AuthProvider = ({ children }) => {
       createMember,
       uploadDocument,
       removeDocument,
+      openDocument,
       testDropboxSign,
       createMemberAccount,
       resetMemberPassword,

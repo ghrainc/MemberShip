@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { resolveDocumentUrl } from '../../context/AuthContext'
+import { useState, useContext } from 'react'
+import { AuthContext } from '../../context/AuthContext'
 import '../../styles/steps/DocumentUploadStep.css'
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
@@ -10,6 +10,7 @@ function getFileExtension(filename) {
 }
 
 function DocumentUploadStep({ formData, errors, handleInputChange, applicationId, uploadDocument, removeDocument }) {
+  const { openDocument } = useContext(AuthContext)
   const [uploadStates, setUploadStates] = useState({})
   const [inputKeys, setInputKeys] = useState({})
 
@@ -110,8 +111,7 @@ function DocumentUploadStep({ formData, errors, handleInputChange, applicationId
   }
 
   const handlePreview = (docValue) => {
-    const url = typeof docValue === 'object' ? resolveDocumentUrl(docValue.url) : null
-    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+    if (typeof docValue === 'object' && docValue.url) openDocument(docValue.url)
   }
 
   const handleRemove = (docId) => {
@@ -136,8 +136,7 @@ function DocumentUploadStep({ formData, errors, handleInputChange, applicationId
 
   const getPreviewUrl = (docValue) => {
     if (!docValue) return null
-    if (typeof docValue === 'object') return resolveDocumentUrl(docValue.url)
-    return null
+    return typeof docValue === 'object' && !!docValue.url
   }
 
   return (

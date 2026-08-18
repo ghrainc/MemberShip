@@ -1,5 +1,13 @@
 import { ghraFuelsApplies } from './fuelUtils'
 
+// HTML-escapes a value before interpolating it into the PDF template.
+const esc = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#x27;')
+
 export const generateApplicationPDF = (application) => {
   const { storeName, submittedDate, id, fullData = {} } = application
   const data = fullData
@@ -14,19 +22,29 @@ export const generateApplicationPDF = (application) => {
     })
   }
 
+  const ownershipTypeLabel = {
+    'sole-proprietor': 'Sole Proprietorship',
+    'partnership': 'Partnership',
+    'c-corp': 'C-Corp',
+    's-corp': 'S-Corp',
+    'llc': 'LLC',
+    'corporation': 'Corporation',
+    'limited-partnership': 'Limited Partnership'
+  }
+
   const htmlContent = `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>GHRA Membership Application - ${storeName}</title>
+      <title>GHRA Membership Application - ${esc(storeName)}</title>
       <style>
         * {
           margin: 0;
           padding: 0;
           box-sizing: border-box;
         }
-        
+
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
           color: #2c3e50;
@@ -34,37 +52,37 @@ export const generateApplicationPDF = (application) => {
           background: white;
           padding: 40px;
         }
-        
+
         .pdf-container {
           max-width: 850px;
           margin: 0 auto;
         }
-        
+
         .pdf-header {
           text-align: center;
           margin-bottom: 40px;
           border-bottom: 3px solid #667eea;
           padding-bottom: 20px;
         }
-        
+
         .pdf-logo {
           max-width: 80px;
           height: auto;
           margin-bottom: 15px;
         }
-        
+
         .pdf-header h1 {
           font-size: 28px;
           margin-bottom: 5px;
           color: #2c3e50;
         }
-        
+
         .pdf-header p {
           font-size: 13px;
           color: #7f8c8d;
           margin-bottom: 10px;
         }
-        
+
         .submission-info {
           background: #f8f9fa;
           padding: 15px;
@@ -75,23 +93,23 @@ export const generateApplicationPDF = (application) => {
           gap: 20px;
           flex-wrap: wrap;
         }
-        
+
         .submission-info div {
           flex: 1;
           min-width: 150px;
         }
-        
+
         .submission-info strong {
           display: block;
           color: #667eea;
           margin-bottom: 3px;
         }
-        
+
         .section {
           margin: 30px 0;
           page-break-inside: avoid;
         }
-        
+
         .section-number {
           display: inline-block;
           background: #667eea;
@@ -105,7 +123,7 @@ export const generateApplicationPDF = (application) => {
           font-size: 12px;
           margin-right: 8px;
         }
-        
+
         .section-title {
           font-size: 18px;
           font-weight: 600;
@@ -114,27 +132,27 @@ export const generateApplicationPDF = (application) => {
           border-bottom: 2px solid #e0e6ed;
           padding-bottom: 10px;
         }
-        
+
         .info-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 20px;
           margin-bottom: 15px;
         }
-        
+
         .info-grid.full {
           grid-template-columns: 1fr;
         }
-        
+
         .info-grid.three {
           grid-template-columns: 1fr 1fr 1fr;
         }
-        
+
         .info-item {
           display: flex;
           flex-direction: column;
         }
-        
+
         .info-label {
           font-size: 11px;
           font-weight: 600;
@@ -143,20 +161,20 @@ export const generateApplicationPDF = (application) => {
           letter-spacing: 0.5px;
           margin-bottom: 5px;
         }
-        
+
         .info-value {
           font-size: 13px;
           color: #2c3e50;
           word-break: break-word;
         }
-        
+
         .category-tags {
           display: flex;
           flex-wrap: wrap;
           gap: 8px;
           margin-top: 5px;
         }
-        
+
         .tag {
           background: #e8eef5;
           color: #667eea;
@@ -165,7 +183,7 @@ export const generateApplicationPDF = (application) => {
           font-size: 11px;
           font-weight: 500;
         }
-        
+
         .owner-block {
           background: #f8f9fa;
           padding: 12px;
@@ -173,49 +191,49 @@ export const generateApplicationPDF = (application) => {
           margin-bottom: 12px;
           border-left: 3px solid #667eea;
         }
-        
+
         .owner-block h4 {
           font-size: 12px;
           margin-bottom: 8px;
           color: #2c3e50;
         }
-        
+
         .reference-block {
           background: #f8f9fa;
           padding: 12px;
           border-radius: 6px;
           margin-bottom: 12px;
         }
-        
+
         .reference-block h4 {
           font-size: 12px;
           margin-bottom: 8px;
           color: #2c3e50;
         }
-        
+
         table {
           width: 100%;
           border-collapse: collapse;
           margin-top: 10px;
         }
-        
+
         th, td {
           padding: 8px;
           text-align: left;
           border-bottom: 1px solid #e0e6ed;
           font-size: 12px;
         }
-        
+
         th {
           background: #667eea;
           color: white;
           font-weight: 600;
         }
-        
+
         tr:nth-child(even) {
           background: #f8f9fa;
         }
-        
+
         .footer {
           margin-top: 40px;
           padding-top: 20px;
@@ -224,7 +242,7 @@ export const generateApplicationPDF = (application) => {
           color: #7f8c8d;
           text-align: center;
         }
-        
+
         @media print {
           body {
             padding: 0;
@@ -243,7 +261,7 @@ export const generateApplicationPDF = (application) => {
           <div class="submission-info">
             <div>
               <strong>Store Name:</strong>
-              ${storeName}
+              ${esc(storeName)}
             </div>
             <div>
               <strong>Application ID:</strong>
@@ -277,7 +295,7 @@ export const generateApplicationPDF = (application) => {
             <div class="info-item">
               <span class="info-label">Product Categories</span>
               <div class="category-tags">
-                ${data.storeProductCategories.map(cat => `<span class="tag">${cat}</span>`).join('')}
+                ${data.storeProductCategories.map(cat => `<span class="tag">${esc(cat)}</span>`).join('')}
               </div>
             </div>
           ` : ''}
@@ -289,68 +307,68 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Member Name</span>
-              <span class="info-value">${data.memberName || '-'}</span>
+              <span class="info-value">${esc(data.memberName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">DBA/Assumed Name</span>
-              <span class="info-value">${data.dbaName || '-'}</span>
+              <span class="info-value">${esc(data.dbaName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">EIN</span>
-              <span class="info-value">${data.ein || '-'}</span>
+              <span class="info-value">${esc(data.ein) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Sales Tax ID</span>
-              <span class="info-value">${data.salesTaxId || '-'}</span>
+              <span class="info-value">${esc(data.salesTaxId) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Ownership Type</span>
-              <span class="info-value">${{ 'sole-proprietor': 'Sole Proprietorship', 'partnership': 'Partnership', 'c-corp': 'C-Corp', 's-corp': 'S-Corp', 'llc': 'LLC', 'corporation': 'Corporation', 'limited-partnership': 'Limited Partnership' }[data.ownershipType] || data.ownershipType || '-'}</span>
+              <span class="info-value">${esc(ownershipTypeLabel[data.ownershipType] || data.ownershipType) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Business Type</span>
-              <span class="info-value">${data.businessType || '-'}</span>
+              <span class="info-value">${esc(data.businessType) || '-'}</span>
             </div>
           </div>
           <div class="info-grid full">
             <div class="info-item">
               <span class="info-label">Store Certification - Store Name</span>
-              <span class="info-value">${data.storeNameCertification || '-'}</span>
+              <span class="info-value">${esc(data.storeNameCertification) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Store Certification - Address</span>
-              <span class="info-value">${data.storeAddressCertification || '-'}</span>
+              <span class="info-value">${esc(data.storeAddressCertification) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">City</span>
-              <span class="info-value">${data.storeCityCertification || '-'}</span>
+              <span class="info-value">${esc(data.storeCityCertification) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Zip Code</span>
-              <span class="info-value">${data.storeZipCertification || '-'}</span>
+              <span class="info-value">${esc(data.storeZipCertification) || '-'}</span>
             </div>
           </div>
           <div class="info-grid three">
             <div class="info-item">
               <span class="info-label">Auth Rep First Name</span>
-              <span class="info-value">${data.authorizedRepFirstNameCertification || data.authorizedRepFirstName || '-'}</span>
+              <span class="info-value">${esc(data.authorizedRepFirstNameCertification || data.authorizedRepFirstName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Auth Rep Middle Initial</span>
-              <span class="info-value">${data.authorizedRepMiddleInitialCertification || data.authorizedRepMiddleInitial || '-'}</span>
+              <span class="info-value">${esc(data.authorizedRepMiddleInitialCertification || data.authorizedRepMiddleInitial) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Auth Rep Last Name</span>
-              <span class="info-value">${data.authorizedRepLastNameCertification || data.authorizedRepLastName || '-'}</span>
+              <span class="info-value">${esc(data.authorizedRepLastNameCertification || data.authorizedRepLastName) || '-'}</span>
             </div>
           </div>
           ${data.authorizedRepAddress ? `
           <div class="info-grid full">
             <div class="info-item">
               <span class="info-label">Auth Rep Address</span>
-              <span class="info-value">${data.authorizedRepAddress}</span>
+              <span class="info-value">${esc(data.authorizedRepAddress)}</span>
             </div>
           </div>
           ` : ''}
@@ -362,7 +380,7 @@ export const generateApplicationPDF = (application) => {
             ${data.previousMember ? `
             <div class="info-item">
               <span class="info-label">Previous GHRA #</span>
-              <span class="info-value">${data.previousGhraNumber || '-'}</span>
+              <span class="info-value">${esc(data.previousGhraNumber) || '-'}</span>
             </div>
             ` : ''}
           </div>
@@ -374,70 +392,70 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid full">
             <div class="info-item">
               <span class="info-label">Store Address</span>
-              <span class="info-value">${data.storeAddress || '-'}</span>
+              <span class="info-value">${esc(data.storeAddress) || '-'}</span>
             </div>
           </div>
           <div class="info-grid three">
             <div class="info-item">
               <span class="info-label">City</span>
-              <span class="info-value">${data.storeCity || '-'}</span>
+              <span class="info-value">${esc(data.storeCity) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">State</span>
-              <span class="info-value">${data.storeState || '-'}</span>
+              <span class="info-value">${esc(data.storeState) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Zip Code</span>
-              <span class="info-value">${data.storeZip || '-'}</span>
+              <span class="info-value">${esc(data.storeZip) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Store Phone</span>
-              <span class="info-value">${data.storePhone || '-'}</span>
+              <span class="info-value">${esc(data.storePhone) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Email Address</span>
-              <span class="info-value">${data.emailAddress || '-'}</span>
+              <span class="info-value">${esc(data.emailAddress) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Store Size (sq ft)</span>
-              <span class="info-value">${data.storeSize || '-'}</span>
+              <span class="info-value">${esc(data.storeSize) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Business Property</span>
-              <span class="info-value">${data.businessProperty || '-'}</span>
+              <span class="info-value">${esc(data.businessProperty) || '-'}</span>
             </div>
           </div>
           ${data.businessType !== 'without-fuel' ? `
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">If with fuel</span>
-              <span class="info-value">${data.fuelAvailable || '-'}</span>
+              <span class="info-value">${esc(data.fuelAvailable) || '-'}</span>
             </div>
             ${data.fuelAvailable === 'branded' ? `
             <div class="info-item">
               <span class="info-label">Brand Name</span>
-              <span class="info-value">${data.brandName || '-'}</span>
+              <span class="info-value">${esc(data.brandName) || '-'}</span>
             </div>
             ` : ''}
             <div class="info-item">
               <span class="info-label">Number of Tanks</span>
-              <span class="info-value">${data.numberOfTanks || '-'}</span>
+              <span class="info-value">${esc(data.numberOfTanks) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Tank Capacity</span>
-              <span class="info-value">${data.tankCapacity || '-'}</span>
+              <span class="info-value">${esc(data.tankCapacity) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Current Fuel Supplier(s)</span>
-              <span class="info-value">${data.currentFuelSupplier || '-'}</span>
+              <span class="info-value">${esc(data.currentFuelSupplier) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">TCEQ number</span>
-              <span class="info-value">${data.tceqNumber || '-'}</span>
+              <span class="info-value">${esc(data.tceqNumber) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
@@ -451,33 +469,33 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Do you scan your products at the POS?</span>
-              <span class="info-value">${data.scanPOS || '-'}</span>
+              <span class="info-value">${esc(data.scanPOS) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Who is back office provider?</span>
-              <span class="info-value">${data.backOfficeProvider || '-'}</span>
+              <span class="info-value">${esc(data.backOfficeProvider) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">What register system (POS) is being used?</span>
-              <span class="info-value">${data.posSystem || '-'}</span>
+              <span class="info-value">${esc(data.posSystem) || '-'}</span>
             </div>
           </div>
 
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Do you have food service at store</span>
-              <span class="info-value">${data.foodServiceAvailable || '-'}</span>
+              <span class="info-value">${esc(data.foodServiceAvailable) || '-'}</span>
             </div>
             ${data.foodServiceAvailable === 'yes' ? `
             <div class="info-item">
               <span class="info-label">Food Concept</span>
-              <span class="info-value">${data.foodConcept || '-'}</span>
+              <span class="info-value">${esc(data.foodConcept) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Is your food service branded</span>
-              <span class="info-value">${data.foodServiceBranded || '-'}</span>
+              <span class="info-value">${esc(data.foodServiceBranded) || '-'}</span>
             </div>
             ` : ''}
           </div>
@@ -485,49 +503,49 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Brand Name</span>
-              <span class="info-value">${data.foodBrandName || '-'}</span>
+              <span class="info-value">${esc(data.foodBrandName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</span>
-              <span class="info-value">${data.bigMardKudosGameday || '-'}</span>
+              <span class="info-value">${esc(data.bigMardKudosGameday) || '-'}</span>
             </div>
           </div>
           ` : data.foodServiceAvailable === 'yes' ? `
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Are you interested in receiving more information on BIG MARD, KUDOS and GAMEDAY CHICKEN?</span>
-              <span class="info-value">${data.bigMardKudosGameday || '-'}</span>
+              <span class="info-value">${esc(data.bigMardKudosGameday) || '-'}</span>
             </div>
           </div>
           ` : ''}
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Does your store have a walk-in cooler?</span>
-              <span class="info-value">${data.walkInCooler || '-'}</span>
+              <span class="info-value">${esc(data.walkInCooler) || '-'}</span>
             </div>
             ${data.walkInCooler === 'yes' ? `
             <div class="info-item">
               <span class="info-label">Number of cooler doors</span>
-              <span class="info-value">${data.coolerDoors || '-'}</span>
+              <span class="info-value">${esc(data.coolerDoors) || '-'}</span>
             </div>
             ` : ''}
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Does your store have a walk-in Freezer?</span>
-              <span class="info-value">${data.walkInFreezer || '-'}</span>
+              <span class="info-value">${esc(data.walkInFreezer) || '-'}</span>
             </div>
             ${data.walkInFreezer === 'yes' ? `
             <div class="info-item">
               <span class="info-label">Number of freezer doors</span>
-              <span class="info-value">${data.freezerDoors || '-'}</span>
+              <span class="info-value">${esc(data.freezerDoors) || '-'}</span>
             </div>
             ` : ''}
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Does your store have a beer cave?</span>
-              <span class="info-value">${data.beerCave || '-'}</span>
+              <span class="info-value">${esc(data.beerCave) || '-'}</span>
             </div>
           </div>
           <div class="info-grid">
@@ -545,7 +563,7 @@ export const generateApplicationPDF = (application) => {
 
         <!-- Section 4: Owners & Management -->
         <div class="section">
-          <div class="section-title"><span class="section-number">4</span>Owners & Management</div>
+          <div class="section-title"><span class="section-number">4</span>Owners &amp; Management</div>
           ${data.owners && data.owners.length > 0 ? `
             <div class="info-item">
               <span class="info-label">Owners/Partners</span>
@@ -556,30 +574,30 @@ export const generateApplicationPDF = (application) => {
                 <div class="info-grid three">
                   <div class="info-item">
                     <span class="info-label">First Name</span>
-                    <span class="info-value">${owner.firstName || '-'}</span>
+                    <span class="info-value">${esc(owner.firstName) || '-'}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">Middle Initial</span>
-                    <span class="info-value">${owner.middleInitial || '-'}</span>
+                    <span class="info-value">${esc(owner.middleInitial) || '-'}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">Last Name</span>
-                    <span class="info-value">${owner.lastName || '-'}</span>
+                    <span class="info-value">${esc(owner.lastName) || '-'}</span>
                   </div>
                 </div>
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="info-label">Title</span>
-                    <span class="info-value">${owner.title || '-'}</span>
+                    <span class="info-value">${esc(owner.title) || '-'}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">Ownership %</span>
-                    <span class="info-value">${owner.ownershipPercent || '-'}</span>
+                    <span class="info-value">${esc(owner.ownershipPercent) || '-'}</span>
                   </div>
                   ${showOwnerSsn && owner.ssn ? `
                   <div class="info-item">
                     <span class="info-label">SSN</span>
-                    <span class="info-value">${owner.ssn}</span>
+                    <span class="info-value">${esc(owner.ssn)}</span>
                   </div>
                   ` : ''}
                 </div>
@@ -596,21 +614,21 @@ export const generateApplicationPDF = (application) => {
             <div class="info-grid">
               <div class="info-item">
                 <span class="info-label">Company Name</span>
-                <span class="info-value">${data.reference1Company || '-'}</span>
+                <span class="info-value">${esc(data.reference1Company) || '-'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">GHRA Membership #</span>
-                <span class="info-value">${data.reference1GhraNumber || '-'}</span>
+                <span class="info-value">${esc(data.reference1GhraNumber) || '-'}</span>
               </div>
             </div>
             <div class="info-grid">
               <div class="info-item">
                 <span class="info-label">Email</span>
-                <span class="info-value">${data.reference1Email || '-'}</span>
+                <span class="info-value">${esc(data.reference1Email) || '-'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Representative Name</span>
-                <span class="info-value">${data.reference1RepName || '-'}</span>
+                <span class="info-value">${esc(data.reference1RepName) || '-'}</span>
               </div>
             </div>
           </div>
@@ -619,21 +637,21 @@ export const generateApplicationPDF = (application) => {
             <div class="info-grid">
               <div class="info-item">
                 <span class="info-label">Company Name</span>
-                <span class="info-value">${data.reference2Company || '-'}</span>
+                <span class="info-value">${esc(data.reference2Company) || '-'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">GHRA Membership #</span>
-                <span class="info-value">${data.reference2GhraNumber || '-'}</span>
+                <span class="info-value">${esc(data.reference2GhraNumber) || '-'}</span>
               </div>
             </div>
             <div class="info-grid">
               <div class="info-item">
                 <span class="info-label">Email</span>
-                <span class="info-value">${data.reference2Email || '-'}</span>
+                <span class="info-value">${esc(data.reference2Email) || '-'}</span>
               </div>
               <div class="info-item">
                 <span class="info-label">Representative Name</span>
-                <span class="info-value">${data.reference2RepName || '-'}</span>
+                <span class="info-value">${esc(data.reference2RepName) || '-'}</span>
               </div>
             </div>
           </div>
@@ -645,23 +663,23 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Bank Name</span>
-              <span class="info-value">${data.bankName || '-'}</span>
+              <span class="info-value">${esc(data.bankName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Bank Address</span>
-              <span class="info-value">${data.bankAddress || '-'}</span>
+              <span class="info-value">${esc(data.bankAddress) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Bank City</span>
-              <span class="info-value">${data.bankCity || '-'}</span>
+              <span class="info-value">${esc(data.bankCity) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Transit/ABA Number</span>
-              <span class="info-value">${data.transitAbaNumber || '-'}</span>
+              <span class="info-value">${esc(data.transitAbaNumber) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Account Number</span>
-              <span class="info-value">${data.accountNumber || '-'}</span>
+              <span class="info-value">${esc(data.accountNumber) || '-'}</span>
             </div>
           </div>
         </div>
@@ -685,17 +703,17 @@ export const generateApplicationPDF = (application) => {
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="info-label">First Name</span>
-                    <span class="info-value">${holder.firstName || '-'}</span>
+                    <span class="info-value">${esc(holder.firstName) || '-'}</span>
                   </div>
                   <div class="info-item">
                     <span class="info-label">Last Name</span>
-                    <span class="info-value">${holder.lastName || '-'}</span>
+                    <span class="info-value">${esc(holder.lastName) || '-'}</span>
                   </div>
                 </div>
                 <div class="info-grid">
                   <div class="info-item">
                     <span class="info-label">Driver License #</span>
-                    <span class="info-value">${holder.drivingLicense || '-'}</span>
+                    <span class="info-value">${esc(holder.drivingLicense) || '-'}</span>
                   </div>
                 </div>
               </div>
@@ -709,21 +727,21 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">AKDN Contribution</span>
-              <span class="info-value">${data.akdnContribute === 'yes' ? `Yes - $${data.akdnAmount || '-'}` : 'No'}</span>
+              <span class="info-value">${data.akdnContribute === 'yes' ? `Yes - $${esc(data.akdnAmount) || '-'}` : 'No'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Houston Food Bank Contribution</span>
-              <span class="info-value">${data.hfbContribute === 'yes' ? `Yes - $${data.hfbAmount || '-'}` : 'No'}</span>
+              <span class="info-value">${data.hfbContribute === 'yes' ? `Yes - $${esc(data.hfbAmount) || '-'}` : 'No'}</span>
             </div>
           </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Authorized Representative - First Name</span>
-              <span class="info-value">${data.donationAuthRepFirstName || '-'}</span>
+              <span class="info-value">${esc(data.donationAuthRepFirstName) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Authorized Representative - Last Name</span>
-              <span class="info-value">${data.donationAuthRepLastName || '-'}</span>
+              <span class="info-value">${esc(data.donationAuthRepLastName) || '-'}</span>
             </div>
           </div>
         </div>
@@ -734,7 +752,7 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Void Check</span>
-              <span class="info-value">${data.voidCheck ? (typeof data.voidCheck === 'object' ? data.voidCheck.originalName : 'Uploaded') : 'Not provided'}</span>
+              <span class="info-value">${data.voidCheck ? (typeof data.voidCheck === 'object' ? esc(data.voidCheck.originalName) : 'Uploaded') : 'Not provided'}</span>
             </div>
           </div>
         </div>
@@ -754,7 +772,7 @@ export const generateApplicationPDF = (application) => {
           </div>
           <div class="info-grid">
             <div class="info-item">
-              <span class="info-label">Financial Information & Rebate Consent</span>
+              <span class="info-label">Financial Information &amp; Rebate Consent</span>
               <span class="info-value">${data.rebateConsent ? 'Agreed' : 'Not agreed'}</span>
             </div>
             <div class="info-item">

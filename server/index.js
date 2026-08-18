@@ -9,6 +9,15 @@ const fs = require('fs')
 const crypto = require('crypto')
 require('dotenv').config()
 
+// Fail fast if required secrets are absent — no silent fallbacks to weak defaults
+const REQUIRED_ENV = ['JWT_SECRET', 'DB_SERVER', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DROPBOX_SIGN_API_KEY', 'SSN_ENCRYPTION_KEY']
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k])
+if (missingEnv.length > 0) {
+  console.error('ERROR: Missing required environment variables:', missingEnv.join(', '))
+  console.error('Copy server/.env.example to server/.env and fill in all values.')
+  process.exit(1)
+}
+
 const {
   SignatureRequestApi,
   SignatureRequestSendWithTemplateRequest,
@@ -97,7 +106,7 @@ function maskOwnerSsns(formData) {
   }
 }
 
-const DROPBOX_SIGN_TEMPLATE_ID            = '48801a508aa8d04b909f28d75eec410c3dc34e3e'
+const DROPBOX_SIGN_TEMPLATE_ID            = process.env.DS_TEMPLATE_ID
 const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
 const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
@@ -105,6 +114,9 @@ const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_
 // reviewerEmail = employee who approved the application (used in the signing request message)
 // staffFirstName / staffLastName = approving employee's name pre-filled into the document
 async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail, staffFirstName, staffLastName) {
+  if (!DROPBOX_SIGN_TEMPLATE_ID) {
+    throw new Error('DS_TEMPLATE_ID is not set in .env')
+  }
   const api = new SignatureRequestApi()
   api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
@@ -333,10 +345,6 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     cf('ApprovedLastName',      boardSigners?.approved?.lastName),
   ].filter(Boolean)
 
-  console.log('=== DS custom fields being sent ===')
-  console.log(JSON.stringify(customFields, null, 2))
-  console.log('===================================')
-
   const verificationSigner = new SubSignatureRequestTemplateSigner()
   verificationSigner.role         = 'Verification: Elected Board Signer'
   verificationSigner.emailAddress = boardSigners.verification.email
@@ -351,7 +359,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
   request.templateIds  = [DROPBOX_SIGN_TEMPLATE_ID]
   request.signers      = [signer, verificationSigner, approvedSigner]
   request.customFields = customFields
-  request.testMode     = true
+  request.testMode     = process.env.DS_TEST_MODE === 'true'
   if (reviewerEmail) {
     request.subject = 'GHRA Membership Application — Signature Required'
     request.message = `Your signature is required for the GHRA Membership Application. This request was sent by ${reviewerEmail}.`
@@ -400,11 +408,7 @@ async function sendReferencesRequest(formData) {
   request.templateIds  = [DROPBOX_SIGN_REFERENCES_TEMPLATE_ID]
   request.signers      = [signer1, signer2]
   request.customFields = buildReferenceCustomFields(formData)
-  request.testMode     = true
-
-  console.log('=== References DS signers ===')
-  console.log(JSON.stringify(request.signers, null, 2))
-  console.log('=============================')
+  request.testMode     = process.env.DS_TEST_MODE === 'true'
 
   const response = await api.signatureRequestSendWithTemplate(request)
   const sr   = response.body.signatureRequest
@@ -468,10 +472,34 @@ const upload = multer({
   }
 })
 
+const rateLimit = require('express-rate-limit')
+const helmet   = require('helmet')
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' }
+})
+
+// Returns an array of unmet requirement strings; empty array means the password is valid.
+function validateEmployeePassword(password) {
+  const failures = []
+  if (!password || password.length < 8)          failures.push('at least 8 characters')
+  if (!/[A-Z]/.test(password))                   failures.push('at least one uppercase letter')
+  if (!/[a-z]/.test(password))                   failures.push('at least one lowercase letter')
+  if (!/[0-9]/.test(password))                   failures.push('at least one number')
+  if (!/[^A-Za-z0-9]/.test(password))            failures.push('at least one special character')
+  return failures
+}
+
 const app = express()
+// crossOriginResourcePolicy must be 'cross-origin' because this is a JSON API
+// accessed from a different origin (the Vite frontend). All other helmet defaults apply.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors({ origin: /^http:\/\/(localhost|ghra-memb)(:\d+)?$/ }))
 app.use(express.json({ limit: '10mb' }))
-app.use('/uploads', express.static(path.join(__dirname, 'UploadedDocuments')))
 
 // ── DB connection ────────────────────────────────────────────────────────────
 
@@ -484,7 +512,9 @@ const dbConfig = {
   connectionTimeout: 5000,
   requestTimeout: 5000,
   options: {
-    encrypt: false,
+    encrypt: true,
+    // trustServerCertificate allows self-signed/internal certs; traffic is still encrypted.
+    // Set to false and supply a CA cert for full certificate validation in a public cloud environment.
     trustServerCertificate: true
   }
 }
@@ -610,6 +640,8 @@ async function ensureSchema() {
       ['ApprovedSignatureStatus',          'NVARCHAR(50)'],
       ['ApprovedSignedAt',                 'DATETIME'],
     ]
+    // col and type come exclusively from the hardcoded boardCols array above — never from
+    // user input or config — so string interpolation here carries no SQLi risk.
     for (const [col, type] of boardCols) {
       await db.request().query(`
         IF NOT EXISTS (
@@ -632,10 +664,25 @@ function authMiddleware(req, res, next) {
   const token = header.replace('Bearer ', '')
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET)
+    // M4: enforce forced password change server-side — not just in the UI
+    if (req.user.mustChangePassword && req.path !== '/api/auth/change-password') {
+      return res.status(403).json({ error: 'Password change required' })
+    }
     next()
   } catch {
     res.status(401).json({ error: 'Invalid token' })
   }
+}
+
+// Returns true if the authenticated user may access the given application.
+// Employees may access any; members only their own.
+async function canAccessApplication(db, appId, user) {
+  const result = await db.request()
+    .input('id',    sql.Int,     appId)
+    .input('email', sql.NVarChar, user.email)
+    .input('role',  sql.NVarChar, user.role)
+    .query("SELECT Id FROM Applications WHERE Id = @id AND (UserEmail = @email OR @role = 'employee')")
+  return result.recordset.length > 0
 }
 
 // ── Auth routes ──────────────────────────────────────────────────────────────
@@ -672,7 +719,7 @@ app.post('/api/auth/signup', async (req, res) => {
 })
 
 // POST /api/auth/login  (members + employees)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
 
@@ -707,7 +754,13 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   const { newPassword } = req.body
   if (!newPassword) return res.status(400).json({ error: 'New password is required' })
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  if (req.user.role === 'employee') {
+    const failures = validateEmployeePassword(newPassword)
+    if (failures.length > 0)
+      return res.status(400).json({ error: `Password must have: ${failures.join(', ')}` })
+  } else {
+    if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  }
 
   try {
     const db = await getPool()
@@ -874,7 +927,9 @@ app.post('/api/employees', authMiddleware, async (req, res) => {
   const { email, password, firstName, lastName } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
   if (!firstName?.trim() || !lastName?.trim()) return res.status(400).json({ error: 'First name and last name are required' })
-  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  const empCreateFailures = validateEmployeePassword(password)
+  if (empCreateFailures.length > 0)
+    return res.status(400).json({ error: `Password must have: ${empCreateFailures.join(', ')}` })
   try {
     const db = await getPool()
     const existing = await db.request()
@@ -901,7 +956,9 @@ app.post('/api/employees/:id/reset-password', authMiddleware, async (req, res) =
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
   const { password } = req.body
   if (!password) return res.status(400).json({ error: 'Password is required' })
-  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  const empResetFailures = validateEmployeePassword(password)
+  if (empResetFailures.length > 0)
+    return res.status(400).json({ error: `Password must have: ${empResetFailures.join(', ')}` })
   try {
     const db = await getPool()
     const result = await db.request()
@@ -1192,8 +1249,10 @@ app.get('/api/applications/:id', authMiddleware, async (req, res) => {
   try {
     const db = await getPool()
     const result = await db.request()
-      .input('id', sql.Int, req.params.id)
-      .query('SELECT * FROM Applications WHERE Id = @id')
+      .input('id',    sql.Int,     req.params.id)
+      .input('email', sql.NVarChar, req.user.email)
+      .input('role',  sql.NVarChar, req.user.role)
+      .query("SELECT * FROM Applications WHERE Id = @id AND (UserEmail = @email OR @role = 'employee')")
     if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
     const row = result.recordset[0]
     row.FormData = maskOwnerSsns(JSON.parse(row.FormData))
@@ -1643,48 +1702,111 @@ app.put('/api/applications/:id', authMiddleware, async (req, res) => {
 
 // POST /api/documents/upload
 app.post('/api/documents/upload', authMiddleware, (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message })
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
 
     const { applicationId, docId } = req.body
-    if (!applicationId) return res.status(400).json({ error: 'applicationId is required' })
 
-    const ext = path.extname(req.file.originalname).toLowerCase()
-    const filename = `${docId}${ext}`
-    const dir = path.join(__dirname, 'UploadedDocuments', String(applicationId))
+    // H4: reject non-integer applicationId to prevent path traversal
+    const appId = parseInt(applicationId, 10)
+    if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
 
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, filename), req.file.buffer)
+    // H4: strip any directory components from docId
+    const safeDocId = path.basename(String(docId || ''))
+    if (!safeDocId || safeDocId.startsWith('.')) return res.status(400).json({ error: 'Invalid docId' })
 
-    res.json({
-      filename,
-      originalName: req.file.originalname,
-      url: `/uploads/${applicationId}/${filename}`
-    })
+    try {
+      // H3: caller must own the application (or be an employee)
+      const db = await getPool()
+      if (!(await canAccessApplication(db, appId, req.user))) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+
+      const ext = path.extname(req.file.originalname).toLowerCase()
+      const filename = `${safeDocId}${ext}`
+      const dir = path.join(__dirname, 'UploadedDocuments', String(appId))
+
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, filename), req.file.buffer)
+
+      res.json({
+        filename,
+        originalName: req.file.originalname,
+        url: `/uploads/${appId}/${filename}`
+      })
+    } catch (err) {
+      res.status(500).json({ error: err.message })
+    }
   })
 })
 
 // DELETE /api/documents/:applicationId/:docId  — remove an uploaded file
-app.delete('/api/documents/:applicationId/:docId', authMiddleware, (req, res) => {
-  const { applicationId, docId } = req.params
-  const dir = path.join(__dirname, 'UploadedDocuments', String(applicationId))
+app.delete('/api/documents/:applicationId/:docId', authMiddleware, async (req, res) => {
+  // H4: reject non-integer applicationId; strip directory components from docId
+  const appId = parseInt(req.params.applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  const safeDocId = path.basename(String(req.params.docId))
 
-  // Find the file that starts with docId (extension may vary)
-  let deleted = false
-  if (fs.existsSync(dir)) {
-    const files = fs.readdirSync(dir)
-    for (const file of files) {
-      const nameWithoutExt = path.basename(file, path.extname(file))
-      if (nameWithoutExt === docId) {
-        fs.unlinkSync(path.join(dir, file))
-        deleted = true
-        break
+  try {
+    // H3: caller must own the application (or be an employee)
+    const db = await getPool()
+    if (!(await canAccessApplication(db, appId, req.user))) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const dir = path.join(__dirname, 'UploadedDocuments', String(appId))
+    let deleted = false
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir)
+      for (const file of files) {
+        if (path.basename(file, path.extname(file)) === safeDocId) {
+          fs.unlinkSync(path.join(dir, file))
+          deleted = true
+          break
+        }
       }
     }
+    res.json({ deleted })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
+})
 
-  res.json({ deleted })
+// GET /api/documents/:applicationId/:filename  — authenticated document download (replaces /uploads static)
+app.get('/api/documents/:applicationId/:filename', authMiddleware, async (req, res) => {
+  // H4: reject non-integer applicationId; strip directory components from filename
+  const appId = parseInt(req.params.applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  const safeFilename = path.basename(String(req.params.filename))
+
+  try {
+    // H1/H3: caller must own the application (or be an employee); return 404 to avoid enumeration
+    const db = await getPool()
+    if (!(await canAccessApplication(db, appId, req.user))) {
+      return res.status(404).json({ error: 'Not found' })
+    }
+
+    const filePath = path.join(__dirname, 'UploadedDocuments', String(appId), safeFilename)
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' })
+
+    const ext = path.extname(safeFilename).toLowerCase()
+    const mimeTypes = {
+      '.pdf':  'application/pdf',
+      '.doc':  'application/msword',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.jpg':  'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png':  'image/png',
+      '.gif':  'image/gif',
+      '.bmp':  'image/bmp',
+      '.webp': 'image/webp',
+    }
+    res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
+    fs.createReadStream(filePath).pipe(res)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // ── Dropbox Sign test ────────────────────────────────────────────────────────
@@ -1772,6 +1894,20 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
   try {
     event = JSON.parse(req.body?.json || '{}')
   } catch {
+    return res.status(200).send('Hello API Event Received')
+  }
+
+  // M1: verify Dropbox Sign HMAC before processing any event
+  const eventMeta = event?.event || {}
+  const { event_hash, event_time, event_type } = eventMeta
+  if (!event_hash || !event_time || !event_type) {
+    return res.status(200).send('Hello API Event Received')
+  }
+  const expectedHash = crypto
+    .createHmac('sha256', process.env.DROPBOX_SIGN_API_KEY)
+    .update(String(event_time) + String(event_type))
+    .digest('hex')
+  if (event_hash !== expectedHash) {
     return res.status(200).send('Hello API Event Received')
   }
 
