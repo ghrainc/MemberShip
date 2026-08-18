@@ -32,6 +32,10 @@ DB_PASSWORD=your_password
 DB_PORT=1433
 JWT_SECRET=your_secret
 
+# Required for owner SSN encryption (AES-256-GCM). Generate with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SSN_ENCRYPTION_KEY=
+
 # Optional — email notifications on status change
 EMAIL_HOST=
 EMAIL_PORT=587

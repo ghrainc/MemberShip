@@ -137,22 +137,6 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
             </div>
 
             <div className="form-group">
-              <label htmlFor="estimatedFuelSales">Estimated Fuels Sales per month *</label>
-              <input
-                type="text"
-                id="estimatedFuelSales"
-                name="estimatedFuelSales"
-                value={formData.estimatedFuelSales || ''}
-                onChange={numericInput(handleInputChange, 'estimatedFuelSales')}
-                className={`form-input ${errors.estimatedFuelSales ? 'input-error' : ''}`}
-                placeholder="Numbers only"
-                maxLength={20}
-                inputMode="numeric"
-              />
-              {errors.estimatedFuelSales && <span className="error-text">{errors.estimatedFuelSales}</span>}
-            </div>
-
-            <div className="form-group">
               <label htmlFor="currentFuelSupplier">Current Fuel Supplier(s) *</label>
               <input
                 type="text"

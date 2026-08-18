@@ -1,6 +1,7 @@
 import { useState, useContext, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
+import { ghraFuelsApplies } from '../utils/fuelUtils'
 
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
@@ -85,7 +86,6 @@ const EMPTY_FORM_DATA = {
   brandName: '',
   numberOfTanks: '',
   tankCapacity: '',
-  estimatedFuelSales: '',
   currentFuelSupplier: '',
   tceqNumber: '',
   scanPOS: '',
@@ -102,11 +102,12 @@ const EMPTY_FORM_DATA = {
   freezerDoors: '',
   beerCave: '',
   storeSpannerBoard: '',
-  owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '' }],
+  owners: [{ firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '', ssn: '' }],
   authorizedRepFirstName: '',
   authorizedRepMiddleInitial: '',
   authorizedRepLastName: '',
   authorizedRepTitle: '',
+  authorizedRepAddress: '',
   reference1Email: '',
   reference1Company: '',
   reference1GhraNumber: '',
@@ -195,7 +196,6 @@ function computeStepErrors(step, data) {
         if (data.fuelAvailable === 'branded' && !(data.brandName || '').trim()) errs.brandName = 'Brand Name is required'
         if (!(data.numberOfTanks || '').toString().trim()) errs.numberOfTanks = 'Number of Tanks is required'
         if (!(data.tankCapacity || '').toString().trim()) errs.tankCapacity = 'Tank Capacity is required'
-        if (!(data.estimatedFuelSales || '').toString().trim()) errs.estimatedFuelSales = 'Estimated Fuel Sales is required'
         if (!(data.currentFuelSupplier || '').trim()) errs.currentFuelSupplier = 'Current Fuel Supplier is required'
         if (!(data.tceqNumber || '').trim()) errs.tceqNumber = 'TCEQ Number is required'
       }
@@ -221,6 +221,12 @@ function computeStepErrors(step, data) {
       if (!(data.storeManagerLastName || '').trim()) errs.storeManagerLastName = 'Store Manager Last Name is required'
       const totalOwnership = (data.owners || []).reduce((sum, o) => sum + (parseFloat(o.ownershipPercent) || 0), 0)
       if (Math.round(totalOwnership) !== 100) errs.ownershipTotal = `Total ownership must equal 100%. Current total: ${totalOwnership}%`
+      if (ghraFuelsApplies(data)) {
+        ;(data.owners || []).forEach((owner, i) => {
+          const val = (owner.ssn || '').trim()
+          if (!val) errs[`ownerSsn_${i}`] = 'SSN is required when GHRA Fuels applies'
+        })
+      }
       break
     }
 
@@ -427,7 +433,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
   const addOwner = () => {
     setFormData(prev => ({
       ...prev,
-      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '' }]
+      owners: [...prev.owners, { firstName: '', middleInitial: '', lastName: '', title: '', ownershipPercent: '', mobilePhone: '', driverLicense: '', stateIssued: '', ssn: '' }]
     }))
   }
 

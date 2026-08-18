@@ -188,6 +188,20 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
             {errors.authorizedRepLastName && <span className="error-text">{errors.authorizedRepLastName}</span>}
           </div>
         </div>
+
+        <div className="form-group">
+          <label htmlFor="authorizedRepAddress">Address</label>
+          <input
+            type="text"
+            id="authorizedRepAddress"
+            name="authorizedRepAddress"
+            value={formData.authorizedRepAddress || ''}
+            onChange={handleInputChange}
+            className="form-input"
+            placeholder="Street address"
+            maxLength={150}
+          />
+        </div>
       </div>
 
       <div className="form-section-inner">

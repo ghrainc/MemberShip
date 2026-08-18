@@ -2,6 +2,7 @@ import { useState, useEffect, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { AuthContext, resolveDocumentUrl } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
+import { ghraFuelsApplies } from '../utils/fuelUtils'
 import ProgressIndicator from './ProgressIndicator'
 import ApprovalDialog from './ApprovalDialog'
 import '../styles/ViewApplication.css'
@@ -223,6 +224,9 @@ function ViewApplication() {
                 <InfoField label="Middle Initial" value={data.authorizedRepMiddleInitial} />
                 <InfoField label="Last Name" value={data.authorizedRepLastName} />
               </InfoRow>
+              {data.authorizedRepAddress && (
+                <InfoRow><InfoField label="Address" value={data.authorizedRepAddress} /></InfoRow>
+              )}
             </Section>
             <Section title="Previous Membership">
               <InfoRow>
@@ -255,7 +259,6 @@ function ViewApplication() {
                 </InfoRow>
                 <InfoRow>
                   <InfoField label="Tank Capacity" value={data.tankCapacity} />
-                  <InfoField label="Estimated Fuels Sales per month" value={data.estimatedFuelSales} />
                   <InfoField label="Current Fuel Supplier(s)" value={data.currentFuelSupplier} />
                 </InfoRow>
                 <InfoRow><InfoField label="TCEQ number" value={data.tceqNumber} /></InfoRow>
@@ -351,6 +354,9 @@ function ViewApplication() {
                 <InfoRow>
                   <InfoField label="Driver License #" value={owner.driverLicense} />
                   <InfoField label="State Issued" value={owner.stateIssued} />
+                  {ghraFuelsApplies(data) && owner.ssn && (
+                    <InfoField label="SSN" value={owner.ssn} />
+                  )}
                 </InfoRow>
               </Section>
             ))}
@@ -399,9 +405,7 @@ function ViewApplication() {
         const achOptions = [
           { id: 'corporate', label: 'GHRA Corporate' },
           { id: 'warehouse', label: 'GHRA Warehouse' },
-          ...(data.businessType !== 'without-fuel' && data.fuelAvailable !== 'branded' && data.ghraFuelOptIn !== false
-            ? [{ id: 'fuels', label: 'GHRA Fuels' }]
-            : [])
+          ...(ghraFuelsApplies(data) ? [{ id: 'fuels', label: 'GHRA Fuels' }] : [])
         ]
         const achInfoFor   = data.achInfoFor || {}
         const bankAccounts = data.bankAccounts || []

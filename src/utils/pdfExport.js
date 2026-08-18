@@ -1,6 +1,9 @@
+import { ghraFuelsApplies } from './fuelUtils'
+
 export const generateApplicationPDF = (application) => {
   const { storeName, submittedDate, id, fullData = {} } = application
   const data = fullData
+  const showOwnerSsn = ghraFuelsApplies(data)
 
   const formatDate = (dateString) => {
     const date = new Date(dateString)
@@ -332,17 +335,25 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid three">
             <div class="info-item">
               <span class="info-label">Auth Rep First Name</span>
-              <span class="info-value">${data.authorizedRepFirstNameCertification || '-'}</span>
+              <span class="info-value">${data.authorizedRepFirstNameCertification || data.authorizedRepFirstName || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Auth Rep Middle Initial</span>
-              <span class="info-value">${data.authorizedRepMiddleInitialCertification || '-'}</span>
+              <span class="info-value">${data.authorizedRepMiddleInitialCertification || data.authorizedRepMiddleInitial || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Auth Rep Last Name</span>
-              <span class="info-value">${data.authorizedRepLastNameCertification || '-'}</span>
+              <span class="info-value">${data.authorizedRepLastNameCertification || data.authorizedRepLastName || '-'}</span>
             </div>
           </div>
+          ${data.authorizedRepAddress ? `
+          <div class="info-grid full">
+            <div class="info-item">
+              <span class="info-label">Auth Rep Address</span>
+              <span class="info-value">${data.authorizedRepAddress}</span>
+            </div>
+          </div>
+          ` : ''}
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Previously a GHRA Member</span>
@@ -420,10 +431,6 @@ export const generateApplicationPDF = (application) => {
             </div>
           </div>
           <div class="info-grid">
-            <div class="info-item">
-              <span class="info-label">Estimated Fuels Sales per month</span>
-              <span class="info-value">${data.estimatedFuelSales || '-'}</span>
-            </div>
             <div class="info-item">
               <span class="info-label">Current Fuel Supplier(s)</span>
               <span class="info-value">${data.currentFuelSupplier || '-'}</span>
@@ -569,6 +576,12 @@ export const generateApplicationPDF = (application) => {
                     <span class="info-label">Ownership %</span>
                     <span class="info-value">${owner.ownershipPercent || '-'}</span>
                   </div>
+                  ${showOwnerSsn && owner.ssn ? `
+                  <div class="info-item">
+                    <span class="info-label">SSN</span>
+                    <span class="info-value">${owner.ssn}</span>
+                  </div>
+                  ` : ''}
                 </div>
               </div>
             `).join('')}

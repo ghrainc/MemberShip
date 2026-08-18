@@ -88,6 +88,8 @@ function EmployeeDashboard() {
   const [employeesLoading, setEmployeesLoading] = useState(false)
 
   // Create employee (embedded in Employee Accounts modal)
+  const [newEmployeeFirstName, setNewEmployeeFirstName] = useState('')
+  const [newEmployeeLastName, setNewEmployeeLastName] = useState('')
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('')
   const [newEmployeePassword, setNewEmployeePassword] = useState('')
   const [newEmployeeConfirm, setNewEmployeeConfirm] = useState('')
@@ -390,6 +392,10 @@ function EmployeeDashboard() {
     e.preventDefault()
     setCreateEmployeeError('')
     setCreateEmployeeSuccess('')
+    if (!newEmployeeFirstName.trim() || !newEmployeeLastName.trim()) {
+      setCreateEmployeeError('First name and last name are required')
+      return
+    }
     if (!newEmployeeEmail || !newEmployeePassword || !newEmployeeConfirm) {
       setCreateEmployeeError('All fields are required')
       return
@@ -403,10 +409,12 @@ function EmployeeDashboard() {
       return
     }
     setCreateEmployeeLoading(true)
-    const result = await createEmployeeAccount(newEmployeeEmail, newEmployeePassword)
+    const result = await createEmployeeAccount(newEmployeeEmail, newEmployeePassword, newEmployeeFirstName.trim(), newEmployeeLastName.trim())
     setCreateEmployeeLoading(false)
     if (result.success) {
       setCreateEmployeeSuccess(`Employee account created for ${result.email}`)
+      setNewEmployeeFirstName('')
+      setNewEmployeeLastName('')
       setNewEmployeeEmail('')
       setNewEmployeePassword('')
       setNewEmployeeConfirm('')
@@ -913,6 +921,18 @@ function EmployeeDashboard() {
               {/* ── Create new employee form ── */}
               <p style={{ fontWeight: 600, fontSize: 14, margin: '0 0 12px', color: '#343a40' }}>Create New Employee</p>
               <form onSubmit={handleCreateEmployeeSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label>First Name *</label>
+                    <input type="text" value={newEmployeeFirstName} onChange={(e) => setNewEmployeeFirstName(e.target.value)}
+                      className="form-input" placeholder="First Name" maxLength={100} />
+                  </div>
+                  <div className="form-group">
+                    <label>Last Name *</label>
+                    <input type="text" value={newEmployeeLastName} onChange={(e) => setNewEmployeeLastName(e.target.value)}
+                      className="form-input" placeholder="Last Name" maxLength={100} />
+                  </div>
+                </div>
                 <div className="form-group">
                   <label>Email Address *</label>
                   <input type="email" value={newEmployeeEmail} onChange={(e) => setNewEmployeeEmail(e.target.value)}

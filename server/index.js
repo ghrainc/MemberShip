@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken')
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 require('dotenv').config()
 
 const {
@@ -20,13 +21,90 @@ const {
 
 const { buildReferenceCustomFields } = require('./dropboxSignMapping')
 
+// ── SSN encryption (AES-256-GCM) ────────────────────────────────────────────
+
+function getSsnKey() {
+  const hex = process.env.SSN_ENCRYPTION_KEY
+  if (!hex) return null
+  const buf = Buffer.from(hex, 'hex')
+  if (buf.length !== 32) throw new Error('SSN_ENCRYPTION_KEY must be exactly 64 hex chars (32 bytes)')
+  return buf
+}
+
+function ssnEncrypt(plaintext) {
+  const key = getSsnKey()
+  if (!key) return null
+  const iv     = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const enc    = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  const tag    = cipher.getAuthTag()
+  return `${iv.toString('base64')}:${tag.toString('base64')}:${enc.toString('base64')}`
+}
+
+function ssnDecrypt(ct) {
+  const key = getSsnKey()
+  if (!key || !ct) return null
+  const parts = ct.split(':')
+  if (parts.length !== 3) return null
+  try {
+    const iv       = Buffer.from(parts[0], 'base64')
+    const tag      = Buffer.from(parts[1], 'base64')
+    const enc      = Buffer.from(parts[2], 'base64')
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
+    decipher.setAuthTag(tag)
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8')
+  } catch { return null }
+}
+
+function ssnMask(ssn) {
+  const d = (ssn || '').replace(/\D/g, '')
+  return d.length >= 4 ? `***-**-${d.slice(-4)}` : '***-**-****'
+}
+
+// Encrypt plaintext owner SSNs before writing to DB; preserve existing ssnEncrypted for masked/unchanged values
+function processOwnerSsnsForSave(formData) {
+  if (!formData?.owners?.length) return formData
+  const key = getSsnKey()
+  return {
+    ...formData,
+    owners: formData.owners.map(owner => {
+      const { ssn, ssnEncrypted, ...rest } = owner
+      const val = (ssn || '').trim()
+      // Real 9-digit SSN: encrypt and store
+      if (val && !/^\*/.test(val)) {
+        const digits = val.replace(/\D/g, '')
+        if (digits.length === 9 && key) return { ...rest, ssnEncrypted: ssnEncrypt(val) }
+        // Value present but key missing: don't store plaintext, keep existing if any
+        return ssnEncrypted ? { ...rest, ssnEncrypted } : rest
+      }
+      // Masked placeholder or empty: keep existing encrypted value
+      return ssnEncrypted ? { ...rest, ssnEncrypted } : rest
+    })
+  }
+}
+
+// Replace ssnEncrypted with masked ssn string for client-facing responses
+function maskOwnerSsns(formData) {
+  if (!formData?.owners?.length) return formData
+  return {
+    ...formData,
+    owners: formData.owners.map(owner => {
+      const { ssnEncrypted, ssn: _ignored, ...rest } = owner
+      if (!ssnEncrypted) return rest
+      const plain = ssnDecrypt(ssnEncrypted)
+      return { ...rest, ssn: plain ? ssnMask(plain) : '***-**-****' }
+    })
+  }
+}
+
 const DROPBOX_SIGN_TEMPLATE_ID            = '48801a508aa8d04b909f28d75eec410c3dc34e3e'
 const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
 const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
 // boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email } }
 // reviewerEmail = employee who approved the application (used in the signing request message)
-async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail) {
+// staffFirstName / staffLastName = approving employee's name pre-filled into the document
+async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail, staffFirstName, staffLastName) {
   const api = new SignatureRequestApi()
   api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
@@ -36,7 +114,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     'Verification: Elected Board Signer',
     'Approved: Elected Board Signer',
   ]
-  const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName']
+  const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName', 'StaffFirstName', 'StaffLastName', 'DateApproved']
   const templateApi = new TemplateApi()
   templateApi.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
   const tmplRes = await templateApi.templateGet(DROPBOX_SIGN_TEMPLATE_ID)
@@ -136,7 +214,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     cf('AuthRepCell',      owner1.mobilePhone),
     cf('AuthRepDL',        owner1.driverLicense),
     cf('AuthRepState',     owner1.stateIssued),
-    // AuthRepSS — not yet collected in form
+    // AuthRepSS — collected in form (owner.ssn) but not wired to this template field
 
     // ── Owners 2–10 (dynamic) ─────────────────────────────────────────────────
     ...Array.from({ length: 9 }, (_, i) => {
@@ -150,7 +228,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
         cf(`Owner${n}Cell`,      o.mobilePhone),
         cf(`Owner${n}DL`,        o.driverLicense),
         cf(`Owner${n}State`,     o.stateIssued),
-        // Owner{n}SS — not yet collected in form
+        // Owner{n}SS — collected in form (owner.ssn) but not wired to this template field
       ]
     }).flat(),
 
@@ -241,6 +319,12 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     chk('SpannerYes',        formData.storeSpannerBoard === 'yes'),
     chk('SpannerNo',         formData.storeSpannerBoard === 'no'),
     chk('SpannerPrevMember', formData.storeSpannerBoard === 'prevMember'),
+
+    // Approving staff fields — pre-filled from the employee who approved
+    cf('StaffFirstName', staffFirstName || null),
+    cf('StaffLastName',  staffLastName  || null),
+    // DateApproved: send as MM/DD/YYYY text; confirm format matches template field type if it changes
+    cf('DateApproved', new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })),
 
     // Board signer names — pre-filled into the document from our DB values
     cf('VerificationFirstName', boardSigners?.verification?.firstName),
@@ -430,6 +514,20 @@ async function ensureSchema() {
     await db.request().query(`
       IF NOT EXISTS (
         SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Users') AND name = 'FirstName'
+      )
+        ALTER TABLE Users ADD FirstName NVARCHAR(100) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Users') AND name = 'LastName'
+      )
+        ALTER TABLE Users ADD LastName NVARCHAR(100) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
         WHERE object_id = OBJECT_ID('Applications') AND name = 'CommentsHistory'
       )
         ALTER TABLE Applications ADD CommentsHistory NVARCHAR(MAX) NULL
@@ -582,7 +680,7 @@ app.post('/api/auth/login', async (req, res) => {
     const db = await getPool()
     const result = await db.request()
       .input('email', sql.NVarChar, email.toLowerCase())
-      .query('SELECT Id, Email, PasswordHash, Role, MustChangePassword FROM Users WHERE Email = @email')
+      .query('SELECT Id, Email, PasswordHash, Role, MustChangePassword, FirstName, LastName FROM Users WHERE Email = @email')
 
     if (!result.recordset.length)
       return res.status(401).json({ error: 'Invalid email or password' })
@@ -592,12 +690,14 @@ app.post('/api/auth/login', async (req, res) => {
     if (!valid) return res.status(401).json({ error: 'Invalid email or password' })
 
     const mustChangePassword = user.MustChangePassword === true || user.MustChangePassword === 1
+    const firstName = user.FirstName || ''
+    const lastName  = user.LastName  || ''
     const token = jwt.sign(
-      { email: user.Email, role: user.Role, mustChangePassword },
+      { email: user.Email, role: user.Role, mustChangePassword, firstName, lastName },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     )
-    res.json({ email: user.Email, role: user.Role, token, mustChangePassword })
+    res.json({ email: user.Email, role: user.Role, token, mustChangePassword, firstName, lastName })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -625,7 +725,7 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
 // POST /api/auth/create-member  — employee creates a new member account
 app.post('/api/auth/create-member', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { email, password } = req.body
+  const { email, password, firstName, lastName } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
@@ -639,10 +739,12 @@ app.post('/api/auth/create-member', authMiddleware, async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10)
     await db.request()
-      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('email',        sql.NVarChar, email.toLowerCase())
       .input('passwordHash', sql.NVarChar, passwordHash)
-      .input('role', sql.NVarChar, 'member')
-      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword) VALUES (@email, @passwordHash, @role, 1)')
+      .input('role',         sql.NVarChar, 'member')
+      .input('firstName',    sql.NVarChar, (firstName || '').trim())
+      .input('lastName',     sql.NVarChar, (lastName  || '').trim())
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword, FirstName, LastName) VALUES (@email, @passwordHash, @role, 1, @firstName, @lastName)')
 
     res.json({ success: true, email: email.toLowerCase() })
   } catch (err) {
@@ -673,7 +775,7 @@ app.get('/api/employees/members', authMiddleware, async (req, res) => {
 // POST /api/employees/members  — employee creates a member login with employee-chosen password
 app.post('/api/employees/members', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { email, password } = req.body
+  const { email, password, firstName, lastName } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
 
@@ -687,10 +789,12 @@ app.post('/api/employees/members', authMiddleware, async (req, res) => {
 
     const passwordHash = await bcrypt.hash(password, 10)
     await db.request()
-      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('email',        sql.NVarChar, email.toLowerCase())
       .input('passwordHash', sql.NVarChar, passwordHash)
-      .input('role', sql.NVarChar, 'member')
-      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword) VALUES (@email, @passwordHash, @role, 1)')
+      .input('role',         sql.NVarChar, 'member')
+      .input('firstName',    sql.NVarChar, (firstName || '').trim())
+      .input('lastName',     sql.NVarChar, (lastName  || '').trim())
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword, FirstName, LastName) VALUES (@email, @passwordHash, @role, 1, @firstName, @lastName)')
 
     res.json({ success: true, email: email.toLowerCase() })
   } catch (err) {
@@ -767,8 +871,9 @@ app.get('/api/employees', authMiddleware, async (req, res) => {
 // POST /api/employees — create a new employee account
 app.post('/api/employees', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { email, password } = req.body
+  const { email, password, firstName, lastName } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
+  if (!firstName?.trim() || !lastName?.trim()) return res.status(400).json({ error: 'First name and last name are required' })
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
   try {
     const db = await getPool()
@@ -779,10 +884,12 @@ app.post('/api/employees', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'An account with that email already exists' })
     const passwordHash = await bcrypt.hash(password, 10)
     await db.request()
-      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('email',        sql.NVarChar, email.toLowerCase())
       .input('passwordHash', sql.NVarChar, passwordHash)
-      .input('role', sql.NVarChar, 'employee')
-      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword) VALUES (@email, @passwordHash, @role, 1)')
+      .input('role',         sql.NVarChar, 'employee')
+      .input('firstName',    sql.NVarChar, firstName.trim())
+      .input('lastName',     sql.NVarChar, lastName.trim())
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword, FirstName, LastName) VALUES (@email, @passwordHash, @role, 1, @firstName, @lastName)')
     res.json({ success: true, email: email.toLowerCase() })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
@@ -839,8 +946,9 @@ app.delete('/api/employees/:id', authMiddleware, async (req, res) => {
 
 // POST /api/applications/draft  — create or update draft on each Next press
 app.post('/api/applications/draft', authMiddleware, async (req, res) => {
-  const { applicationId, currentStep, formData } = req.body
+  const { applicationId, currentStep, formData: rawFormData } = req.body
   const userEmail = req.user.email
+  const formData = processOwnerSsnsForSave(rawFormData)
 
   try {
     const db = await getPool()
@@ -885,7 +993,8 @@ app.post('/api/applications/draft', authMiddleware, async (req, res) => {
 
 // POST /api/applications/submit  — final submission
 app.post('/api/applications/submit', authMiddleware, async (req, res) => {
-  const { applicationId, formData } = req.body
+  const { applicationId, formData: rawFormData } = req.body
+  const formData = processOwnerSsnsForSave(rawFormData)
   const userEmail = req.user.email
 
   try {
@@ -1087,7 +1196,7 @@ app.get('/api/applications/:id', authMiddleware, async (req, res) => {
       .query('SELECT * FROM Applications WHERE Id = @id')
     if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
     const row = result.recordset[0]
-    row.FormData = JSON.parse(row.FormData)
+    row.FormData = maskOwnerSsns(JSON.parse(row.FormData))
     try { row.CommentsHistory = JSON.parse(row.CommentsHistory || '[]') } catch { row.CommentsHistory = [] }
     res.json(row)
   } catch (err) {
@@ -1137,7 +1246,7 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
 
       try {
         const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
-          await sendSignatureRequest(fd, UserEmail, boardSigners, req.user.email)
+          await sendSignatureRequest(fd, UserEmail, boardSigners, req.user.email, req.user.firstName, req.user.lastName)
 
         // DS succeeded — commit status = pending_signature with reviewer + board signer fields
         await db.request()
@@ -1509,7 +1618,8 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
 // PUT /api/applications/:id  — employee updates application form data
 app.put('/api/applications/:id', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { formData } = req.body
+  const { formData: rawFormData } = req.body
+  const formData = processOwnerSsnsForSave(rawFormData)
   try {
     const db = await getPool()
     const storeName = formData.memberName || formData.storeNameCertification || ''

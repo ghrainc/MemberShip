@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '' }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -88,7 +88,7 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '' }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -355,13 +355,13 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
-  const createMemberAccount = useCallback(async (email, password) => {
+  const createMemberAccount = useCallback(async (email, password, firstName = '', lastName = '') => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/employees/members`, {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, firstName, lastName })
       })
       const data = await res.json()
       if (!res.ok) return { success: false, error: data.error || 'Failed to create member' }
@@ -431,13 +431,13 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
-  const createEmployeeAccount = useCallback(async (email, password) => {
+  const createEmployeeAccount = useCallback(async (email, password, firstName, lastName) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/employees`, {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, firstName, lastName })
       })
       const data = await res.json()
       if (!res.ok) return { success: false, error: data.error || 'Failed to create employee' }

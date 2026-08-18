@@ -1,4 +1,12 @@
 import { useEffect } from 'react'
+import { ghraFuelsApplies } from '../../utils/fuelUtils'
+
+function formatSSN(raw) {
+  const d = raw.replace(/\D/g, '').slice(0, 9)
+  if (d.length <= 3) return d
+  if (d.length <= 5) return `${d.slice(0, 3)}-${d.slice(3)}`
+  return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`
+}
 
 function OwnersManagementStep({
   formData,
@@ -8,6 +16,8 @@ function OwnersManagementStep({
   addOwner,
   removeOwner
 }) {
+  const ssnRequired = ghraFuelsApplies(formData)
+
   // Auto-fill first owner with Authorized Representative data
   useEffect(() => {
     if (formData.owners.length > 0 && formData.authorizedRepFirstName) {
@@ -19,6 +29,10 @@ function OwnersManagementStep({
 
   const numericOwner = (index, field) => (e) => {
     handleOwnerChange(index, field, e.target.value.replace(/\D/g, ''))
+  }
+
+  const ssnChange = (index) => (e) => {
+    handleOwnerChange(index, 'ssn', formatSSN(e.target.value))
   }
 
   const ownershipChange = (index) => (e) => {
@@ -143,6 +157,25 @@ function OwnersManagementStep({
                 />
               </div>
             </div>
+
+            {ssnRequired && (
+              <div className="owners-row-item">
+                <div className="form-group">
+                  <label>SSN {ssnRequired ? '*' : ''} (XXX-XX-XXXX)</label>
+                  <input
+                    type="text"
+                    value={owner.ssn || ''}
+                    onChange={ssnChange(index)}
+                    className={`form-input${errors[`ownerSsn_${index}`] ? ' input-error' : ''}`}
+                    placeholder="XXX-XX-XXXX"
+                    maxLength={11}
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                  {errors[`ownerSsn_${index}`] && <span className="error-text">{errors[`ownerSsn_${index}`]}</span>}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
