@@ -9,6 +9,8 @@ CREATE TABLE Users (
   PasswordHash        NVARCHAR(255)  NOT NULL,
   Role                NVARCHAR(20)   NOT NULL DEFAULT 'member',  -- 'member' or 'employee'
   MustChangePassword  BIT            NOT NULL DEFAULT 0,          -- 1 = forced change on next login
+  FirstName           NVARCHAR(100)  NULL,
+  LastName            NVARCHAR(100)  NULL,
   CreatedAt           DATETIME       NOT NULL DEFAULT GETDATE()
 );
 GO

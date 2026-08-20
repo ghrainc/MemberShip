@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://ghra-memb:3001'
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'//'http://ghra-memb:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -480,6 +480,25 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const updateEmployeeName = useCallback(async (employeeId, firstName, lastName) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/${employeeId}/name`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ firstName, lastName })
+      })
+      if (!res.ok) {
+        let msg = `Server error ${res.status}`
+        try { const d = await res.json(); msg = d.error || msg } catch {}
+        return { success: false, error: msg }
+      }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err?.message || 'Network error — could not reach server' }
+    }
+  }, [token])
+
   const createMember = useCallback(async (email, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
@@ -530,7 +549,8 @@ export const AuthProvider = ({ children }) => {
       deleteEmployee,
       getEmployees,
       createEmployeeAccount,
-      resetEmployeePassword
+      resetEmployeePassword,
+      updateEmployeeName
     }}>
       {children}
     </AuthContext.Provider>

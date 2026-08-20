@@ -28,7 +28,7 @@ function EmployeeDashboard() {
     currentUser, getAllApplications, syncSignatureStatuses, testDropboxSign, logout,
     createMemberAccount, resetMemberPassword,
     getMembers, deleteMember,
-    getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee
+    getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -80,16 +80,20 @@ function EmployeeDashboard() {
   const [memberDeletePending, setMemberDeletePending] = useState(null) // { id, email }
   const [memberDeleteError, setMemberDeleteError] = useState('')
 
-  // Employee delete (in Employee Accounts modal)
+  // Employee Accounts tab
+  const [employees, setEmployees] = useState([])
+  const [employeesLoading, setEmployeesLoading] = useState(false)
   const [employeeDeletePending, setEmployeeDeletePending] = useState(null) // { id, email }
   const [employeeDeleteError, setEmployeeDeleteError] = useState('')
 
-  // Employee accounts
-  const [showEmployeeAccounts, setShowEmployeeAccounts] = useState(false)
-  const [employees, setEmployees] = useState([])
-  const [employeesLoading, setEmployeesLoading] = useState(false)
+  // Edit employee name (inline)
+  const [editingEmployeeId, setEditingEmployeeId] = useState(null)
+  const [editFirstName, setEditFirstName] = useState('')
+  const [editLastName, setEditLastName] = useState('')
+  const [editNameLoading, setEditNameLoading] = useState(false)
+  const [editNameError, setEditNameError] = useState('')
 
-  // Create employee (embedded in Employee Accounts modal)
+  // Create employee (in Employee Accounts tab)
   const [newEmployeeFirstName, setNewEmployeeFirstName] = useState('')
   const [newEmployeeLastName, setNewEmployeeLastName] = useState('')
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('')
@@ -113,8 +117,16 @@ function EmployeeDashboard() {
     setMembersLoading(false)
   }
 
+  const loadEmployees = async () => {
+    setEmployeesLoading(true)
+    const data = await getEmployees()
+    setEmployees(data || [])
+    setEmployeesLoading(false)
+  }
+
   useEffect(() => {
     if (activeTab === 'members') loadMembers()
+    if (activeTab === 'employees') loadEmployees()
   }, [activeTab])
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -340,27 +352,37 @@ function EmployeeDashboard() {
     setDsTestResult(null)
   }
 
-  // ── Employee accounts ────────────────────────────────────────────────────────
+  // ── Edit employee name ───────────────────────────────────────────────────────
 
-  const handleShowEmployeeAccounts = async () => {
-    setShowEmployeeAccounts(true)
-    setEmployeesLoading(true)
-    const data = await getEmployees()
-    setEmployees(data || [])
-    setEmployeesLoading(false)
+  const handleEditEmployeeName = (emp) => {
+    setEditingEmployeeId(emp.Id)
+    setEditFirstName(emp.FirstName || '')
+    setEditLastName(emp.LastName || '')
+    setEditNameError('')
   }
 
-  const handleCloseEmployeeAccounts = () => {
-    setShowEmployeeAccounts(false)
-    setEmployees([])
-    setNewEmployeeEmail('')
-    setNewEmployeePassword('')
-    setNewEmployeeConfirm('')
-    setCreateEmployeeError('')
-    setCreateEmployeeSuccess('')
-    setCreateEmployeeLoading(false)
-    setEmployeeDeletePending(null)
-    setEmployeeDeleteError('')
+  const handleCancelEdit = () => {
+    setEditingEmployeeId(null)
+    setEditFirstName('')
+    setEditLastName('')
+    setEditNameError('')
+  }
+
+  const handleSaveEmployeeName = async (id) => {
+    if (!editFirstName.trim() || !editLastName.trim()) {
+      setEditNameError('First and last name are required')
+      return
+    }
+    setEditNameLoading(true)
+    const result = await updateEmployeeName(id, editFirstName.trim(), editLastName.trim())
+    setEditNameLoading(false)
+    if (result.success) {
+      setEditingEmployeeId(null)
+      setEditNameError('')
+      await loadEmployees()
+    } else {
+      setEditNameError(result.error)
+    }
   }
 
   // ── Delete member ────────────────────────────────────────────────────────────
@@ -384,8 +406,7 @@ function EmployeeDashboard() {
     if (result.success) {
       setEmployeeDeletePending(null)
       setEmployeeDeleteError('')
-      const data = await getEmployees()
-      setEmployees(data || [])
+      await loadEmployees()
     } else {
       setEmployeeDeleteError(result.error)
       setEmployeeDeletePending(null)
@@ -424,8 +445,7 @@ function EmployeeDashboard() {
       setNewEmployeeEmail('')
       setNewEmployeePassword('')
       setNewEmployeeConfirm('')
-      const data = await getEmployees()
-      setEmployees(data || [])
+      await loadEmployees()
     } else {
       setCreateEmployeeError(result.error)
     }
@@ -452,9 +472,6 @@ function EmployeeDashboard() {
           </div>
           <div className="header-right">
             <div className="user-info">
-              <button className="create-member-button" onClick={handleShowEmployeeAccounts} style={{ background: '#495057' }}>
-                Employee Accounts
-              </button>
               <button className="create-member-button" onClick={() => setShowDsTest(true)} style={{ background: '#6c757d' }}>
                 Test Dropbox Sign
               </button>
@@ -477,6 +494,12 @@ function EmployeeDashboard() {
           onClick={() => setActiveTab('members')}
         >
           Members
+        </button>
+        <button
+          className={`tab-button${activeTab === 'employees' ? ' tab-button--active' : ''}`}
+          onClick={() => setActiveTab('employees')}
+        >
+          Employee Accounts
         </button>
       </nav>
 
@@ -739,6 +762,174 @@ function EmployeeDashboard() {
           )}
           </>}
 
+          {/* ── Employee Accounts tab ─────────────────────────────────────── */}
+          {activeTab === 'employees' && <>
+          <div className="content-header">
+            <h2>Employee Accounts</h2>
+            <div className="content-header-right">
+              <p className="application-count">
+                {employeesLoading ? 'Loading...' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
+              </p>
+              <button className="refresh-button" onClick={loadEmployees} disabled={employeesLoading}>
+                {employeesLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {employeeDeleteError && (
+            <div className="member-delete-error">
+              {employeeDeleteError}
+              <button style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontWeight: 600 }} onClick={() => setEmployeeDeleteError('')}>✕</button>
+            </div>
+          )}
+          {editNameError && (
+            <div className="member-delete-error">
+              {editNameError}
+              <button style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontWeight: 600 }} onClick={() => setEditNameError('')}>✕</button>
+            </div>
+          )}
+
+          {employeesLoading ? (
+            <div className="empty-state"><p>Loading employees...</p></div>
+          ) : employees.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">👤</div>
+              <h3>No Employee Accounts</h3>
+              <p>No employee accounts found.</p>
+            </div>
+          ) : (
+            <div className="applications-table-wrapper">
+              <table className="applications-table">
+                <thead>
+                  <tr>
+                    <th><span className="th-label">Name</span></th>
+                    <th><span className="th-label">Email</span></th>
+                    <th><span className="th-label">Created</span></th>
+                    <th className="action-column"><span className="th-label">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map(emp => {
+                    const isAdmin = emp.Email.toLowerCase() === 'admin@ghraonline.com'
+                    const isSelf = emp.Email.toLowerCase() === currentUser?.email?.toLowerCase()
+                    const isEditing = editingEmployeeId === emp.Id
+                    const displayName = [emp.FirstName, emp.LastName].filter(Boolean).join(' ')
+                    return (
+                      <tr key={emp.Id}>
+                        <td>
+                          {isEditing ? (
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <input
+                                type="text"
+                                value={editFirstName}
+                                onChange={(e) => setEditFirstName(e.target.value)}
+                                placeholder="First name"
+                                style={{ width: 100, padding: '3px 6px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4 }}
+                                maxLength={100}
+                              />
+                              <input
+                                type="text"
+                                value={editLastName}
+                                onChange={(e) => setEditLastName(e.target.value)}
+                                placeholder="Last name"
+                                style={{ width: 100, padding: '3px 6px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4 }}
+                                maxLength={100}
+                              />
+                              <button className="reset-pwd-button" onClick={() => handleSaveEmployeeName(emp.Id)} disabled={editNameLoading}>
+                                {editNameLoading ? '...' : 'Save'}
+                              </button>
+                              <button className="delete-button" onClick={handleCancelEdit} disabled={editNameLoading} style={{ background: '#6c757d' }}>
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <span>
+                              {displayName || <span style={{ color: '#aaa', fontStyle: 'italic' }}>No name set</span>}
+                              {isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#ffc107', color: '#333', borderRadius: 3, padding: '1px 5px' }}>protected</span>}
+                              {isSelf && !isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#cce5ff', color: '#004085', borderRadius: 3, padding: '1px 5px' }}>you</span>}
+                            </span>
+                          )}
+                        </td>
+                        <td className="email-cell">{emp.Email}</td>
+                        <td>{formatDate(emp.CreatedAt)}</td>
+                        <td className="action-cell">
+                          {!isEditing && (
+                            <button className="reset-pwd-button" style={{ background: '#6c757d' }} onClick={() => handleEditEmployeeName(emp)}>
+                              Edit Name
+                            </button>
+                          )}
+                          {!isAdmin && !isEditing && (
+                            <button className="reset-pwd-button" onClick={() => openResetModal(emp, 'employee')}>
+                              Reset PWD
+                            </button>
+                          )}
+                          {!isAdmin && !isSelf && !isEditing && (
+                            employeeDeletePending?.id === emp.Id ? (
+                              <span className="delete-confirm-inline">
+                                <span>Delete?</span>
+                                <button className="delete-confirm-yes" onClick={() => handleDeleteEmployee(emp.Id)}>Yes</button>
+                                <button className="delete-confirm-cancel" onClick={() => setEmployeeDeletePending(null)}>Cancel</button>
+                              </span>
+                            ) : (
+                              <button className="delete-button" onClick={() => setEmployeeDeletePending({ id: emp.Id, email: emp.Email })}>
+                                Delete
+                              </button>
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid #dee2e6', margin: '24px 0 16px' }} />
+
+          <p style={{ fontWeight: 600, fontSize: 14, margin: '0 0 12px', color: '#343a40' }}>Create New Employee</p>
+          <form onSubmit={handleCreateEmployeeSubmit} style={{ maxWidth: 540 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group">
+                <label>First Name *</label>
+                <input type="text" value={newEmployeeFirstName} onChange={(e) => setNewEmployeeFirstName(e.target.value)}
+                  className="form-input" placeholder="First Name" maxLength={100} />
+              </div>
+              <div className="form-group">
+                <label>Last Name *</label>
+                <input type="text" value={newEmployeeLastName} onChange={(e) => setNewEmployeeLastName(e.target.value)}
+                  className="form-input" placeholder="Last Name" maxLength={100} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Email Address *</label>
+              <input type="email" value={newEmployeeEmail} onChange={(e) => setNewEmployeeEmail(e.target.value)}
+                className="form-input" placeholder="employee@example.com" maxLength={100} />
+            </div>
+            <div className="form-group">
+              <label>Password *</label>
+              <PasswordInput value={newEmployeePassword} onChange={(e) => setNewEmployeePassword(e.target.value)}
+                className="form-input" placeholder="Min 8 characters" />
+              <PasswordStrengthChecklist password={newEmployeePassword} />
+            </div>
+            <div className="form-group">
+              <label>Confirm Password *</label>
+              <PasswordInput value={newEmployeeConfirm} onChange={(e) => setNewEmployeeConfirm(e.target.value)}
+                className="form-input" placeholder="Repeat password" />
+            </div>
+            <p style={{ fontSize: 12, color: '#7f8c8d', margin: '0 0 8px' }}>
+              Employee will be required to change this password on first login.
+            </p>
+            {createEmployeeError && <div className="modal-error">{createEmployeeError}</div>}
+            {createEmployeeSuccess && <div className="modal-success">{createEmployeeSuccess}</div>}
+            <div className="modal-actions">
+              <button type="submit" className="modal-submit-button" disabled={createEmployeeLoading}>
+                {createEmployeeLoading ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </form>
+          </>}
+
         </div>
       </main>
 
@@ -843,132 +1034,6 @@ function EmployeeDashboard() {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ── Employee accounts modal (list + create) ─────────────────────── */}
-      {showEmployeeAccounts && (
-        <div className="modal-overlay" onClick={handleCloseEmployeeAccounts}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="modal-header">
-              <h3>Employee Accounts</h3>
-              <button className="modal-close" onClick={handleCloseEmployeeAccounts}>✕</button>
-            </div>
-            <div className="modal-form">
-
-              {/* ── Existing accounts list ── */}
-              {employeesLoading ? (
-                <p style={{ color: '#666', fontSize: 14 }}>Loading...</p>
-              ) : employees.length === 0 ? (
-                <p style={{ color: '#888', fontSize: 14, margin: 0 }}>No employee accounts yet.</p>
-              ) : (
-                <>
-                {employeeDeleteError && (
-                  <div className="member-delete-error" style={{ marginBottom: 10 }}>
-                    {employeeDeleteError}
-                    <button style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: '#c0392b', fontWeight: 600 }} onClick={() => setEmployeeDeleteError('')}>✕</button>
-                  </div>
-                )}
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #dee2e6' }}>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#495057' }}>Email</th>
-                      <th style={{ textAlign: 'left', padding: '6px 8px', color: '#495057' }}>Created</th>
-                      <th style={{ padding: '6px 8px' }}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {employees.map(emp => {
-                      const isAdmin = emp.Email.toLowerCase() === 'admin@ghraonline.com'
-                      const isSelf = emp.Email.toLowerCase() === currentUser?.email?.toLowerCase()
-                      return (
-                        <tr key={emp.Id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                          <td style={{ padding: '8px' }}>
-                            {emp.Email}
-                            {isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#ffc107', color: '#333', borderRadius: 3, padding: '1px 5px' }}>protected</span>}
-                            {isSelf && !isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#cce5ff', color: '#004085', borderRadius: 3, padding: '1px 5px' }}>you</span>}
-                          </td>
-                          <td style={{ padding: '8px', color: '#6c757d' }}>{formatDate(emp.CreatedAt)}</td>
-                          <td style={{ padding: '8px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {!isAdmin && (
-                              <button
-                                className="reset-pwd-button"
-                                onClick={() => { handleCloseEmployeeAccounts(); openResetModal(emp, 'employee') }}
-                              >
-                                Reset PWD
-                              </button>
-                            )}
-                            {!isAdmin && !isSelf && (
-                              employeeDeletePending?.id === emp.Id ? (
-                                <span className="delete-confirm-inline">
-                                  <span>Delete?</span>
-                                  <button className="delete-confirm-yes" onClick={() => handleDeleteEmployee(emp.Id)}>Yes</button>
-                                  <button className="delete-confirm-cancel" onClick={() => setEmployeeDeletePending(null)}>Cancel</button>
-                                </span>
-                              ) : (
-                                <button className="delete-button" onClick={() => setEmployeeDeletePending({ id: emp.Id, email: emp.Email })}>
-                                  Delete
-                                </button>
-                              )
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-                </>
-              )}
-
-              {/* ── Divider ── */}
-              <div style={{ borderTop: '1px solid #dee2e6', margin: '20px 0 16px' }} />
-
-              {/* ── Create new employee form ── */}
-              <p style={{ fontWeight: 600, fontSize: 14, margin: '0 0 12px', color: '#343a40' }}>Create New Employee</p>
-              <form onSubmit={handleCreateEmployeeSubmit}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div className="form-group">
-                    <label>First Name *</label>
-                    <input type="text" value={newEmployeeFirstName} onChange={(e) => setNewEmployeeFirstName(e.target.value)}
-                      className="form-input" placeholder="First Name" maxLength={100} />
-                  </div>
-                  <div className="form-group">
-                    <label>Last Name *</label>
-                    <input type="text" value={newEmployeeLastName} onChange={(e) => setNewEmployeeLastName(e.target.value)}
-                      className="form-input" placeholder="Last Name" maxLength={100} />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Email Address *</label>
-                  <input type="email" value={newEmployeeEmail} onChange={(e) => setNewEmployeeEmail(e.target.value)}
-                    className="form-input" placeholder="employee@example.com" maxLength={100} />
-                </div>
-                <div className="form-group">
-                  <label>Password *</label>
-                  <PasswordInput value={newEmployeePassword} onChange={(e) => setNewEmployeePassword(e.target.value)}
-                    className="form-input" placeholder="Min 8 characters" />
-                  <PasswordStrengthChecklist password={newEmployeePassword} />
-                </div>
-                <div className="form-group">
-                  <label>Confirm Password *</label>
-                  <PasswordInput value={newEmployeeConfirm} onChange={(e) => setNewEmployeeConfirm(e.target.value)}
-                    className="form-input" placeholder="Repeat password" />
-                </div>
-                <p style={{ fontSize: 12, color: '#7f8c8d', margin: '0 0 8px' }}>
-                  Employee will be required to change this password on first login.
-                </p>
-                {createEmployeeError && <div className="modal-error">{createEmployeeError}</div>}
-                {createEmployeeSuccess && <div className="modal-success">{createEmployeeSuccess}</div>}
-                <div className="modal-actions">
-                  <button type="submit" className="modal-submit-button" disabled={createEmployeeLoading}>
-                    {createEmployeeLoading ? 'Creating...' : 'Create Account'}
-                  </button>
-                  <button type="button" className="modal-cancel-button" onClick={handleCloseEmployeeAccounts}>Close</button>
-                </div>
-              </form>
-
-            </div>
           </div>
         </div>
       )}

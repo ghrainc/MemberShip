@@ -7,10 +7,11 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
-require('dotenv').config()
+// Explicit path so this always loads server/.env regardless of the CWD the process was started from
+require('dotenv').config({ path: require('path').join(__dirname, '.env') })
 
 // Fail fast if required secrets are absent — no silent fallbacks to weak defaults
-const REQUIRED_ENV = ['JWT_SECRET', 'DB_SERVER', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DROPBOX_SIGN_API_KEY', 'SSN_ENCRYPTION_KEY']
+const REQUIRED_ENV = ['JWT_SECRET', 'DB_SERVER', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DROPBOX_SIGN_API_KEY', 'SSN_ENCRYPTION_KEY', 'DS_TEMPLATE_ID', 'DROPBOX_SIGN_REFERENCES_TEMPLATE_ID']
 const missingEnv = REQUIRED_ENV.filter(k => !process.env[k])
 if (missingEnv.length > 0) {
   console.error('ERROR: Missing required environment variables:', missingEnv.join(', '))
@@ -335,8 +336,8 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     // Approving staff fields — pre-filled from the employee who approved
     cf('StaffFirstName', staffFirstName || null),
     cf('StaffLastName',  staffLastName  || null),
-    // DateApproved: send as MM/DD/YYYY text; confirm format matches template field type if it changes
-    cf('DateApproved', new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })),
+    // DateApproved: ISO YYYY-MM-DD — accepted by both DS text fields and date-type fields
+    cf('DateApproved', new Date().toISOString().split('T')[0]),
 
     // Board signer names — pre-filled into the document from our DB values
     cf('VerificationFirstName', boardSigners?.verification?.firstName),
@@ -512,7 +513,7 @@ const dbConfig = {
   connectionTimeout: 5000,
   requestTimeout: 5000,
   options: {
-    encrypt: true,
+    encrypt: false,
     // trustServerCertificate allows self-signed/internal certs; traffic is still encrypted.
     // Set to false and supply a CA cert for full certificate validation in a public cloud environment.
     trustServerCertificate: true
@@ -916,8 +917,28 @@ app.get('/api/employees', authMiddleware, async (req, res) => {
   try {
     const db = await getPool()
     const result = await db.request()
-      .query(`SELECT Id, Email, CreatedAt FROM Users WHERE Role = 'employee' ORDER BY CreatedAt DESC`)
+      .query(`SELECT Id, Email, FirstName, LastName, CreatedAt FROM Users WHERE Role = 'employee' ORDER BY CreatedAt DESC`)
     res.json(result.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PATCH /api/employees/:id/name — update employee first/last name (name editing is lower-risk; admin account allowed)
+app.patch('/api/employees/:id/name', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { firstName, lastName } = req.body
+  if (!firstName?.trim() || !lastName?.trim()) return res.status(400).json({ error: 'First name and last name are required' })
+  try {
+    const db = await getPool()
+    const existing = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id, Email FROM Users WHERE Id = @id AND Role = 'employee'`)
+    if (!existing.recordset.length) return res.status(404).json({ error: 'Employee account not found' })
+    await db.request()
+      .input('id',        sql.Int,      req.params.id)
+      .input('firstName', sql.NVarChar, firstName.trim())
+      .input('lastName',  sql.NVarChar, lastName.trim())
+      .query('UPDATE Users SET FirstName = @firstName, LastName = @lastName WHERE Id = @id')
+    res.json({ success: true })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -1303,6 +1324,9 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
       try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
       const { UserEmail } = existing.recordset[0]
 
+      if (!req.user.firstName || !req.user.lastName) {
+        console.warn(`[APPROVAL WARNING] Employee ${req.user.email} has no first/last name set — StaffFirstName/StaffLastName will be blank in the DS document. Update the employee name in Employee Accounts.`)
+      }
       try {
         const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
           await sendSignatureRequest(fd, UserEmail, boardSigners, req.user.email, req.user.firstName, req.user.lastName)
