@@ -1,4 +1,5 @@
 import { ghraFuelsApplies } from './fuelUtils'
+import { US_STATES } from './usStates'
 
 // HTML-escapes a value before interpolating it into the PDF template.
 const esc = (s) => String(s == null ? '' : s)
@@ -7,6 +8,9 @@ const esc = (s) => String(s == null ? '' : s)
   .replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#x27;')
+
+const STATE_CODE_MAP = Object.fromEntries(US_STATES.map(s => [s.code, s.name]))
+const stateName = (code) => STATE_CODE_MAP[code] || code || ''
 
 export const generateApplicationPDF = (application) => {
   const { storeName, submittedDate, id, fullData = {} } = application
@@ -367,11 +371,29 @@ export const generateApplicationPDF = (application) => {
           ${data.authorizedRepAddress ? `
           <div class="info-grid full">
             <div class="info-item">
-              <span class="info-label">Auth Rep Address</span>
+              <span class="info-label">Auth Rep Street Address</span>
               <span class="info-value">${esc(data.authorizedRepAddress)}</span>
             </div>
           </div>
           ` : ''}
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Auth Rep City</span>
+              <span class="info-value">${esc(data.authorizedRepCity) || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Auth Rep State</span>
+              <span class="info-value">${esc(stateName(data.authorizedRepState)) || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Auth Rep Zip Code</span>
+              <span class="info-value">${esc(data.authorizedRepZip) || '-'}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Auth Rep County</span>
+              <span class="info-value">${esc(data.authorizedRepCounty) || '-'}</span>
+            </div>
+          </div>
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Previously a GHRA Member</span>
@@ -402,7 +424,7 @@ export const generateApplicationPDF = (application) => {
             </div>
             <div class="info-item">
               <span class="info-label">State</span>
-              <span class="info-value">${esc(data.storeState) || '-'}</span>
+              <span class="info-value">${esc(stateName(data.storeState)) || '-'}</span>
             </div>
             <div class="info-item">
               <span class="info-label">Zip Code</span>

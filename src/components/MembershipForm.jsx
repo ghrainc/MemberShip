@@ -108,6 +108,10 @@ const EMPTY_FORM_DATA = {
   authorizedRepLastName: '',
   authorizedRepTitle: '',
   authorizedRepAddress: '',
+  authorizedRepCity: '',
+  authorizedRepState: '',
+  authorizedRepZip: '',
+  authorizedRepCounty: '',
   reference1Email: '',
   reference1Company: '',
   reference1GhraNumber: '',
@@ -177,6 +181,14 @@ function computeStepErrors(step, data) {
       if (!(data.salesTaxId || '').trim()) errs.salesTaxId = 'Sales Tax ID is required'
       if (!(data.authorizedRepFirstName || '').trim()) errs.authorizedRepFirstName = 'Authorized Representative First Name is required'
       if (!(data.authorizedRepLastName || '').trim()) errs.authorizedRepLastName = 'Authorized Representative Last Name is required'
+      if (!(data.authorizedRepCity || '').trim()) errs.authorizedRepCity = 'City is required'
+      if (!(data.authorizedRepState || '').trim()) errs.authorizedRepState = 'State is required'
+      if (!(data.authorizedRepZip || '').trim()) {
+        errs.authorizedRepZip = 'Zip Code is required'
+      } else if (!/^\d{5}(-\d{4})?$/.test((data.authorizedRepZip || '').trim())) {
+        errs.authorizedRepZip = 'Enter a valid zip code (12345 or 12345-6789)'
+      }
+      if (!(data.authorizedRepCounty || '').trim()) errs.authorizedRepCounty = 'County is required'
       break
 
     case 3:

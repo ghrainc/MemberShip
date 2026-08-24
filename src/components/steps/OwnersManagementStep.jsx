@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { ghraFuelsApplies } from '../../utils/fuelUtils'
+import StateSelect from '../StateSelect'
 
 function formatSSN(raw) {
   const d = raw.replace(/\D/g, '').slice(0, 9)
@@ -147,13 +148,10 @@ function OwnersManagementStep({
             <div className="owners-row-item">
               <div className="form-group">
                 <label>State Issued</label>
-                <input
-                  type="text"
+                <StateSelect
                   value={owner.stateIssued}
                   onChange={(e) => handleOwnerChange(index, 'stateIssued', e.target.value)}
-                  className="form-input"
-                  placeholder="State"
-                  maxLength={50}
+                  className="form-select"
                 />
               </div>
             </div>

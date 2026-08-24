@@ -1,4 +1,5 @@
 import { ghraFuelsApplies } from '../../utils/fuelUtils'
+import StateSelect from '../StateSelect'
 
 function AchAuthorizationStep({
   formData,
@@ -174,14 +175,11 @@ function AchAuthorizationStep({
                   </div>
                   <div className="form-group">
                     <label htmlFor={`bankState-${account.id}`}>State</label>
-                    <input
-                      type="text"
+                    <StateSelect
                       id={`bankState-${account.id}`}
                       value={account.bankState}
                       onChange={(e) => handleBankInfoChange(account.id, 'bankState', e.target.value)}
-                      className="form-input"
-                      placeholder="State"
-                      maxLength={50}
+                      className="form-select"
                     />
                   </div>
                   <div className="form-group">

@@ -1,3 +1,5 @@
+import StateSelect from '../StateSelect'
+
 // Helpers
 const numericInput = (handleInputChange, name) => (e) => {
   const value = e.target.value.replace(/\D/g, '')
@@ -190,7 +192,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="authorizedRepAddress">Address</label>
+          <label htmlFor="authorizedRepAddress">Street Address</label>
           <input
             type="text"
             id="authorizedRepAddress"
@@ -201,6 +203,67 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
             placeholder="Street address"
             maxLength={150}
           />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="authorizedRepCity">City *</label>
+            <input
+              type="text"
+              id="authorizedRepCity"
+              name="authorizedRepCity"
+              value={formData.authorizedRepCity || ''}
+              onChange={handleInputChange}
+              className={`form-input ${errors.authorizedRepCity ? 'input-error' : ''}`}
+              placeholder="City"
+              maxLength={100}
+            />
+            {errors.authorizedRepCity && <span className="error-text">{errors.authorizedRepCity}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="authorizedRepState">State *</label>
+            <StateSelect
+              id="authorizedRepState"
+              name="authorizedRepState"
+              value={formData.authorizedRepState || ''}
+              onChange={handleInputChange}
+              className={`form-select ${errors.authorizedRepState ? 'input-error' : ''}`}
+            />
+            {errors.authorizedRepState && <span className="error-text">{errors.authorizedRepState}</span>}
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="authorizedRepZip">Zip Code *</label>
+            <input
+              type="text"
+              id="authorizedRepZip"
+              name="authorizedRepZip"
+              value={formData.authorizedRepZip || ''}
+              onChange={handleInputChange}
+              className={`form-input ${errors.authorizedRepZip ? 'input-error' : ''}`}
+              placeholder="12345 or 12345-6789"
+              maxLength={10}
+            />
+            {errors.authorizedRepZip && <span className="error-text">{errors.authorizedRepZip}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="authorizedRepCounty">County *</label>
+            <input
+              type="text"
+              id="authorizedRepCounty"
+              name="authorizedRepCounty"
+              value={formData.authorizedRepCounty || ''}
+              onChange={handleInputChange}
+              className={`form-input ${errors.authorizedRepCounty ? 'input-error' : ''}`}
+              placeholder="e.g. Harris"
+              maxLength={100}
+            />
+            {errors.authorizedRepCounty && <span className="error-text">{errors.authorizedRepCounty}</span>}
+          </div>
         </div>
       </div>
 

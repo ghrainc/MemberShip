@@ -1,3 +1,5 @@
+import StateSelect from '../StateSelect'
+
 // Helper: numeric-only onChange for fields using handleInputChange
 const numericInput = (handleInputChange, name) => (e) => {
   const value = e.target.value.replace(/\D/g, '')
@@ -425,15 +427,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
           </div>
           <div className="form-group">
             <label htmlFor="storeState">State *</label>
-            <input
-              type="text"
+            <StateSelect
               id="storeState"
               name="storeState"
               value={formData.storeState}
               onChange={handleInputChange}
-              className={`form-input ${errors.storeState ? 'input-error' : ''}`}
-              placeholder="State"
-              maxLength={50}
+              className={`form-select ${errors.storeState ? 'input-error' : ''}`}
             />
             {errors.storeState && <span className="error-text">{errors.storeState}</span>}
           </div>
@@ -512,15 +511,12 @@ function StoreInformationStep({ formData, errors, handleInputChange, copyStoreTo
           </div>
           <div className="form-group">
             <label htmlFor="mailingState">State *</label>
-            <input
-              type="text"
+            <StateSelect
               id="mailingState"
               name="mailingState"
               value={formData.mailingState}
               onChange={handleInputChange}
-              className={`form-input ${errors.mailingState ? 'input-error' : ''}`}
-              placeholder="State"
-              maxLength={50}
+              className={`form-select ${errors.mailingState ? 'input-error' : ''}`}
             />
             {errors.mailingState && <span className="error-text">{errors.mailingState}</span>}
           </div>

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
+import { US_STATES } from '../utils/usStates'
 import ProgressIndicator from './ProgressIndicator'
 import ApprovalDialog from './ApprovalDialog'
 import '../styles/ViewApplication.css'
@@ -60,6 +61,12 @@ const YES_NO_UPPER = { 'yes': 'YES', 'no': 'NO' }
 function lbl(map, value) {
   if (!value) return null
   return map[value] || value
+}
+
+const STATE_CODE_MAP = Object.fromEntries(US_STATES.map(s => [s.code, s.name]))
+function stateName(value) {
+  if (!value) return null
+  return STATE_CODE_MAP[value] || value
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,8 +232,14 @@ function ViewApplication() {
                 <InfoField label="Last Name" value={data.authorizedRepLastName} />
               </InfoRow>
               {data.authorizedRepAddress && (
-                <InfoRow><InfoField label="Address" value={data.authorizedRepAddress} /></InfoRow>
+                <InfoRow><InfoField label="Street Address" value={data.authorizedRepAddress} /></InfoRow>
               )}
+              <InfoRow>
+                <InfoField label="City" value={data.authorizedRepCity} />
+                <InfoField label="State" value={stateName(data.authorizedRepState)} />
+                <InfoField label="Zip Code" value={data.authorizedRepZip} />
+                <InfoField label="County" value={data.authorizedRepCounty} />
+              </InfoRow>
             </Section>
             <Section title="Previous Membership">
               <InfoRow>
@@ -310,7 +323,7 @@ function ViewApplication() {
               <InfoRow><InfoField label="Store Address" value={data.storeAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.storeCity} />
-                <InfoField label="State" value={data.storeState} />
+                <InfoField label="State" value={stateName(data.storeState)} />
                 <InfoField label="Zip Code" value={data.storeZip} />
                 <InfoField label="County" value={data.storeCounty} />
               </InfoRow>
@@ -319,7 +332,7 @@ function ViewApplication() {
               <InfoRow><InfoField label="Mailing Address" value={data.mailingAddress} /></InfoRow>
               <InfoRow>
                 <InfoField label="City" value={data.mailingCity} />
-                <InfoField label="State" value={data.mailingState} />
+                <InfoField label="State" value={stateName(data.mailingState)} />
                 <InfoField label="Zip Code" value={data.mailingZip} />
                 <InfoField label="County" value={data.mailingCounty} />
               </InfoRow>
@@ -353,7 +366,7 @@ function ViewApplication() {
                 </InfoRow>
                 <InfoRow>
                   <InfoField label="Driver License #" value={owner.driverLicense} />
-                  <InfoField label="State Issued" value={owner.stateIssued} />
+                  <InfoField label="State Issued" value={stateName(owner.stateIssued)} />
                   {ghraFuelsApplies(data) && owner.ssn && (
                     <InfoField label="SSN" value={owner.ssn} />
                   )}
