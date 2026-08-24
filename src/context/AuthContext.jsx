@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'//'http://ghra-memb:3001'
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
