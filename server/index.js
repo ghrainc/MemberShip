@@ -7,6 +7,7 @@ const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
+const { ZipArchive } = require('archiver')
 // Explicit path so this always loads server/.env regardless of the CWD the process was started from
 require('dotenv').config({ path: require('path').join(__dirname, '.env') })
 
@@ -111,7 +112,7 @@ const DROPBOX_SIGN_TEMPLATE_ID            = process.env.DS_TEMPLATE_ID
 const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
 const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
-// boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email } }
+// boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email }, membershipAdmin: { firstName, lastName, email } }
 // reviewerEmail = employee who approved the application (used in the signing request message)
 // staffFirstName / staffLastName = approving employee's name pre-filled into the document
 async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail, staffFirstName, staffLastName) {
@@ -126,6 +127,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     DROPBOX_SIGN_SIGNER_ROLE,
     'Verification: Elected Board Signer',
     'Approved: Elected Board Signer',
+    'MembershipAdmin',
   ]
   const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName', 'StaffFirstName', 'StaffLastName', 'DateApproved']
   const templateApi = new TemplateApi()
@@ -356,9 +358,14 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
   approvedSigner.emailAddress = boardSigners.approved.email
   approvedSigner.name         = [boardSigners.approved.firstName, boardSigners.approved.lastName].filter(Boolean).join(' ')
 
+  const adminSigner = new SubSignatureRequestTemplateSigner()
+  adminSigner.role         = 'MembershipAdmin'
+  adminSigner.emailAddress = boardSigners.membershipAdmin.email
+  adminSigner.name         = [boardSigners.membershipAdmin.firstName, boardSigners.membershipAdmin.lastName].filter(Boolean).join(' ')
+
   const request = new SignatureRequestSendWithTemplateRequest()
   request.templateIds  = [DROPBOX_SIGN_TEMPLATE_ID]
-  request.signers      = [signer, verificationSigner, approvedSigner]
+  request.signers      = [signer, verificationSigner, approvedSigner, adminSigner]
   request.customFields = customFields
   request.testMode     = process.env.DS_TEST_MODE === 'true'
   if (reviewerEmail) {
@@ -367,14 +374,16 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
   }
 
   const response = await api.signatureRequestSendWithTemplate(request)
-  const sr   = response.body.signatureRequest
-  const sigs = sr.signatures || []
-  const vSig = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
-  const aSig = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+  const sr     = response.body.signatureRequest
+  const sigs   = sr.signatures || []
+  const vSig   = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
+  const aSig   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+  const admSig = sigs.find(s => s.signerRole === 'MembershipAdmin')
   return {
     signatureRequestId:      sr.signatureRequestId,
-    verificationSignatureId: vSig?.signatureId || null,
-    approvedSignatureId:     aSig?.signatureId || null,
+    verificationSignatureId: vSig?.signatureId   || null,
+    approvedSignatureId:     aSig?.signatureId   || null,
+    adminSignatureId:        admSig?.signatureId || null,
   }
 }
 
@@ -652,6 +661,48 @@ async function ensureSchema() {
           ALTER TABLE Applications ADD ${col} ${type} NULL
       `)
     }
+    // GHRA membership number columns
+    const ghraCols = [
+      ['GhraNumber',          'NVARCHAR(50)'],
+      ['GhraNumberSource',    'NVARCHAR(20)'],   // 'manual' | 'ds'
+      ['GhraNumberUpdatedBy', 'NVARCHAR(255)'],
+      ['GhraNumberUpdatedAt', 'DATETIME'],
+      ['GhraNumberIssue',     'NVARCHAR(255)'],
+    ]
+    for (const [col, type] of ghraCols) {
+      await db.request().query(`
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.columns
+          WHERE object_id = OBJECT_ID('Applications') AND name = '${col}'
+        )
+          ALTER TABLE Applications ADD ${col} ${type} NULL
+      `)
+    }
+    // MembershipAdmin (4th DS signer) columns
+    const adminCols = [
+      ['AdminSignerFirstName', 'NVARCHAR(100)'],
+      ['AdminSignerLastName',  'NVARCHAR(100)'],
+      ['AdminSignerEmail',     'NVARCHAR(255)'],
+      ['AdminSignatureId',     'NVARCHAR(255)'],
+      ['AdminSignatureStatus', 'NVARCHAR(50)'],
+      ['AdminSignedAt',        'DATETIME'],
+    ]
+    for (const [col, type] of adminCols) {
+      await db.request().query(`
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.columns
+          WHERE object_id = OBJECT_ID('Applications') AND name = '${col}'
+        )
+          ALTER TABLE Applications ADD ${col} ${type} NULL
+      `)
+    }
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'AchAuthorizationDate'
+      )
+        ALTER TABLE Applications ADD AchAuthorizationDate DATETIME NULL
+    `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
   }
@@ -1080,6 +1131,8 @@ app.post('/api/applications/submit', authMiddleware, async (req, res) => {
     const storeName = formData.memberName || formData.storeNameCertification || ''
     const storeAddress = [formData.storeAddress, formData.storeCity, formData.storeZip]
       .filter(Boolean).join(', ')
+    const hasAch = Object.values(formData?.achInfoFor || {}).some(Boolean)
+    const achDate = hasAch ? new Date() : null
 
     if (applicationId) {
       await db.request()
@@ -1088,12 +1141,14 @@ app.post('/api/applications/submit', authMiddleware, async (req, res) => {
         .input('formData', sql.NVarChar(sql.MAX), JSON.stringify(formData))
         .input('storeName', sql.NVarChar, storeName)
         .input('storeAddress', sql.NVarChar, storeAddress)
+        .input('achDate', sql.DateTime, achDate)
         .query(`UPDATE Applications
                 SET Status = 'submitted',
                     FormData = @formData,
                     StoreName = @storeName,
                     StoreAddress = @storeAddress,
-                    UpdatedAt = GETDATE()
+                    UpdatedAt = GETDATE(),
+                    AchAuthorizationDate = CASE WHEN @achDate IS NOT NULL AND AchAuthorizationDate IS NULL THEN @achDate ELSE AchAuthorizationDate END
                 WHERE Id = @id AND UserEmail = @email`)
       res.json({ applicationId })
     } else {
@@ -1102,9 +1157,10 @@ app.post('/api/applications/submit', authMiddleware, async (req, res) => {
         .input('formData', sql.NVarChar(sql.MAX), JSON.stringify(formData))
         .input('storeName', sql.NVarChar, storeName)
         .input('storeAddress', sql.NVarChar, storeAddress)
-        .query(`INSERT INTO Applications (UserEmail, StoreName, StoreAddress, Status, CurrentStep, FormData)
+        .input('achDate', sql.DateTime, achDate)
+        .query(`INSERT INTO Applications (UserEmail, StoreName, StoreAddress, Status, CurrentStep, FormData, AchAuthorizationDate)
                 OUTPUT INSERTED.Id
-                VALUES (@email, @storeName, @storeAddress, 'submitted', 10, @formData)`)
+                VALUES (@email, @storeName, @storeAddress, 'submitted', 10, @formData, @achDate)`)
       res.json({ applicationId: result.recordset[0].Id })
     }
   } catch (err) {
@@ -1118,7 +1174,7 @@ app.get('/api/applications/my', authMiddleware, async (req, res) => {
     const db = await getPool()
     const result = await db.request()
       .input('email', sql.NVarChar, req.user.email)
-      .query('SELECT Id, StoreName, StoreAddress, Status, CurrentStep, CreatedAt, UpdatedAt FROM Applications WHERE UserEmail = @email ORDER BY CreatedAt DESC')
+      .query('SELECT Id, StoreName, StoreAddress, Status, CurrentStep, CreatedAt, UpdatedAt, GhraNumber FROM Applications WHERE UserEmail = @email ORDER BY CreatedAt DESC')
     res.json(result.recordset)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -1138,34 +1194,75 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
     const api = new SignatureRequestApi()
     api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
+    const { readAssignedGhraNumber } = require('./ghra/readAssignedGhraNumber')
+
     for (const row of result.recordset) {
       try {
         // Membership + board signers
         if (row.SignatureRequestId) {
           const r    = await api.signatureRequestGet(row.SignatureRequestId)
-          const sigs = r.body.signatureRequest.signatures || []
+          const sr   = r.body.signatureRequest
+          const sigs = sr.signatures || []
           const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
           const verify = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
           const appr   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+          const admin  = sigs.find(s => s.signerRole === 'MembershipAdmin')
 
-          if (rep?.statusCode === 'signed') {
+          // Legacy: apps approved before MembershipAdmin was added have no AdminSignatureId.
+          // For those, the admin requirement is waived so they can still reach 'signed'.
+          const dbRow = await db.request()
+            .input('id', sql.Int, row.Id)
+            .query('SELECT AdminSignatureId FROM Applications WHERE Id = @id')
+          const adminSignatureId = dbRow.recordset[0]?.AdminSignatureId || null
+
+          const allSigned =
+            rep?.statusCode    === 'signed' &&
+            verify?.statusCode === 'signed' &&
+            appr?.statusCode   === 'signed' &&
+            (adminSignatureId === null || admin?.statusCode === 'signed')
+
+          if (allSigned) {
             await db.request()
               .input('id', sql.Int, row.Id)
               .query(`UPDATE Applications SET Status = 'signed', SignedAt = COALESCE(SignedAt, GETDATE()) WHERE Id = @id AND Status != 'signed'`)
+
+            // Import GHRA # from DS when admin signs (only when not already set from another source)
+            if (admin?.statusCode === 'signed') {
+              const dsGhraNo = readAssignedGhraNumber(sr)
+              if (dsGhraNo) {
+                await db.request()
+                  .input('id',  sql.Int,      row.Id)
+                  .input('num', sql.NVarChar, dsGhraNo)
+                  .query(`UPDATE Applications
+                          SET GhraNumber          = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN @num ELSE GhraNumber END,
+                              GhraNumberSource    = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN 'ds'            ELSE GhraNumberSource END,
+                              GhraNumberUpdatedAt = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN GETDATE()       ELSE GhraNumberUpdatedAt END
+                          WHERE Id = @id`)
+              }
+            }
           }
+
           await db.request()
-            .input('vStatus', sql.NVarChar, verify?.statusCode  || null)
-            .input('vSigId',  sql.NVarChar, verify?.signatureId || null)
-            .input('aStatus', sql.NVarChar, appr?.statusCode    || null)
-            .input('aSigId',  sql.NVarChar, appr?.signatureId   || null)
-            .input('id',      sql.Int,      row.Id)
+            .input('repStatus', sql.NVarChar, rep?.statusCode     || null)
+            .input('vStatus',   sql.NVarChar, verify?.statusCode  || null)
+            .input('vSigId',    sql.NVarChar, verify?.signatureId || null)
+            .input('aStatus',   sql.NVarChar, appr?.statusCode    || null)
+            .input('aSigId',    sql.NVarChar, appr?.signatureId   || null)
+            .input('admStatus', sql.NVarChar, admin?.statusCode   || null)
+            .input('admSigId',  sql.NVarChar, admin?.signatureId  || null)
+            .input('id',        sql.Int,      row.Id)
             .query(`UPDATE Applications
-                    SET VerificationSignatureStatus = COALESCE(@vStatus, VerificationSignatureStatus),
+                    SET Status  = CASE WHEN @repStatus = 'signed' AND Status = 'pending_signature' THEN 'signed' ELSE Status END,
+                        SignedAt = CASE WHEN @repStatus = 'signed' AND SignedAt IS NULL THEN GETDATE() ELSE SignedAt END,
+                        VerificationSignatureStatus = COALESCE(@vStatus, VerificationSignatureStatus),
                         VerificationSignatureId     = COALESCE(@vSigId,  VerificationSignatureId),
                         VerificationSignedAt        = CASE WHEN @vStatus = 'signed' AND VerificationSignedAt IS NULL THEN GETDATE() ELSE VerificationSignedAt END,
                         ApprovedSignatureStatus     = COALESCE(@aStatus, ApprovedSignatureStatus),
                         ApprovedSignatureId         = COALESCE(@aSigId,  ApprovedSignatureId),
-                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END
+                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END,
+                        AdminSignatureStatus        = COALESCE(@admStatus, AdminSignatureStatus),
+                        AdminSignatureId            = COALESCE(@admSigId,  AdminSignatureId),
+                        AdminSignedAt               = CASE WHEN @admStatus = 'signed' AND AdminSignedAt IS NULL THEN GETDATE() ELSE AdminSignedAt END
                     WHERE Id = @id`)
         }
 
@@ -1245,7 +1342,11 @@ app.get('/api/applications/all', authMiddleware, async (req, res) => {
                      a.BoardSignerVerificationFirstName, a.BoardSignerVerificationLastName, a.BoardSignerVerificationEmail,
                      a.VerificationSignatureId, a.VerificationSignatureStatus, a.VerificationSignedAt,
                      a.BoardSignerApprovedFirstName, a.BoardSignerApprovedLastName, a.BoardSignerApprovedEmail,
-                     a.ApprovedSignatureId, a.ApprovedSignatureStatus, a.ApprovedSignedAt
+                     a.ApprovedSignatureId, a.ApprovedSignatureStatus, a.ApprovedSignedAt,
+                     a.AdminSignerFirstName, a.AdminSignerLastName, a.AdminSignerEmail,
+                     a.AdminSignatureId, a.AdminSignatureStatus, a.AdminSignedAt,
+                     a.GhraNumber, a.GhraNumberSource, a.GhraNumberUpdatedBy, a.GhraNumberUpdatedAt, a.GhraNumberIssue,
+                     a.AchAuthorizationDate, a.SignedAt
               FROM Applications a
               LEFT JOIN Users u ON u.Email = a.UserEmail
               ORDER BY a.CreatedAt DESC`)
@@ -1305,9 +1406,15 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
     const historyJson = JSON.stringify(history)
 
     if (status === 'approved') {
-      // Validate board signer details — required before any DS call
-      const v = boardSigners?.verification
-      const a = boardSigners?.approved
+      // MembershipAdmin signer is the approving employee — never trust the request body for this.
+      // Also guards StaffFirstName/StaffLastName in the DS document (replaces the old console.warn).
+      if (!req.user.firstName?.trim() || !req.user.lastName?.trim()) {
+        return res.status(400).json({ error: 'Your first and last name must be set before approving. Ask an admin to update them in Employee Accounts.' })
+      }
+
+      const v   = boardSigners?.verification
+      const a   = boardSigners?.approved
+      const adm = { firstName: req.user.firstName.trim(), lastName: req.user.lastName.trim(), email: req.user.email }
       const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!v?.firstName?.trim() || !v?.lastName?.trim() || !v?.email?.trim() ||
           !a?.firstName?.trim() || !a?.lastName?.trim() || !a?.email?.trim()) {
@@ -1318,18 +1425,18 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
       if (v.email.toLowerCase() === a.email.toLowerCase()) {
         return res.status(400).json({ error: 'Verification and Approved signer email addresses must be different' })
       }
+      if ([v.email, a.email].some(e => e.toLowerCase() === adm.email.toLowerCase())) {
+        return res.status(400).json({ error: 'Board signer email addresses must differ from the approving employee email' })
+      }
 
       // For approvals: DS send drives the status — do not set 'approved' unless send succeeds
       let fd = {}
       try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
       const { UserEmail } = existing.recordset[0]
 
-      if (!req.user.firstName || !req.user.lastName) {
-        console.warn(`[APPROVAL WARNING] Employee ${req.user.email} has no first/last name set — StaffFirstName/StaffLastName will be blank in the DS document. Update the employee name in Employee Accounts.`)
-      }
       try {
-        const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
-          await sendSignatureRequest(fd, UserEmail, boardSigners, req.user.email, req.user.firstName, req.user.lastName)
+        const { signatureRequestId, verificationSignatureId, approvedSignatureId, adminSignatureId } =
+          await sendSignatureRequest(fd, UserEmail, { verification: v, approved: a, membershipAdmin: adm }, req.user.email, req.user.firstName, req.user.lastName)
 
         // DS succeeded — commit status = pending_signature with reviewer + board signer fields
         await db.request()
@@ -1346,6 +1453,10 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
           .input('aLastName',  sql.NVarChar,        a.lastName)
           .input('aEmail',     sql.NVarChar,        a.email)
           .input('aSigId',     sql.NVarChar,        approvedSignatureId || null)
+          .input('admFirstName', sql.NVarChar,      adm.firstName)
+          .input('admLastName',  sql.NVarChar,      adm.lastName)
+          .input('admEmail',     sql.NVarChar,      adm.email)
+          .input('admSigId',     sql.NVarChar,      adminSignatureId || null)
           .query(`UPDATE Applications
                   SET Status = 'pending_signature', SignatureRequestId = @sigId,
                       Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history,
@@ -1357,7 +1468,12 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
                       BoardSignerApprovedFirstName     = @aFirstName,
                       BoardSignerApprovedLastName      = @aLastName,
                       BoardSignerApprovedEmail         = @aEmail,
-                      ApprovedSignatureId              = @aSigId
+                      ApprovedSignatureId              = @aSigId,
+                      AdminSignerFirstName             = @admFirstName,
+                      AdminSignerLastName              = @admLastName,
+                      AdminSignerEmail                 = @admEmail,
+                      AdminSignatureId                 = @admSigId,
+                      AdminSignatureStatus             = 'awaiting_signature'
                   WHERE Id = @id2`)
 
         // Send references signature request (non-fatal)
@@ -1438,12 +1554,14 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
     if (SignatureRequestId) {
       const r = await api.signatureRequestGet(SignatureRequestId)
       const sigs = r.body.signatureRequest.signatures || []
-      const s = sigs.find(x => x.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
-      const v = sigs.find(x => x.signerRole === 'Verification: Elected Board Signer')
-      const a = sigs.find(x => x.signerRole === 'Approved: Elected Board Signer')
-      if (s) out.member = { email: s.signerEmailAddress, status: s.statusCode, signatureId: s.signatureId }
-      if (v) out.verification_board_signer = { email: v.signerEmailAddress, status: v.statusCode, signatureId: v.signatureId }
-      if (a) out.approved_board_signer     = { email: a.signerEmailAddress, status: a.statusCode, signatureId: a.signatureId }
+      const s    = sigs.find(x => x.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
+      const v    = sigs.find(x => x.signerRole === 'Verification: Elected Board Signer')
+      const a    = sigs.find(x => x.signerRole === 'Approved: Elected Board Signer')
+      const adm  = sigs.find(x => x.signerRole === 'MembershipAdmin')
+      if (s)   out.member                  = { email: s.signerEmailAddress,   status: s.statusCode,   signatureId: s.signatureId }
+      if (v)   out.verification_board_signer = { email: v.signerEmailAddress, status: v.statusCode,   signatureId: v.signatureId }
+      if (a)   out.approved_board_signer     = { email: a.signerEmailAddress, status: a.statusCode,   signatureId: a.signatureId }
+      if (adm) out.membership_admin          = { email: adm.signerEmailAddress, status: adm.statusCode, signatureId: adm.signatureId }
     } else {
       out.member = { email: UserEmail, status: null, signatureId: null }
     }
@@ -1477,8 +1595,9 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
     reference2:                { col: 'ReferencesSignatureRequestId', role: 'Reference 2 - Membership Application' },
     verification_board_signer: { col: 'SignatureRequestId',           role: 'Verification: Elected Board Signer' },
     approved_board_signer:     { col: 'SignatureRequestId',           role: 'Approved: Elected Board Signer' },
+    membership_admin:          { col: 'SignatureRequestId',           role: 'MembershipAdmin' },
   }
-  if (!ROLE_MAP[target]) return res.status(400).json({ error: 'Invalid target. Use member, reference1, reference2, verification_board_signer, or approved_board_signer.' })
+  if (!ROLE_MAP[target]) return res.status(400).json({ error: 'Invalid target. Use member, reference1, reference2, verification_board_signer, approved_board_signer, or membership_admin.' })
   const { col, role } = ROLE_MAP[target]
 
   try {
@@ -1578,6 +1697,16 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
                       ApprovedSignatureStatus = 'awaiting_signature',
                       BoardSignerApprovedEmail = @email
                   WHERE Id = @id2`)
+      } else if (target === 'membership_admin') {
+        await db.request()
+          .input('newSigId', sql.NVarChar, newSigId)
+          .input('email',    sql.NVarChar, newEmail)
+          .input('id2',      sql.Int,      req.params.id)
+          .query(`UPDATE Applications
+                  SET AdminSignatureId = @newSigId,
+                      AdminSignatureStatus = 'awaiting_signature',
+                      AdminSignerEmail = @email
+                  WHERE Id = @id2`)
       }
       // member target — status is derived from app.Status, no per-signer DB column
 
@@ -1605,6 +1734,10 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
         await db.request()
           .input('id2', sql.Int, req.params.id)
           .query(`UPDATE Applications SET ApprovedSignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
+      } else if (target === 'membership_admin') {
+        await db.request()
+          .input('id2', sql.Int, req.params.id)
+          .query(`UPDATE Applications SET AdminSignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
       }
 
       return res.json({ success: true, message: `Reminder sent to ${currentEmail}.` })
@@ -1615,18 +1748,54 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
   }
 })
 
+// PATCH /api/applications/:id/ghra-number  — assign or update GHRA membership number (employee only)
+app.patch('/api/applications/:id/ghra-number', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid application ID' })
+
+  const { ghraNumber, ghraNumberIssue } = req.body
+  const { validateGhraNumber } = require('./ghra/ghraNumber')
+
+  if (ghraNumber !== null && ghraNumber !== undefined && ghraNumber !== '') {
+    const err = validateGhraNumber(ghraNumber)
+    if (err) return res.status(400).json({ error: err })
+  }
+
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id',       sql.Int,      appId)
+      .input('num',      sql.NVarChar, ghraNumber ? ghraNumber.trim() : null)
+      .input('issue',    sql.NVarChar, ghraNumberIssue || null)
+      .input('updatedBy',sql.NVarChar, req.user.email)
+      .query(`UPDATE Applications
+              SET GhraNumber          = @num,
+                  GhraNumberSource    = CASE WHEN @num IS NOT NULL THEN 'manual' ELSE NULL END,
+                  GhraNumberIssue     = @issue,
+                  GhraNumberUpdatedBy = @updatedBy,
+                  GhraNumberUpdatedAt = GETDATE()
+              WHERE Id = @id`)
+    if (result.rowsAffected[0] === 0) return res.status(404).json({ error: 'Application not found' })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // PATCH /api/applications/:id/board-signers  — update board signer names/emails (employee only)
 // Uses signatureRequestUpdate (same approach as reference email changes in resend endpoint)
 app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { verification, approved } = req.body
+  const { verification, approved, membershipAdmin } = req.body
   try {
     const db = await getPool()
     const result = await db.request()
       .input('id', sql.Int, req.params.id)
       .query(`SELECT SignatureRequestId,
                      VerificationSignatureId, VerificationSignedAt, BoardSignerVerificationEmail,
-                     ApprovedSignatureId,     ApprovedSignedAt,     BoardSignerApprovedEmail
+                     ApprovedSignatureId,     ApprovedSignedAt,     BoardSignerApprovedEmail,
+                     AdminSignatureId,        AdminSignedAt,        AdminSignerEmail
               FROM Applications WHERE Id = @id`)
     if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
     const row = result.recordset[0]
@@ -1691,6 +1860,33 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
                 WHERE Id = @id`)
     }
 
+    // ── Update MembershipAdmin signer ───────────────────────────────────────
+    if (membershipAdmin && !row.AdminSignedAt) {
+      let newSigId = row.AdminSignatureId
+      if (membershipAdmin.email && membershipAdmin.email.toLowerCase() !== (row.AdminSignerEmail || '').toLowerCase()) {
+        const updateReq = new SignatureRequestUpdateRequest()
+        updateReq.signatureId  = row.AdminSignatureId
+        updateReq.emailAddress = membershipAdmin.email
+        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
+          .find(s => s.signerRole === 'MembershipAdmin')
+        newSigId = updatedSig?.signatureId || newSigId
+      }
+      await db.request()
+        .input('firstName', sql.NVarChar, (membershipAdmin.firstName || '').trim() || null)
+        .input('lastName',  sql.NVarChar, (membershipAdmin.lastName  || '').trim() || null)
+        .input('email',     sql.NVarChar, (membershipAdmin.email     || '').trim() || null)
+        .input('sigId',     sql.NVarChar, newSigId)
+        .input('id',        sql.Int,      req.params.id)
+        .query(`UPDATE Applications
+                SET AdminSignerFirstName = ISNULL(@firstName, AdminSignerFirstName),
+                    AdminSignerLastName  = ISNULL(@lastName,  AdminSignerLastName),
+                    AdminSignerEmail     = ISNULL(@email,     AdminSignerEmail),
+                    AdminSignatureId     = @sigId,
+                    AdminSignatureStatus = 'awaiting_signature'
+                WHERE Id = @id`)
+    }
+
     res.json({ success: true })
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message
@@ -1722,6 +1918,167 @@ app.put('/api/applications/:id', authMiddleware, async (req, res) => {
   }
 })
 
+// ── Inline slot helpers (mirrors src/utils/documentSlots.js) ─────────────────
+
+const STATIC_DOC_SLOTS = [
+  { id: 'salesTaxPermit',          title: 'Sales Tax Permit' },
+  { id: 'articlesOfIncorporation', title: 'Articles of Incorporation' },
+  { id: 'irsDocument',             title: 'IRS Document' },
+  { id: 'tobaccoPermit',           title: 'Tobacco Permit' },
+  { id: 'beerLicense',             title: 'Beer License' },
+  { id: 'voidCheck',               title: 'Void Check' },
+]
+
+function getServerDocSlots(owners) {
+  const dlSlots = (!owners || owners.length <= 1)
+    ? [{ id: 'driverLicenseCopies', title: 'Driver License Copies' }]
+    : owners.map((o, i) => {
+        const name = [o.firstName, o.lastName].filter(Boolean).join(' ') || `Owner ${i + 1}`
+        return { id: `driverLicense_owner_${i}`, title: `Driver License — ${name}` }
+      })
+  return [...dlSlots, ...STATIC_DOC_SLOTS]
+}
+
+function normaliseServerDocuments(formData) {
+  if (formData?.documents && typeof formData.documents === 'object' && !Array.isArray(formData.documents)) {
+    return formData.documents
+  }
+  const owners = formData?.owners || []
+  const docs = {}
+  for (const slot of getServerDocSlots(owners)) {
+    const legacy = formData?.[slot.id]
+    if (legacy && typeof legacy === 'object' && legacy.filename) {
+      docs[slot.id] = [legacy]
+    } else if (typeof legacy === 'string' && legacy.length > 0) {
+      docs[slot.id] = [{ originalName: legacy, filename: legacy, url: null }]
+    } else {
+      docs[slot.id] = []
+    }
+  }
+  return docs
+}
+
+// GET /api/applications/:id/package  — structured ZIP: signed PDF + attachments (employee-only)
+app.get('/api/applications/:id/package', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, appId)
+      .query('SELECT Id, StoreName, Status, SignatureRequestId, FormData FROM Applications WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Application not found' })
+
+    const appRow = result.recordset[0]
+    const formData = JSON.parse(appRow.FormData || '{}')
+    const safeStore = (appRow.StoreName || String(appId))
+      .replace(/[^a-zA-Z0-9\s\-]/g, '').trim().replace(/\s+/g, '-').substring(0, 40) || String(appId)
+    const zipName = `GHRA-${appId}-${safeStore}.zip`
+
+    const skipped = []
+    const items = []
+
+    // 1. Signed PDF from Dropbox Sign
+    if (appRow.SignatureRequestId) {
+      try {
+        const api = new SignatureRequestApi()
+        api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+        const pdfRes = await api.signatureRequestFiles(appRow.SignatureRequestId, 'pdf')
+        const pdfBuffer = Buffer.isBuffer(pdfRes.body) ? pdfRes.body : Buffer.from(pdfRes.body)
+        if (pdfBuffer.length > 0) {
+          items.push({ archiveName: `Signed Application/GHRA-${appId}-${safeStore}-Membership-Signed.pdf`, buffer: pdfBuffer })
+        } else {
+          skipped.push('Signed Application PDF — response was empty from Dropbox Sign')
+        }
+      } catch (err) {
+        const detail = err.body?.error?.errorMsg || err.message || 'unknown error'
+        skipped.push(`Signed Application PDF — could not retrieve (${detail})`)
+      }
+    } else {
+      skipped.push('Signed Application PDF — no signature request sent for this application')
+    }
+
+    // 2. Attachments from FormData + disk
+    const slots = getServerDocSlots(formData.owners || [])
+    const documents = normaliseServerDocuments(formData)
+    const uploadDir = path.join(__dirname, 'UploadedDocuments', String(appId))
+
+    for (const slot of slots) {
+      const files = (documents[slot.id] || []).filter(f => f.filename)
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        const filename = path.basename(f.filename || '')
+        if (!filename) { skipped.push(`${slot.title} — entry has no filename`); continue }
+        const filePath = path.join(uploadDir, filename)
+        if (!fs.existsSync(filePath)) {
+          skipped.push(`${slot.title} — ${f.originalName || filename} (not found on disk)`)
+          continue
+        }
+        const pageLabel = files.length > 1 ? `Page ${String(i + 1).padStart(2, '0')} - ` : ''
+        items.push({ archiveName: `Attachments/${slot.title}/${pageLabel}${f.originalName || filename}`, filePath })
+      }
+    }
+
+    if (items.length === 0) {
+      return res.status(404).json({ error: 'No documents available for this application yet' })
+    }
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="${zipName}"`)
+
+    const archive = new ZipArchive({ zlib: { level: 6 } })
+    archive.on('error',   err => { console.error('Package archive error:', err.message) })
+    archive.on('warning', err => { if (err.code !== 'ENOENT') console.warn('Package archive warning:', err.message) })
+    archive.pipe(res)
+
+    for (const item of items) {
+      if (item.buffer) {
+        archive.append(item.buffer, { name: item.archiveName })
+      } else {
+        archive.file(item.filePath, { name: item.archiveName })
+      }
+    }
+
+    if (skipped.length > 0) {
+      const readme = [
+        `GHRA Membership Application #${appId} — Package Notes`,
+        `Generated: ${new Date().toISOString()}`,
+        '',
+        'The following items were not included in this package:',
+        ...skipped.map(s => `  • ${s}`),
+      ].join('\r\n')
+      archive.append(Buffer.from(readme, 'utf8'), { name: 'README.txt' })
+    }
+
+    await archive.finalize()
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/ach/generate  — stamp AchAuthorizationDate on selected applications (employee-only)
+app.post('/api/ach/generate', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { applicationIds } = req.body
+  if (!Array.isArray(applicationIds) || applicationIds.length === 0) {
+    return res.status(400).json({ error: 'applicationIds must be a non-empty array' })
+  }
+  const ids = applicationIds.map(id => parseInt(id, 10))
+  if (ids.some(id => isNaN(id))) return res.status(400).json({ error: 'All applicationIds must be integers' })
+  try {
+    const db = await getPool()
+    const placeholders = ids.map((_, i) => `@id${i}`).join(',')
+    const req2 = db.request()
+    ids.forEach((id, i) => req2.input(`id${i}`, sql.Int, id))
+    const result = await req2.query(`UPDATE Applications SET AchAuthorizationDate = GETDATE() WHERE Id IN (${placeholders})`)
+    res.json({ updated: result.rowsAffected[0] })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Document upload ──────────────────────────────────────────────────────────
 
 // POST /api/documents/upload
@@ -1747,8 +2104,11 @@ app.post('/api/documents/upload', authMiddleware, (req, res) => {
         return res.status(403).json({ error: 'Forbidden' })
       }
 
-      const ext = path.extname(req.file.originalname).toLowerCase()
-      const filename = `${safeDocId}${ext}`
+      const originalName = req.file.originalname
+      const ext = path.extname(originalName).toLowerCase()
+      const baseName = path.basename(originalName, path.extname(originalName))
+      const sanitised = (baseName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, '') || 'file').substring(0, 40)
+      const filename = `${safeDocId}-${Date.now()}-${sanitised}${ext}`
       const dir = path.join(__dirname, 'UploadedDocuments', String(appId))
 
       fs.mkdirSync(dir, { recursive: true })
@@ -1756,7 +2116,7 @@ app.post('/api/documents/upload', authMiddleware, (req, res) => {
 
       res.json({
         filename,
-        originalName: req.file.originalname,
+        originalName,
         url: `/uploads/${appId}/${filename}`
       })
     } catch (err) {
@@ -1783,15 +2143,145 @@ app.delete('/api/documents/:applicationId/:docId', authMiddleware, async (req, r
     let deleted = false
     if (fs.existsSync(dir)) {
       const files = fs.readdirSync(dir)
+      // New scheme: exact filename match (safeDocId is the full filename)
       for (const file of files) {
-        if (path.basename(file, path.extname(file)) === safeDocId) {
+        if (path.basename(file) === safeDocId) {
           fs.unlinkSync(path.join(dir, file))
           deleted = true
           break
         }
       }
+      // Legacy fallback: basename-without-extension match (safeDocId is the slot id)
+      if (!deleted) {
+        for (const file of files) {
+          if (path.basename(file, path.extname(file)) === safeDocId) {
+            fs.unlinkSync(path.join(dir, file))
+            deleted = true
+            break
+          }
+        }
+      }
     }
     res.json({ deleted })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/documents/:applicationId/download-all  — zip all uploaded documents for an application
+// Must be registered before /:filename to prevent "download-all" being matched as a filename.
+app.get('/api/documents/:applicationId/download-all', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+
+  try {
+    const db = await getPool()
+    if (!(await canAccessApplication(db, appId, req.user))) {
+      return res.status(404).json({ error: 'Not found' })
+    }
+
+    const dir = path.join(__dirname, 'UploadedDocuments', String(appId))
+    if (!fs.existsSync(dir)) {
+      return res.status(404).json({ error: 'No documents found for this application' })
+    }
+
+    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.'))
+    if (!files.length) {
+      return res.status(404).json({ error: 'No documents found for this application' })
+    }
+
+    // Fetch store name for the zip filename
+    const nameRow = await db.request()
+      .input('id', sql.Int, appId)
+      .query('SELECT StoreName FROM Applications WHERE Id = @id')
+    const storeName = (nameRow.recordset[0]?.StoreName || String(appId))
+      .replace(/[^a-zA-Z0-9\s\-]/g, '').trim().replace(/\s+/g, '-').substring(0, 40) || String(appId)
+
+    res.setHeader('Content-Type', 'application/zip')
+    res.setHeader('Content-Disposition', `attachment; filename="documents-${storeName}.zip"`)
+
+    const archive = new ZipArchive({ zlib: { level: 6 } })
+    archive.on('error',   err => { console.error('Archive error:', err.message) })
+    archive.on('warning', err => { if (err.code !== 'ENOENT') console.warn('Archive warning:', err.message) })
+    archive.pipe(res)
+
+    for (const file of files) {
+      archive.file(path.join(dir, file), { name: file })
+    }
+
+    await archive.finalize()
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/documents/:applicationId/combined/:slotId  — merge all files in a slot into one PDF
+// Must be registered before /:filename to prevent "combined" being matched as a filename.
+app.get('/api/documents/:applicationId/combined/:slotId', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  const safeSlotId = path.basename(String(req.params.slotId))
+
+  try {
+    const db = await getPool()
+    if (!(await canAccessApplication(db, appId, req.user))) {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
+    const result = await db.request()
+      .input('id', sql.Int, appId)
+      .query('SELECT FormData FROM Applications WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Application not found' })
+
+    const formData = JSON.parse(result.recordset[0].FormData || '{}')
+    const slotFiles = (formData.documents || {})[safeSlotId] || []
+    if (!slotFiles.length) return res.status(404).json({ error: 'No files in this slot' })
+
+    const { PDFDocument } = require('pdf-lib')
+    const dir = path.join(__dirname, 'UploadedDocuments', String(appId))
+    const merged = await PDFDocument.create()
+
+    for (const fileObj of slotFiles) {
+      const filename = path.basename(fileObj.filename || '')
+      if (!filename) continue
+      const filePath = path.join(dir, filename)
+      if (!fs.existsSync(filePath)) continue
+
+      const buffer = fs.readFileSync(filePath)
+      const ext = path.extname(filename).toLowerCase()
+
+      if (ext === '.pdf') {
+        try {
+          const doc = await PDFDocument.load(buffer)
+          const pages = await merged.copyPages(doc, doc.getPageIndices())
+          pages.forEach(p => merged.addPage(p))
+        } catch { /* skip unreadable PDFs */ }
+      } else if (ext === '.jpg' || ext === '.jpeg') {
+        try {
+          const img = await merged.embedJpg(buffer)
+          const { width, height } = img.scale(1)
+          const page = merged.addPage([width, height])
+          page.drawImage(img, { x: 0, y: 0, width, height })
+        } catch { /* skip corrupt images */ }
+      } else if (ext === '.png') {
+        try {
+          const img = await merged.embedPng(buffer)
+          const { width, height } = img.scale(1)
+          const page = merged.addPage([width, height])
+          page.drawImage(img, { x: 0, y: 0, width, height })
+        } catch { /* skip corrupt images */ }
+      }
+      // gif, bmp, webp, doc, docx: cannot embed natively — skipped silently
+    }
+
+    if (merged.getPageCount() === 0) {
+      return res.status(422).json({ error: 'No embeddable pages found in this slot (GIF, BMP, WebP, and Word files cannot be combined)' })
+    }
+
+    const pdfBytes = await merged.save()
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${safeSlotId}-combined.pdf"`)
+    res.send(Buffer.from(pdfBytes))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1891,14 +2381,15 @@ app.post('/api/test/dropbox-sign', authMiddleware, async (req, res) => {
   }
 
   const dummyBoardSigners = {
-    verification: { firstName: 'Verification', lastName: 'Signer', email: req.body.verificationEmail || `verify.${Date.now()}@example.com` },
-    approved:     { firstName: 'Approved',     lastName: 'Signer', email: req.body.approvedEmail    || `approved.${Date.now()}@example.com` },
+    verification:    { firstName: 'Verification',    lastName: 'Signer', email: req.body.verificationEmail || `verify.${Date.now()}@example.com` },
+    approved:        { firstName: 'Approved',        lastName: 'Signer', email: req.body.approvedEmail    || `approved.${Date.now()}@example.com` },
+    membershipAdmin: { firstName: 'MembershipAdmin', lastName: 'Signer', email: req.body.adminEmail       || `admin.${Date.now()}@example.com` },
   }
 
   try {
-    const { signatureRequestId, verificationSignatureId, approvedSignatureId } =
+    const { signatureRequestId, verificationSignatureId, approvedSignatureId, adminSignatureId } =
       await sendSignatureRequest(dummyFormData, signerEmail, dummyBoardSigners, req.user.email)
-    res.json({ success: true, signatureRequestId, verificationSignatureId, approvedSignatureId })
+    res.json({ success: true, signatureRequestId, verificationSignatureId, approvedSignatureId, adminSignatureId })
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
     console.error('Dropbox Sign test failed:', detail)
@@ -1954,30 +2445,67 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
 
         if (memMatch.recordset.length > 0) {
           const r    = await api.signatureRequestGet(sigReqId)
-          const sigs = r.body.signatureRequest.signatures || []
+          const sr   = r.body.signatureRequest
+          const sigs = sr.signatures || []
           const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
           const verify = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
           const appr   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
+          const admin  = sigs.find(s => s.signerRole === 'MembershipAdmin')
           const appId  = memMatch.recordset[0].Id
 
-          if (rep?.statusCode === 'signed') {
+          const dbRow2 = await db.request()
+            .input('id', sql.Int, appId)
+            .query('SELECT AdminSignatureId FROM Applications WHERE Id = @id')
+          const adminSignatureId2 = dbRow2.recordset[0]?.AdminSignatureId || null
+
+          const allSigned2 =
+            rep?.statusCode    === 'signed' &&
+            verify?.statusCode === 'signed' &&
+            appr?.statusCode   === 'signed' &&
+            (adminSignatureId2 === null || admin?.statusCode === 'signed')
+
+          if (allSigned2) {
             await db.request()
               .input('id', sql.Int, appId)
-              .query(`UPDATE Applications SET Status = 'signed', SignedAt = COALESCE(SignedAt, GETDATE()) WHERE Id = @id`)
+              .query(`UPDATE Applications SET Status = 'signed', SignedAt = COALESCE(SignedAt, GETDATE()) WHERE Id = @id AND Status != 'signed'`)
+
+            if (admin?.statusCode === 'signed') {
+              const { readAssignedGhraNumber } = require('./ghra/readAssignedGhraNumber')
+              const dsGhraNo2 = readAssignedGhraNumber(sr)
+              if (dsGhraNo2) {
+                await db.request()
+                  .input('id',  sql.Int,      appId)
+                  .input('num', sql.NVarChar, dsGhraNo2)
+                  .query(`UPDATE Applications
+                          SET GhraNumber          = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN @num ELSE GhraNumber END,
+                              GhraNumberSource    = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN 'ds'            ELSE GhraNumberSource END,
+                              GhraNumberUpdatedAt = CASE WHEN GhraNumber IS NULL OR GhraNumber = '' THEN GETDATE()       ELSE GhraNumberUpdatedAt END
+                          WHERE Id = @id`)
+              }
+            }
           }
+
           await db.request()
-            .input('vStatus', sql.NVarChar, verify?.statusCode  || null)
-            .input('vSigId',  sql.NVarChar, verify?.signatureId || null)
-            .input('aStatus', sql.NVarChar, appr?.statusCode    || null)
-            .input('aSigId',  sql.NVarChar, appr?.signatureId   || null)
-            .input('id',      sql.Int,      appId)
+            .input('repStatus', sql.NVarChar, rep?.statusCode     || null)
+            .input('vStatus',   sql.NVarChar, verify?.statusCode  || null)
+            .input('vSigId',    sql.NVarChar, verify?.signatureId || null)
+            .input('aStatus',   sql.NVarChar, appr?.statusCode    || null)
+            .input('aSigId',    sql.NVarChar, appr?.signatureId   || null)
+            .input('admStatus', sql.NVarChar, admin?.statusCode   || null)
+            .input('admSigId',  sql.NVarChar, admin?.signatureId  || null)
+            .input('id',        sql.Int,      appId)
             .query(`UPDATE Applications
-                    SET VerificationSignatureStatus = @vStatus,
+                    SET Status                      = CASE WHEN @repStatus = 'signed' AND Status = 'pending_signature' THEN 'signed' ELSE Status END,
+                        SignedAt                    = CASE WHEN @repStatus = 'signed' AND SignedAt IS NULL THEN GETDATE() ELSE SignedAt END,
+                        VerificationSignatureStatus = @vStatus,
                         VerificationSignatureId     = COALESCE(@vSigId, VerificationSignatureId),
                         VerificationSignedAt        = CASE WHEN @vStatus = 'signed' AND VerificationSignedAt IS NULL THEN GETDATE() ELSE VerificationSignedAt END,
                         ApprovedSignatureStatus     = @aStatus,
                         ApprovedSignatureId         = COALESCE(@aSigId, ApprovedSignatureId),
-                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END
+                        ApprovedSignedAt            = CASE WHEN @aStatus = 'signed' AND ApprovedSignedAt IS NULL THEN GETDATE() ELSE ApprovedSignedAt END,
+                        AdminSignatureStatus        = @admStatus,
+                        AdminSignatureId            = COALESCE(@admSigId, AdminSignatureId),
+                        AdminSignedAt               = CASE WHEN @admStatus = 'signed' AND AdminSignedAt IS NULL THEN GETDATE() ELSE AdminSignedAt END
                     WHERE Id = @id`)
         }
 

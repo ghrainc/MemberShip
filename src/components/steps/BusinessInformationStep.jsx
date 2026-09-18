@@ -192,7 +192,7 @@ function BusinessInformationStep({ formData, errors, handleInputChange }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="authorizedRepAddress">Street Address</label>
+          <label htmlFor="authorizedRepAddress">Home Street Address</label>
           <input
             type="text"
             id="authorizedRepAddress"

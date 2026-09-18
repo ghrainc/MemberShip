@@ -1,0 +1,291 @@
+.mfu-slot {
+  border: 1px solid #e0e6ed;
+  border-radius: 8px;
+  padding: 20px;
+  background: white;
+  transition: box-shadow 0.2s ease;
+}
+.mfu-slot:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+.mfu-slot.required { border-left: 4px solid var(--ghra-navy); }
+.mfu-slot.optional { border-left: 4px solid #f39c12; background: #fffaf0; }
+
+.mfu-slot-header { margin-bottom: 14px; }
+
+.mfu-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.mfu-title {
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.mfu-count {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: #e8f4f8;
+  color: #0277bd;
+}
+
+.mfu-description {
+  color: #7f8c8d;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Thumbnail grid ────────────────────────────────────────── */
+
+.mfu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.mfu-card {
+  border: 1px solid #e0e6ed;
+  border-radius: 6px;
+  background: #f8f9fa;
+  overflow: hidden;
+  cursor: grab;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+.mfu-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.mfu-card.dragging { opacity: 0.4; transform: scale(0.97); }
+.mfu-card.drag-target { box-shadow: 0 0 0 2px var(--ghra-navy); }
+.mfu-card:active { cursor: grabbing; }
+
+.mfu-card-thumb {
+  width: 100%;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f2f5;
+  cursor: pointer;
+  overflow: hidden;
+}
+.mfu-card-thumb:hover { background: #e8ecf0; }
+
+.mfu-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mfu-thumb-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #e0e6ed 25%, #f0f2f5 50%, #e0e6ed 75%);
+  background-size: 200% 100%;
+  animation: mfu-shimmer 1.2s infinite;
+}
+@keyframes mfu-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.mfu-doc-icon {
+  width: 36px;
+  height: 36px;
+  color: #95a5a6;
+  stroke-width: 1.5;
+}
+.mfu-doc-icon.pdf { color: #e74c3c; }
+
+.mfu-card-footer {
+  padding: 5px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  background: white;
+  border-top: 1px solid #e0e6ed;
+}
+
+.mfu-card-name {
+  font-size: 11px;
+  color: #2c3e50;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.mfu-card-remove {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #95a5a6;
+  padding: 0;
+  border-radius: 3px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.mfu-card-remove:hover { color: #e74c3c; background: #fdf0ee; }
+.mfu-card-remove svg { width: 12px; height: 12px; }
+
+/* ── Drop zone ─────────────────────────────────────────────── */
+
+.mfu-drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 28px 20px;
+  border: 2px dashed #e0e6ed;
+  border-radius: 8px;
+  background: #f8f9fa;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+  position: relative;
+}
+.mfu-drop-zone:hover,
+.mfu-drop-zone.drag-over {
+  border-color: var(--ghra-navy);
+  background: #f0f4ff;
+}
+.mfu-drop-zone.compact {
+  padding: 16px 20px;
+}
+.mfu-drop-zone.is-uploading { cursor: wait; opacity: 0.8; }
+
+.mfu-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mfu-zone-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #2c3e50;
+  text-align: center;
+}
+
+/* ── Combined PDF button ───────────────────────────────────── */
+
+.mfu-combined-btn {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: white;
+  color: var(--ghra-navy);
+  border: 1px solid var(--ghra-navy);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.mfu-combined-btn:hover { background: var(--ghra-navy); color: white; }
+.mfu-combined-btn svg { width: 15px; height: 15px; }
+
+/* ── Lightbox ──────────────────────────────────────────────── */
+
+.mfu-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.mfu-lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+
+.mfu-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 36px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.8;
+  padding: 0;
+  transition: opacity 0.15s ease;
+}
+.mfu-lightbox-close:hover { opacity: 1; }
+
+/* ── Shared badges (referenced from DocumentUploadStep.css) ── */
+.required-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #e8f4f8;
+  color: #0277bd;
+}
+.optional-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #fff3cd;
+  color: #856404;
+}
+
+/* ── Spinner (shared) ──────────────────────────────────────── */
+.upload-spinner {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 3px solid #e0e6ed;
+  border-top-color: var(--ghra-navy);
+  border-radius: 50%;
+  animation: mfu-spin 0.7s linear infinite;
+}
+@keyframes mfu-spin { to { transform: rotate(360deg); } }
+
+.upload-icon {
+  width: 30px;
+  height: 30px;
+  color: var(--ghra-navy);
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #7f8c8d;
+}
+
+@media (max-width: 480px) {
+  .mfu-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+  .mfu-drop-zone { padding: 20px 14px; }
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import '../styles/ApprovalDialog.css'
 
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -23,16 +23,26 @@ function SignerField({ role, field, label, type = 'text', value, error, onChange
   )
 }
 
-function ApprovalDialog({ application, action, onConfirm, onCancel, initialBoardSigners }) {
+function ApprovalDialog({ application, action, onConfirm, onCancel, initialBoardSigners, prefillLoading, currentUser }) {
   const [comments, setComments] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [boardSigners, setBoardSigners] = useState({
-    verification: initialBoardSigners?.verification ?? { firstName: '', lastName: '', email: '' },
-    approved:     initialBoardSigners?.approved     ?? { firstName: '', lastName: '', email: '' },
+    verification: { firstName: '', lastName: '', email: '' },
+    approved:     { firstName: '', lastName: '', email: '' },
   })
   const [boardErrors, setBoardErrors] = useState({})
 
   const isApprove = action === 'approve'
+
+  // Apply pre-fill once the fetch resolves. Inputs are hidden until then, so there is nothing to overwrite.
+  useEffect(() => {
+    if (!prefillLoading) {
+      setBoardSigners({
+        verification: initialBoardSigners?.verification ?? { firstName: '', lastName: '', email: '' },
+        approved:     initialBoardSigners?.approved     ?? { firstName: '', lastName: '', email: '' },
+      })
+    }
+  }, [prefillLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSigner = (role, field, value) => {
     setBoardSigners(prev => ({ ...prev, [role]: { ...prev[role], [field]: value } }))
@@ -67,6 +77,9 @@ function ApprovalDialog({ application, action, onConfirm, onCancel, initialBoard
     onConfirm(comments, isApprove ? boardSigners : null)
   }
 
+  const adminName = [currentUser?.firstName, currentUser?.lastName].filter(Boolean).join(' ') || '(name not set)'
+  const adminDisplay = `${adminName} (${currentUser?.email || ''})`
+
   const config = isApprove
     ? { title: 'Approve Application', message: 'Enter board signer details to proceed with approval.', buttonClass: 'approve-button', buttonText: 'Approve & Send', icon: '✓' }
     : { title: 'Reject Application',  message: 'Are you sure you want to reject this application?',  buttonClass: 'reject-button',  buttonText: 'Reject',         icon: '✕' }
@@ -90,34 +103,44 @@ function ApprovalDialog({ application, action, onConfirm, onCancel, initialBoard
 
           {isApprove && (
             <div className="board-signers-section">
-              <div className="board-signer-group">
-                <div className="board-signers-group-title">Verification Board Signer</div>
-                <div className="board-signer-name-row">
-                  <SignerField role="verification" field="firstName" label="First Name"
-                    value={boardSigners.verification.firstName} error={boardErrors.verification_firstName}
-                    onChange={e => updateSigner('verification', 'firstName', e.target.value)} disabled={isSubmitting} />
-                  <SignerField role="verification" field="lastName" label="Last Name"
-                    value={boardSigners.verification.lastName} error={boardErrors.verification_lastName}
-                    onChange={e => updateSigner('verification', 'lastName', e.target.value)} disabled={isSubmitting} />
-                </div>
-                <SignerField role="verification" field="email" label="Email Address" type="email"
-                  value={boardSigners.verification.email} error={boardErrors.verification_email}
-                  onChange={e => updateSigner('verification', 'email', e.target.value)} disabled={isSubmitting} />
-              </div>
-              <div className="board-signer-group">
-                <div className="board-signers-group-title">Approved Board Signer</div>
-                <div className="board-signer-name-row">
-                  <SignerField role="approved" field="firstName" label="First Name"
-                    value={boardSigners.approved.firstName} error={boardErrors.approved_firstName}
-                    onChange={e => updateSigner('approved', 'firstName', e.target.value)} disabled={isSubmitting} />
-                  <SignerField role="approved" field="lastName" label="Last Name"
-                    value={boardSigners.approved.lastName} error={boardErrors.approved_lastName}
-                    onChange={e => updateSigner('approved', 'lastName', e.target.value)} disabled={isSubmitting} />
-                </div>
-                <SignerField role="approved" field="email" label="Email Address" type="email"
-                  value={boardSigners.approved.email} error={boardErrors.approved_email}
-                  onChange={e => updateSigner('approved', 'email', e.target.value)} disabled={isSubmitting} />
-              </div>
+              {prefillLoading ? (
+                <div className="board-prefill-loading">Loading board signer history…</div>
+              ) : (
+                <>
+                  <div className="board-signer-group">
+                    <div className="board-signers-group-title">Verification Board Signer</div>
+                    <div className="board-signer-name-row">
+                      <SignerField role="verification" field="firstName" label="First Name"
+                        value={boardSigners.verification.firstName} error={boardErrors.verification_firstName}
+                        onChange={e => updateSigner('verification', 'firstName', e.target.value)} disabled={isSubmitting} />
+                      <SignerField role="verification" field="lastName" label="Last Name"
+                        value={boardSigners.verification.lastName} error={boardErrors.verification_lastName}
+                        onChange={e => updateSigner('verification', 'lastName', e.target.value)} disabled={isSubmitting} />
+                    </div>
+                    <SignerField role="verification" field="email" label="Email Address" type="email"
+                      value={boardSigners.verification.email} error={boardErrors.verification_email}
+                      onChange={e => updateSigner('verification', 'email', e.target.value)} disabled={isSubmitting} />
+                  </div>
+                  <div className="board-signer-group">
+                    <div className="board-signers-group-title">Approved Board Signer</div>
+                    <div className="board-signer-name-row">
+                      <SignerField role="approved" field="firstName" label="First Name"
+                        value={boardSigners.approved.firstName} error={boardErrors.approved_firstName}
+                        onChange={e => updateSigner('approved', 'firstName', e.target.value)} disabled={isSubmitting} />
+                      <SignerField role="approved" field="lastName" label="Last Name"
+                        value={boardSigners.approved.lastName} error={boardErrors.approved_lastName}
+                        onChange={e => updateSigner('approved', 'lastName', e.target.value)} disabled={isSubmitting} />
+                    </div>
+                    <SignerField role="approved" field="email" label="Email Address" type="email"
+                      value={boardSigners.approved.email} error={boardErrors.approved_email}
+                      onChange={e => updateSigner('approved', 'email', e.target.value)} disabled={isSubmitting} />
+                  </div>
+                  <div className="board-signer-group board-signer-group--admin">
+                    <div className="board-signers-group-title">Membership Admin</div>
+                    <div className="board-signer-admin-readonly">{adminDisplay}</div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

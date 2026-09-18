@@ -21,14 +21,28 @@ function getBoardApproveState(app) {
   return 'awaiting'
 }
 
-const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '' }
+function getAdminSignState(app) {
+  if (!app.SignatureRequestId) return 'not_sent'
+  if (!app.AdminSignatureId)   return 'legacy'   // app approved before MembershipAdmin was added
+  if (app.AdminSignedAt)       return 'signed'
+  return 'awaiting'
+}
+
+function getAuthRepState(app) {
+  if (!app.SignatureRequestId) return 'not_sent'
+  if (app.SignedAt || app.Status === 'signed') return 'signed'
+  return 'awaiting'
+}
+
+const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '', achStatus: '' }
 
 function EmployeeDashboard() {
   const {
     currentUser, getAllApplications, syncSignatureStatuses, testDropboxSign, logout,
     createMemberAccount, resetMemberPassword,
     getMembers, deleteMember,
-    getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName
+    getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName,
+    updateGhraNumber, downloadApplicationPackage, generateAch
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -44,6 +58,19 @@ function EmployeeDashboard() {
 
   // Board signers modal
   const [boardApp, setBoardApp] = useState(null)
+
+  // GHRA # inline editing (applications table)
+  const [editingGhraId, setEditingGhraId] = useState(null)
+  const [editingGhraValue, setEditingGhraValue] = useState('')
+  const [editGhraLoading, setEditGhraLoading] = useState(false)
+  const [editGhraError, setEditGhraError] = useState('')
+
+  // ACH export row selection
+  const [selectedIds, setSelectedIds] = useState(new Set())
+
+  // Docs download
+  const [docsDownloading, setDocsDownloading] = useState(new Set())
+  const [achToast, setAchToast] = useState(null)
 
   // Dropbox Sign test modal
   const [showDsTest, setShowDsTest] = useState(false)
@@ -162,10 +189,15 @@ function EmployeeDashboard() {
       else if (searchTerms.status === 'board_approved')  statusMatch = getBoardApproveState(app) === 'signed'
       else                                               statusMatch = (app.Status || '') === searchTerms.status
     }
+    let achMatch = true
+    if (searchTerms.achStatus !== '') {
+      achMatch = searchTerms.achStatus === 'generated' ? !!app.AchAuthorizationDate : !app.AchAuthorizationDate
+    }
     return (
       (searchTerms.storeName === '' || (app.StoreName || '').toLowerCase().includes(searchTerms.storeName.toLowerCase())) &&
       (searchTerms.submittedDate === '' || dateStr.includes(searchTerms.submittedDate)) &&
       statusMatch &&
+      achMatch &&
       (searchTerms.email === '' || (app.UserEmail || '').toLowerCase().includes(searchTerms.email.toLowerCase())) &&
       (searchTerms.repName === '' || repFullName.toLowerCase().includes(searchTerms.repName.toLowerCase()))
     )
@@ -181,6 +213,10 @@ function EmployeeDashboard() {
       case 'repName':
         aValue = `${a.AuthRepFirstName || ''} ${a.AuthRepLastName || ''}`.trim().toLowerCase()
         bValue = `${b.AuthRepFirstName || ''} ${b.AuthRepLastName || ''}`.trim().toLowerCase()
+        break
+      case 'AchAuthorizationDate':
+        aValue = a.AchAuthorizationDate ? new Date(a.AchAuthorizationDate) : new Date(0)
+        bValue = b.AchAuthorizationDate ? new Date(b.AchAuthorizationDate) : new Date(0)
         break
       default: return 0
     }
@@ -368,6 +404,27 @@ function EmployeeDashboard() {
     setEditNameError('')
   }
 
+  const handleStartGhraEdit = (app) => {
+    setEditingGhraId(app.Id)
+    setEditingGhraValue(app.GhraNumber || '')
+    setEditGhraError('')
+  }
+
+  const handleSaveGhraNumber = async (appId) => {
+    setEditGhraLoading(true)
+    const result = await updateGhraNumber(appId, { ghraNumber: editingGhraValue.trim() || null })
+    setEditGhraLoading(false)
+    if (result.success) {
+      setApplications(prev =>
+        prev.map(a => a.Id === appId ? { ...a, GhraNumber: editingGhraValue.trim() || null } : a)
+      )
+      setEditingGhraId(null)
+      setEditGhraError('')
+    } else {
+      setEditGhraError(result.error || 'Failed to save')
+    }
+  }
+
   const handleSaveEmployeeName = async (id) => {
     if (!editFirstName.trim() || !editLastName.trim()) {
       setEditNameError('First and last name are required')
@@ -455,6 +512,56 @@ function EmployeeDashboard() {
     ? `${sortedApplications.length} of ${applications.length} application${applications.length !== 1 ? 's' : ''}`
     : `${applications.length} application${applications.length !== 1 ? 's' : ''}`
 
+  const visibleIds = sortedApplications.map(a => a.Id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id))
+  const someVisibleSelected = visibleIds.some(id => selectedIds.has(id))
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(prev => { const next = new Set(prev); visibleIds.forEach(id => next.delete(id)); return next })
+    } else {
+      setSelectedIds(prev => { const next = new Set(prev); visibleIds.forEach(id => next.add(id)); return next })
+    }
+  }
+
+  const toggleSelectApp = (id) => {
+    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+  }
+
+  const generateAchCsv = async () => {
+    const selected = applications.filter(a => selectedIds.has(a.Id))
+    if (!selected.length) return
+    const escape = (v) => {
+      const s = String(v ?? '')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const header = 'GHRA #,Member Name,Authorized Representative Name,Amount'
+    const rows = selected.map(a => {
+      const repName = [a.AuthRepFirstName, a.AuthRepLastName].filter(Boolean).join(' ')
+      return [escape(a.GhraNumber || ''), escape(a.StoreName || ''), escape(repName), '400.00'].join(',')
+    })
+    const csv = [header, ...rows].join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ghra-ach-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 5000)
+
+    const ids = Array.from(selectedIds)
+    const result = await generateAch(ids)
+    if (result.success) {
+      const data = await getAllApplications()
+      setApplications(data || [])
+      setSelectedIds(new Set())
+      setAchToast({ type: 'success', text: `ACH file generated for ${ids.length} application${ids.length !== 1 ? 's' : ''}` })
+    } else {
+      setAchToast({ type: 'error', text: `ACH date update failed: ${result.error}` })
+    }
+    setTimeout(() => setAchToast(null), 6000)
+  }
+
   return (
     <div className="employee-dashboard-container">
       <header className="employee-dashboard-header">
@@ -514,6 +621,21 @@ function EmployeeDashboard() {
               <p className="application-count">
                 {loading ? 'Loading...' : countLabel}
               </p>
+              {selectedIds.size > 0 && (
+                <button className="ach-export-button" onClick={generateAchCsv}>
+                  Download ACH File ({selectedIds.size})
+                </button>
+              )}
+              {achToast && (
+                <span style={{
+                  padding: '4px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                  background: achToast.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: achToast.type === 'success' ? '#155724' : '#721c24',
+                  border: `1px solid ${achToast.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
+                }}>
+                  {achToast.text}
+                </span>
+              )}
               {hasActiveFilters && (
                 <button className="clear-filters-button" onClick={handleClearFilters}>
                   Clear Filters
@@ -538,6 +660,16 @@ function EmployeeDashboard() {
               <table className="applications-table">
                 <thead>
                   <tr>
+                    <th className="select-col">
+                      <input
+                        type="checkbox"
+                        className="ach-checkbox"
+                        checked={allVisibleSelected}
+                        ref={el => { if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected }}
+                        onChange={toggleSelectAll}
+                        title="Select all visible"
+                      />
+                    </th>
                     <th>
                       <div className="table-header">
                         <div className="filter-input">
@@ -596,13 +728,27 @@ function EmployeeDashboard() {
                       </div>
                       <span className="th-label">Status</span>
                     </th>
+                    <th className="ach-date-column">
+                      <div className="table-header">
+                        <select value={searchTerms.achStatus} onChange={e => handleSearchChange('achStatus', e.target.value)} className="filter-select">
+                          <option value="">All</option>
+                          <option value="not_generated">ACH not generated</option>
+                          <option value="generated">ACH generated</option>
+                        </select>
+                        <button className="sort-button" onClick={() => handleSort('AchAuthorizationDate')}><SortIcon column="AchAuthorizationDate" /></button>
+                      </div>
+                      <span className="th-label">ACH Date</span>
+                    </th>
+                    <th className="ghra-number-column">
+                      <span className="th-label">GHRA #</span>
+                    </th>
                     <th className="action-column">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedApplications.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="empty-filter-row">
+                      <td colSpan={9} className="empty-filter-row">
                         No applications match the current filters.{' '}
                         <button className="clear-filters-inline" onClick={handleClearFilters}>Clear Filters</button>
                       </td>
@@ -611,35 +757,109 @@ function EmployeeDashboard() {
                     sortedApplications.map((app) => {
                       const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
                       return (
-                        <tr key={app.Id}>
+                        <tr key={app.Id} className={selectedIds.has(app.Id) ? 'row-selected' : ''}>
+                          <td className="select-col">
+                            <input
+                              type="checkbox"
+                              className="ach-checkbox"
+                              checked={selectedIds.has(app.Id)}
+                              onChange={() => toggleSelectApp(app.Id)}
+                            />
+                          </td>
                           <td>{app.StoreName || '—'}</td>
                           <td className="email-cell">{app.UserEmail}</td>
                           <td>{repFullName || 'Not provided'}</td>
                           <td>{formatDate(app.CreatedAt)}</td>
                           <td>
                             <div className="sig-status-cell">
-                              <div className="sig-status-row">
-                                <span className="sig-status-label">App</span>
-                                {getAppStatusBadge(app.Status)}
-                              </div>
-                              <div className="sig-status-row sig-status-row-sub">
-                                <span className="sig-status-label">Ref 1</span>
-                                {getSigStatusBadge(app.Ref1SignatureStatus)}
-                              </div>
-                              <div className="sig-status-row sig-status-row-sub">
-                                <span className="sig-status-label">Ref 2</span>
-                                {getSigStatusBadge(app.Ref2SignatureStatus)}
-                              </div>
-                              <div className="sig-status-divider" />
-                              <div className="sig-status-row sig-status-row-sub">
-                                <span className="sig-status-label">Verify</span>
-                                {getBoardStatusBadge(getBoardVerifyState(app), app.VerificationSignedAt)}
-                              </div>
-                              <div className="sig-status-row sig-status-row-sub">
-                                <span className="sig-status-label">Approve</span>
-                                {getBoardStatusBadge(getBoardApproveState(app), app.ApprovedSignedAt)}
-                              </div>
+                              {(!app.SignatureRequestId || (app.Status !== 'pending_signature' && app.Status !== 'signed')) && (
+                                <div className="sig-status-row">
+                                  <span className="sig-status-label">Status</span>
+                                  {getAppStatusBadge(app.Status)}
+                                </div>
+                              )}
+                              {app.SignatureRequestId && (
+                                <>
+                                  <div className="sig-group">
+                                    <span className="sig-group-label">App</span>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">Auth Rep</span>
+                                      {getBoardStatusBadge(getAuthRepState(app), app.SignedAt)}
+                                    </div>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">Verify</span>
+                                      {getBoardStatusBadge(getBoardVerifyState(app), app.VerificationSignedAt)}
+                                    </div>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">Approve</span>
+                                      {getBoardStatusBadge(getBoardApproveState(app), app.ApprovedSignedAt)}
+                                    </div>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">MemAdmin</span>
+                                      {getAdminSignState(app) === 'legacy'
+                                        ? <span className="sig-status-badge sig-status-na" title="Sent before the Membership Admin signer was added">N/A</span>
+                                        : getBoardStatusBadge(getAdminSignState(app), app.AdminSignedAt)
+                                      }
+                                    </div>
+                                  </div>
+                                  <div className="sig-group">
+                                    <span className="sig-group-label">Ref</span>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">Ref 1</span>
+                                      {getSigStatusBadge(app.Ref1SignatureStatus)}
+                                    </div>
+                                    <div className="sig-status-row sig-status-row-sub">
+                                      <span className="sig-status-label">Ref 2</span>
+                                      {getSigStatusBadge(app.Ref2SignatureStatus)}
+                                    </div>
+                                  </div>
+                                </>
+                              )}
                             </div>
+                          </td>
+                          <td className="ach-date-column">
+                            {app.AchAuthorizationDate
+                              ? new Date(app.AchAuthorizationDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })
+                              : '—'}
+                          </td>
+                          <td className="ghra-number-cell">
+                            {editingGhraId === app.Id ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                  <input
+                                    type="text"
+                                    value={editingGhraValue}
+                                    onChange={e => setEditingGhraValue(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleSaveGhraNumber(app.Id); if (e.key === 'Escape') setEditingGhraId(null) }}
+                                    placeholder="e.g. 12345"
+                                    maxLength={50}
+                                    autoFocus
+                                    style={{ width: 80, padding: '3px 6px', fontSize: 12, border: '1px solid #ced4da', borderRadius: 4 }}
+                                  />
+                                  <button className="reset-pwd-button" onClick={() => handleSaveGhraNumber(app.Id)} disabled={editGhraLoading} style={{ fontSize: 11, padding: '3px 8px' }}>
+                                    {editGhraLoading ? '…' : '✓'}
+                                  </button>
+                                  <button className="delete-button" onClick={() => setEditingGhraId(null)} disabled={editGhraLoading} style={{ background: '#6c757d', fontSize: 11, padding: '3px 8px' }}>
+                                    ✕
+                                  </button>
+                                </div>
+                                {editGhraError && <span style={{ color: '#e74c3c', fontSize: 11 }}>{editGhraError}</span>}
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 13, fontWeight: app.GhraNumber ? 600 : 400, color: app.GhraNumber ? '#2c3e50' : '#aaa' }}>
+                                  {app.GhraNumber || '—'}
+                                </span>
+                                <button
+                                  className="edit-button"
+                                  onClick={() => handleStartGhraEdit(app)}
+                                  style={{ fontSize: 11, padding: '2px 7px' }}
+                                  title={app.GhraNumber ? 'Edit GHRA #' : 'Assign GHRA #'}
+                                >
+                                  {app.GhraNumber ? '✎' : '+'}
+                                </button>
+                              </div>
+                            )}
                           </td>
                           <td className="action-cell action-cell--column">
                             <button className="view-button" onClick={() => navigate(`/employee/application/${app.Id}`)}>
@@ -656,6 +876,22 @@ function EmployeeDashboard() {
                             {app.SignatureRequestId && (
                               <button className="board-action-button" onClick={() => setBoardApp(app)}>
                                 Board
+                              </button>
+                            )}
+                            {app.Status !== 'draft' && (
+                              <button
+                                className="board-action-button"
+                                style={{ background: '#17a2b8', opacity: docsDownloading.has(app.Id) ? 0.6 : 1 }}
+                                disabled={docsDownloading.has(app.Id)}
+                                onClick={async () => {
+                                  setDocsDownloading(prev => new Set([...prev, app.Id]))
+                                  const result = await downloadApplicationPackage(app.Id)
+                                  setDocsDownloading(prev => { const n = new Set(prev); n.delete(app.Id); return n })
+                                  if (!result.success) setAchToast({ type: 'error', text: `Download failed: ${result.error}` })
+                                }}
+                                title="Download application package"
+                              >
+                                {docsDownloading.has(app.Id) ? '…' : 'Docs'}
                               </button>
                             )}
                           </td>

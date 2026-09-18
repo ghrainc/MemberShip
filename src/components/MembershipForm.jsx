@@ -2,6 +2,7 @@ import { useState, useContext, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
+import { normaliseDocuments } from '../utils/documentSlots'
 
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
@@ -50,6 +51,7 @@ const EMPTY_FORM_DATA = {
   authorizedRepFirstNameCertification: '',
   authorizedRepMiddleInitialCertification: '',
   authorizedRepLastNameCertification: '',
+  documents: {},
   driverLicenseCopies: '',
   salesTaxPermit: '',
   articlesOfIncorporation: '',
@@ -266,19 +268,23 @@ function computeStepErrors(step, data) {
       break
     }
 
-    case 9:
-      if ((data.owners || []).length > 1) {
-        ;(data.owners || []).forEach((_, index) => {
-          if (!data[`driverLicense_owner_${index}`]) errs[`driverLicense_owner_${index}`] = 'Driver License is required'
+    case 9: {
+      const docs = normaliseDocuments(data)
+      const owners9 = data.owners || []
+      if (owners9.length > 1) {
+        owners9.forEach((_, index) => {
+          const id = `driverLicense_owner_${index}`
+          if (!(docs[id] || []).length) errs[id] = 'Driver License is required'
         })
       } else {
-        if (!data.driverLicenseCopies) errs.driverLicenseCopies = 'Driver License Copies are required'
+        if (!(docs.driverLicenseCopies || []).length) errs.driverLicenseCopies = 'Driver License Copies are required'
       }
-      if (!data.salesTaxPermit) errs.salesTaxPermit = 'Sales Tax Permit is required'
-      if (!data.articlesOfIncorporation) errs.articlesOfIncorporation = 'Articles of Incorporation/Certificate of Formation is required'
-      if (!data.irsDocument) errs.irsDocument = 'IRS Document is required'
-      if (!data.voidCheck) errs.voidCheck = 'Void Check is required'
+      if (!(docs.salesTaxPermit || []).length) errs.salesTaxPermit = 'Sales Tax Permit is required'
+      if (!(docs.articlesOfIncorporation || []).length) errs.articlesOfIncorporation = 'Articles of Incorporation/Certificate of Formation is required'
+      if (!(docs.irsDocument || []).length) errs.irsDocument = 'IRS Document is required'
+      if (!(docs.voidCheck || []).length) errs.voidCheck = 'Void Check is required'
       break
+    }
 
     case 10:
       if (!data.membershipAgreement) errs.membershipAgreement = 'You must check Membership Agreement'
@@ -384,6 +390,8 @@ function MembershipForm({ isEmployeeEdit = false }) {
     setFormData(prev => ({ ...prev, [name]: finalValue }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
   }
+
+  const clearError = (name) => setErrors(prev => ({ ...prev, [name]: '' }))
 
   const copyStoreToMailing = () => {
     setFormData(prev => ({
@@ -656,6 +664,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
             applicationId={applicationId}
             uploadDocument={uploadDocument}
             removeDocument={removeDocument}
+            clearError={clearError}
           />
         </div>
 

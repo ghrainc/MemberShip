@@ -15,8 +15,16 @@ function getBoardApproveState(app) {
   return 'awaiting'
 }
 
+function getAdminSignState(app) {
+  if (!app.SignatureRequestId) return 'not_sent'
+  if (!app.AdminSignatureId)   return 'legacy'
+  if (app.AdminSignedAt)       return 'signed'
+  return 'awaiting'
+}
+
 function StateBadge({ state, signedAt }) {
   if (state === 'not_sent') return <span className="sig-status-badge sig-status-unknown">Not Sent</span>
+  if (state === 'legacy')   return <span className="sig-status-badge sig-status-unknown">N/A</span>
   if (state === 'queued')   return <span className="sig-status-badge sig-status-queued">Queued</span>
   if (state === 'awaiting') return <span className="sig-status-badge sig-status-waiting">Awaiting</span>
   if (state === 'signed') {
@@ -117,6 +125,7 @@ function BoardSignersModal({ app, onClose, onSaved }) {
 
   const verifyState  = getBoardVerifyState(app)
   const approveState = getBoardApproveState(app)
+  const adminState   = getAdminSignState(app)
 
   const [editVerify, setEditVerify] = useState({
     firstName: app.BoardSignerVerificationFirstName || '',
@@ -128,12 +137,14 @@ function BoardSignersModal({ app, onClose, onSaved }) {
     lastName:  app.BoardSignerApprovedLastName  || '',
     email:     app.BoardSignerApprovedEmail     || '',
   })
+  const [adminRedirectEmail, setAdminRedirectEmail] = useState(app.AdminSignerEmail || '')
 
   const [saveLoading, setSaveLoading] = useState(false)
   const [saveError,   setSaveError]   = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
 
-  const hasEditable = verifyState !== 'signed' || approveState !== 'signed'
+  const adminCanRedirect = adminState === 'awaiting'
+  const hasEditable = verifyState !== 'signed' || approveState !== 'signed' || adminCanRedirect
 
   const handleSave = async () => {
     setSaveLoading(true)
@@ -142,7 +153,8 @@ function BoardSignersModal({ app, onClose, onSaved }) {
     const result = await updateBoardSigners(
       app.Id,
       verifyState  !== 'signed' ? editVerify   : null,
-      approveState !== 'signed' ? editApproved : null
+      approveState !== 'signed' ? editApproved : null,
+      adminCanRedirect ? { email: adminRedirectEmail } : null
     )
     setSaveLoading(false)
     if (result.success) {
@@ -180,6 +192,33 @@ function BoardSignersModal({ app, onClose, onSaved }) {
             target="approved_board_signer"
             appId={app.Id}
           />
+          {adminState !== 'legacy' && adminState !== 'not_sent' && (
+            <>
+              <hr className="board-signer-hr" />
+              <div className="board-signer-section-block">
+                <div className="board-signer-section-header">
+                  <span className="board-signer-section-title">Membership Admin</span>
+                  <StateBadge state={adminState} signedAt={app.AdminSignedAt} />
+                </div>
+                <div className="board-signer-readonly">
+                  <span>{[app.AdminSignerFirstName, app.AdminSignerLastName].filter(Boolean).join(' ')}</span>
+                  <span className="board-signer-email">{app.AdminSignerEmail}</span>
+                </div>
+                {adminCanRedirect && (
+                  <div className="board-signer-redirect-row">
+                    <label className="signer-field-label">Redirect to another email</label>
+                    <input
+                      type="email"
+                      className="signer-input"
+                      value={adminRedirectEmail}
+                      onChange={e => setAdminRedirectEmail(e.target.value)}
+                      placeholder="Leave unchanged to keep current email"
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {saveError   && <div className="modal-error">{saveError}</div>}
           {saveSuccess && <div className="modal-success">{saveSuccess}</div>}

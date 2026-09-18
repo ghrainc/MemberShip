@@ -245,10 +245,30 @@
   border: 1px solid #e0e6ed;
 }
 
+.board-prefill-loading {
+  padding: 20px 0;
+  text-align: center;
+  font-size: 14px;
+  color: #6c757d;
+}
+
 .board-signer-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.board-signer-group--admin {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.board-signer-admin-readonly {
+  font-size: 14px;
+  color: #495057;
+  padding: 2px 0;
 }
 
 .board-signers-group-title {

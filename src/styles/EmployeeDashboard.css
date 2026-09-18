@@ -615,7 +615,7 @@
   font-size: 11px;
   font-weight: 600;
   color: var(--ghra-muted);
-  min-width: 44px;
+  min-width: 56px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
 }
@@ -1253,6 +1253,13 @@
   font-size: 13px;
 }
 
+.board-signer-redirect-row {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .board-signer-resend-row {
   margin-top: 10px;
   display: flex;
@@ -1314,4 +1321,160 @@
   font-size: 13px;
   display: flex;
   align-items: center;
+}
+
+/* ── ACH export ──────────────────────────────────────────────────────────── */
+
+.select-col {
+  width: 36px;
+  text-align: center;
+  padding: 0 4px;
+}
+
+.ach-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--ghra-navy);
+}
+
+.row-selected {
+  background-color: #eef2fb !important;
+}
+
+.ach-export-button {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.ach-export-button:hover {
+  background: #229954;
+}
+
+.ghra-number-column {
+  min-width: 90px;
+}
+
+.ghra-number-cell {
+  min-width: 90px;
+}
+
+/* ── Signer-status groups (App / Ref) ────────────────────────────────────── */
+
+.sig-group {
+  border-top: 1px solid var(--ghra-line);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+
+.sig-group:first-of-type {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.sig-group-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ghra-navy);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  margin-bottom: 3px;
+  padding-left: 2px;
+}
+
+.sig-status-na { background: #e9ecef; color: #6c757d; }
+
+/* ── ACH Date column ────────────────────────────────────────────────────── */
+
+.ach-date-column {
+  min-width: 88px;
+  white-space: nowrap;
+}
+
+/* ── Documents modal ─────────────────────────────────────────────────────── */
+
+.docs-modal-content {
+  width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.docs-modal-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.docs-empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--ghra-muted);
+  font-size: 14px;
+}
+
+.docs-modal-slot {
+  border: 1px solid var(--ghra-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.docs-modal-slot-title {
+  background: var(--ghra-mist);
+  border-bottom: 1px solid var(--ghra-line);
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ghra-slate);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.docs-modal-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ghra-line);
+  gap: 8px;
+}
+
+.docs-modal-file-row:last-child {
+  border-bottom: none;
+}
+
+.docs-modal-filename {
+  font-size: 13px;
+  color: var(--ghra-slate);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-view-button {
+  background: var(--ghra-navy);
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.docs-view-button:hover {
+  background: #243575;
 }

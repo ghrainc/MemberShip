@@ -93,7 +93,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -101,8 +101,14 @@ function ViewApplication() {
   const [currentSection, setCurrentSection] = useState(1)
   const [approvalDialog, setApprovalDialog] = useState(null)
   const [lastBoardSigners, setLastBoardSigners] = useState(null)
+  const [prefillLoading, setPrefillLoading] = useState(false)
   const [historyOpen, setHistoryOpen]   = useState(false)
   const [approvalError, setApprovalError] = useState(null)
+
+  // GHRA # inline editing (employee only)
+  const [editingGhra, setEditingGhra] = useState(null) // null = viewing; string = editing
+  const [editGhraLoading, setEditGhraLoading] = useState(false)
+  const [editGhraError, setEditGhraError] = useState('')
   const [approving, setApproving]       = useState(false)
 
   useEffect(() => {
@@ -116,8 +122,13 @@ function ViewApplication() {
   const handleSectionClick = (sectionId) => { setCurrentSection(sectionId); window.scrollTo(0, 0) }
   const handleApproveClick = () => {
     setApprovalError(null)
-    getLastBoardSigners().then(signers => setLastBoardSigners(signers))
+    setLastBoardSigners(null)   // clear stale values from any previous open
+    setPrefillLoading(true)
     setApprovalDialog({ action: 'approve' })
+    getLastBoardSigners()
+      .then(signers => setLastBoardSigners(signers))
+      .catch(() => {})
+      .finally(() => setPrefillLoading(false))
   }
   const handleRejectClick  = () => { setApprovalError(null); setApprovalDialog({ action: 'reject' }) }
 
@@ -136,6 +147,19 @@ function ViewApplication() {
 
   const handleBack = () => {
     navigate(isEmployee ? '/employee' : '/dashboard')
+  }
+
+  const handleSaveGhraNumber = async () => {
+    setEditGhraLoading(true)
+    const result = await updateGhraNumber(application.Id, { ghraNumber: editingGhra?.trim() || null })
+    setEditGhraLoading(false)
+    if (result.success) {
+      setApplication(prev => ({ ...prev, GhraNumber: editingGhra?.trim() || null }))
+      setEditingGhra(null)
+      setEditGhraError('')
+    } else {
+      setEditGhraError(result.error || 'Failed to save')
+    }
   }
 
   const handleEdit = () => {
@@ -232,7 +256,7 @@ function ViewApplication() {
                 <InfoField label="Last Name" value={data.authorizedRepLastName} />
               </InfoRow>
               {data.authorizedRepAddress && (
-                <InfoRow><InfoField label="Street Address" value={data.authorizedRepAddress} /></InfoRow>
+                <InfoRow><InfoField label="Home Street Address" value={data.authorizedRepAddress} /></InfoRow>
               )}
               <InfoRow>
                 <InfoField label="City" value={data.authorizedRepCity} />
@@ -631,6 +655,60 @@ function ViewApplication() {
           &nbsp;|&nbsp; ID: {application.Id}
           &nbsp;|&nbsp; Status: <strong>{application.Status}</strong>
         </p>
+        {isEmployee && application.AdminSignatureId && (
+          <div className="ghra-number-header-row" style={{ fontSize: 13, color: '#555' }}>
+            <span className="ghra-number-header-label">Admin Sign:</span>
+            <span className="ghra-number-header-value">
+              {application.AdminSignedAt
+                ? <span style={{ color: '#27ae60', fontWeight: 600 }}>✓ Signed {new Date(application.AdminSignedAt).toLocaleDateString()}</span>
+                : <span style={{ color: '#e67e22' }}>Awaiting signature</span>}
+              {application.AdminSignerFirstName && (
+                <span style={{ marginLeft: 8, color: '#888' }}>
+                  ({application.AdminSignerFirstName} {application.AdminSignerLastName})
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+        {(application.GhraNumber || isEmployee) && (
+          <div className="ghra-number-header-row">
+            <span className="ghra-number-header-label">GHRA #:</span>
+            {isEmployee && editingGhra !== null ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="text"
+                  value={editingGhra}
+                  onChange={e => setEditingGhra(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveGhraNumber(); if (e.key === 'Escape') { setEditingGhra(null); setEditGhraError('') } }}
+                  placeholder="e.g. 12345"
+                  maxLength={50}
+                  autoFocus
+                  style={{ padding: '3px 8px', fontSize: 14, border: '1px solid #ced4da', borderRadius: 4, width: 120 }}
+                />
+                <button type="button" onClick={handleSaveGhraNumber} disabled={editGhraLoading} className="nav-button approve-action-button" style={{ padding: '4px 10px', fontSize: 12 }}>
+                  {editGhraLoading ? '…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => { setEditingGhra(null); setEditGhraError('') }} disabled={editGhraLoading} className="nav-button cancel-button" style={{ padding: '4px 10px', fontSize: 12 }}>
+                  Cancel
+                </button>
+                {editGhraError && <span style={{ color: '#e74c3c', fontSize: 12 }}>{editGhraError}</span>}
+              </div>
+            ) : (
+              <span className="ghra-number-header-value">
+                {application.GhraNumber || <em style={{ color: '#aaa' }}>Not yet assigned</em>}
+                {isEmployee && (
+                  <button
+                    type="button"
+                    onClick={() => { setEditingGhra(application.GhraNumber || ''); setEditGhraError('') }}
+                    style={{ marginLeft: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ghra-navy)', fontSize: 13 }}
+                  >
+                    {application.GhraNumber ? '✎ Edit' : '+ Assign'}
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {application.Notes && (
@@ -728,6 +806,11 @@ function ViewApplication() {
           <button type="button" onClick={() => generateApplicationPDF(application)} className="nav-button download-button">
             📥 Download PDF
           </button>
+          {isEmployee && (
+            <button type="button" onClick={() => downloadAllDocuments(application.Id, application.StoreName)} className="nav-button download-button" style={{ background: '#17a2b8' }}>
+              📦 Download All Docs
+            </button>
+          )}
         </div>
 
         {approvalError && (
@@ -747,8 +830,10 @@ function ViewApplication() {
           application={application}
           action={approvalDialog.action}
           onConfirm={handleApprovalConfirm}
-          onCancel={() => setApprovalDialog(null)}
+          onCancel={() => { setApprovalDialog(null); setPrefillLoading(false) }}
           initialBoardSigners={approvalDialog.action === 'approve' ? lastBoardSigners : null}
+          prefillLoading={approvalDialog.action === 'approve' ? prefillLoading : false}
+          currentUser={currentUser}
         />
       )}
     </div>

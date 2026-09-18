@@ -13,7 +13,11 @@ const STATE_CODE_MAP = Object.fromEntries(US_STATES.map(s => [s.code, s.name]))
 const stateName = (code) => STATE_CODE_MAP[code] || code || ''
 
 export const generateApplicationPDF = (application) => {
-  const { storeName, submittedDate, id, fullData = {} } = application
+  const storeName     = application.storeName     || application.StoreName     || ''
+  const submittedDate = application.submittedDate || application.UpdatedAt     || application.CreatedAt
+  const id            = application.id            ?? application.Id            ?? ''
+  const fullData      = application.fullData      || application.FormData      || {}
+  const ghraNumber    = application.GhraNumber    || application.ghraNumber    || null
   const data = fullData
   const showOwnerSsn = ghraFuelsApplies(data)
 
@@ -275,6 +279,7 @@ export const generateApplicationPDF = (application) => {
               <strong>Submitted:</strong>
               ${formatDate(submittedDate)}
             </div>
+            ${ghraNumber ? `<div><strong>GHRA #:</strong> ${esc(ghraNumber)}</div>` : ''}
           </div>
         </div>
 
@@ -371,7 +376,7 @@ export const generateApplicationPDF = (application) => {
           ${data.authorizedRepAddress ? `
           <div class="info-grid full">
             <div class="info-item">
-              <span class="info-label">Auth Rep Street Address</span>
+              <span class="info-label">Auth Rep Home Street Address</span>
               <span class="info-value">${esc(data.authorizedRepAddress)}</span>
             </div>
           </div>

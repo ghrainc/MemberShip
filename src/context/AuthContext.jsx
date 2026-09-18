@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN = 'http://localhost:3001' //import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -213,6 +213,99 @@ export const AuthProvider = ({ children }) => {
     } catch {}
   }, [token])
 
+  // Returns a blob URL for the given stored doc URL. Caller must revoke when done.
+  const fetchDocumentBlobUrl = useCallback(async (storedUrl) => {
+    if (!token || !storedUrl) return null
+    const url = resolveDocumentUrl(storedUrl)
+    if (!url) return null
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return null
+      const blob = await res.blob()
+      return URL.createObjectURL(blob)
+    } catch { return null }
+  }, [token])
+
+  // Downloads all uploaded documents for an application as a ZIP file.
+  const downloadAllDocuments = useCallback(async (applicationId, storeName) => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/documents/${applicationId}/download-all`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (storeName || String(applicationId))
+        .replace(/[^a-zA-Z0-9\s\-]/g, '').trim().replace(/\s+/g, '-').substring(0, 40) || String(applicationId)
+      a.download = `documents-${safeName}.zip`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    } catch {}
+  }, [token])
+
+  const downloadApplicationPackage = useCallback(async (applicationId) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${applicationId}/package`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        return { success: false, error: data.error || `Server error ${res.status}` }
+      }
+      const blob = await res.blob()
+      const cd = res.headers.get('Content-Disposition') || ''
+      const match = cd.match(/filename="([^"]+)"/)
+      const filename = match ? match[1] : `application-${applicationId}.zip`
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      return { success: true }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const generateAch = useCallback(async (applicationIds) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/ach/generate`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ applicationIds })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to generate ACH' }
+      return { success: true, updated: data.updated }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  // Downloads the combined PDF for all files in a document slot.
+  const downloadCombinedPdf = useCallback(async (applicationId, slotId) => {
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/documents/${applicationId}/combined/${slotId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${slotId}-combined.pdf`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+    } catch {}
+  }, [token])
+
   const removeDocument = useCallback(async (applicationId, docId) => {
     if (!token) return
     try {
@@ -257,13 +350,29 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
-  const updateBoardSigners = useCallback(async (appId, verification, approved) => {
+  const updateGhraNumber = useCallback(async (appId, payload) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/ghra-number`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  }, [token])
+
+  const updateBoardSigners = useCallback(async (appId, verification, approved, membershipAdmin) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/applications/${appId}/board-signers`, {
         method: 'PATCH',
         headers: authHeaders(token),
-        body: JSON.stringify({ verification, approved })
+        body: JSON.stringify({ verification, approved, membershipAdmin })
       })
       const data = await res.json()
       if (!res.ok) return { success: false, error: data.error || 'Request failed' }
@@ -530,6 +639,7 @@ export const AuthProvider = ({ children }) => {
       getApplicationById,
       getAllApplications,
       updateApplicationStatus,
+      updateGhraNumber,
       updateBoardSigners,
       employeeUpdateApplication,
       getLastBoardSigners,
@@ -541,6 +651,11 @@ export const AuthProvider = ({ children }) => {
       uploadDocument,
       removeDocument,
       openDocument,
+      fetchDocumentBlobUrl,
+      downloadAllDocuments,
+      downloadApplicationPackage,
+      generateAch,
+      downloadCombinedPdf,
       testDropboxSign,
       createMemberAccount,
       resetMemberPassword,
