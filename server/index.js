@@ -539,6 +539,14 @@ async function getPool() {
   return pool
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+// ABA routing number checksum: (3*odd-pos + 7*even-pos + plain) mod 10 === 0
+function validateAba(nineDigits) {
+  const d = nineDigits.split('').map(Number)
+  return (3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8])) % 10 === 0
+}
+
 // ── Schema migration ─────────────────────────────────────────────────────────
 
 async function ensureSchema() {
@@ -702,6 +710,17 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'AchAuthorizationDate'
       )
         ALTER TABLE Applications ADD AchAuthorizationDate DATETIME NULL
+    `)
+    // AchBatches: stores each generated ACH file for re-download (FileContent is employee-only)
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'AchBatches' AND type = 'U')
+        CREATE TABLE AchBatches (
+          Id          INT IDENTITY(1,1) PRIMARY KEY,
+          GeneratedAt DATETIME NOT NULL DEFAULT GETDATE(),
+          GeneratedBy NVARCHAR(255) NOT NULL,
+          AppCount    INT NOT NULL,
+          FileContent NVARCHAR(MAX) NOT NULL
+        )
     `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
@@ -2058,7 +2077,9 @@ app.get('/api/applications/:id/package', authMiddleware, async (req, res) => {
   }
 })
 
-// POST /api/ach/generate  — stamp AchAuthorizationDate on selected applications (employee-only)
+// POST /api/ach/generate  — validate, build TSV, save batch, stamp dates (employee-only)
+// Returns the TSV file on success (200) or a 422 JSON listing per-application errors.
+// Bank details are never echoed in error messages and never logged.
 app.post('/api/ach/generate', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
   const { applicationIds } = req.body
@@ -2068,12 +2089,141 @@ app.post('/api/ach/generate', authMiddleware, async (req, res) => {
   const ids = applicationIds.map(id => parseInt(id, 10))
   if (ids.some(id => isNaN(id))) return res.status(400).json({ error: 'All applicationIds must be integers' })
   try {
-    const db = await getPool()
-    const placeholders = ids.map((_, i) => `@id${i}`).join(',')
-    const req2 = db.request()
-    ids.forEach((id, i) => req2.input(`id${i}`, sql.Int, id))
-    const result = await req2.query(`UPDATE Applications SET AchAuthorizationDate = GETDATE() WHERE Id IN (${placeholders})`)
-    res.json({ updated: result.rowsAffected[0] })
+    const db    = await getPool()
+    const ph    = ids.map((_, i) => `@id${i}`).join(',')
+    const reqDb = db.request()
+    ids.forEach((id, i) => reqDb.input(`id${i}`, sql.Int, id))
+    const rows  = (await reqDb.query(
+      `SELECT Id, StoreName, GhraNumber, FormData FROM Applications WHERE Id IN (${ph})`
+    )).recordset
+
+    // CSV-escape a value: replace CR/LF with space, then quote if it contains , or "
+    const csvField = v => {
+      const s = String(v ?? '').replace(/[\r\n]/g, ' ')
+      return /[,"]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+
+    const validationErrors = []
+    const csvRows          = []
+
+    for (const row of rows) {
+      let fd = {}
+      try { fd = JSON.parse(row.FormData || '{}') } catch { /* empty fd */ }
+
+      const ach     = fd.achInfoFor       || {}
+      const mapping = fd.achToBankMapping || {}
+      const banks   = fd.bankAccounts     || []
+      const errors  = []
+
+      if (!ach.corporate) {
+        errors.push('No corporate ACH account — cannot determine the account to debit for the membership fee')
+      } else {
+        const bankId = mapping.corporate
+        const bank   = bankId ? banks.find(b => b.id === bankId) : null
+
+        if (!bank) {
+          errors.push('Corporate ACH type is mapped but the bank account record is missing')
+        } else {
+          if (!bank.bankName?.trim()) errors.push('Bank name is missing')
+
+          const routingRaw    = String(bank.transitAbaNumber || '')
+          const routingDigits = routingRaw.replace(/\D/g, '')
+          if (!routingRaw.trim()) {
+            errors.push('Routing number is missing')
+          } else if (routingDigits.length !== 9) {
+            errors.push('Routing number must be exactly 9 digits')
+          } else if (!validateAba(routingDigits)) {
+            errors.push('Routing number is invalid (ABA checksum failed — check for a typo)')
+          }
+
+          const accountRaw    = String(bank.accountNumber || '')
+          const accountDigits = accountRaw.replace(/[\s-]/g, '')
+          if (!accountRaw.trim()) {
+            errors.push('Account number is missing')
+          } else if (!/^\d+$/.test(accountDigits)) {
+            errors.push('Account number must contain digits only (spaces and hyphens are stripped)')
+          } else if (accountDigits.length < 4 || accountDigits.length > 17) {
+            errors.push('Account number must be between 4 and 17 digits')
+          }
+
+          if (errors.length === 0) {
+            const repName = [fd.authorizedRepFirstName, fd.authorizedRepLastName].filter(Boolean).join(' ')
+            csvRows.push([
+              csvField(row.GhraNumber  || ''),
+              csvField(fd.memberName   || ''),
+              csvField(repName),
+              csvField(bank.bankName),
+              routingDigits,       // already 9 clean digits — no escaping needed
+              accountDigits,       // already clean digits
+              '400.00',
+            ].join(','))
+          }
+        }
+      }
+
+      if (errors.length) validationErrors.push({ id: row.Id, storeName: row.StoreName, errors })
+    }
+
+    if (validationErrors.length) return res.status(422).json({ validationErrors })
+
+    const header      = 'GHRA#,Member Name,Authorized Representative Name,Bank Name,Routing Number,Account Number,Amount'
+    const fileContent = [header, ...csvRows].join('\r\n')
+    const dateStr     = new Date().toISOString().slice(0, 10)
+
+    // Persist batch so it can be re-downloaded from ACH History
+    const batchResult = await db.request()
+      .input('generatedBy', sql.NVarChar, req.user.email)
+      .input('appCount',    sql.Int,      ids.length)
+      .input('fileContent', sql.NVarChar, fileContent)
+      .query(`INSERT INTO AchBatches (GeneratedBy, AppCount, FileContent)
+              OUTPUT INSERTED.Id
+              VALUES (@generatedBy, @appCount, @fileContent)`)
+    const batchId = batchResult.recordset[0]?.Id
+
+    // Stamp AchAuthorizationDate on all selected apps
+    const reqStamp = db.request()
+    ids.forEach((id, i) => reqStamp.input(`id${i}`, sql.Int, id))
+    await reqStamp.query(`UPDATE Applications SET AchAuthorizationDate = GETDATE() WHERE Id IN (${ph})`)
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="ghra-ach-${dateStr}.csv"`)
+    res.setHeader('X-Ach-Batch-Id', String(batchId ?? ''))
+    res.send(Buffer.from(fileContent, 'utf8'))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/ach/batches  — list generated ACH batches, no FileContent (employee-only)
+app.get('/api/ach/batches', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db     = await getPool()
+    const result = await db.request().query(
+      `SELECT Id, GeneratedAt, GeneratedBy, AppCount FROM AchBatches ORDER BY GeneratedAt DESC`
+    )
+    res.json(result.recordset)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// GET /api/ach/batches/:id/file  — download stored CSV for a batch (employee-only)
+app.get('/api/ach/batches/:id/file', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const batchId = parseInt(req.params.id, 10)
+  if (isNaN(batchId)) return res.status(400).json({ error: 'Invalid batch ID' })
+  try {
+    const db     = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, batchId)
+      .query('SELECT FileContent, GeneratedAt FROM AchBatches WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Batch not found' })
+    const { FileContent, GeneratedAt } = result.recordset[0]
+    const dateStr = new Date(GeneratedAt).toISOString().slice(0, 10)
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="ghra-ach-${dateStr}-batch-${batchId}.csv"`)
+    res.send(Buffer.from(FileContent, 'utf8'))
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

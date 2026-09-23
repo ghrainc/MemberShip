@@ -133,6 +133,9 @@ All routes below require `role === 'employee'`. Literal paths are registered bef
 | Method | Path | Auth | Notes |
 |---|---|---|---|
 | `POST` | `/api/test/dropbox-sign` | JWT, employee | Sends a test signature request with dummy form data; useful for verifying DS config |
+| `POST` | `/api/ach/generate` | JWT, employee | Validate bank data, generate CSV, save to `AchBatches`, stamp `AchAuthorizationDate`. Returns 422 JSON on validation failure, CSV file on success. See **ACH File** section. |
+| `GET` | `/api/ach/batches` | JWT, employee | List all batches — `Id, GeneratedAt, GeneratedBy, AppCount`. **`FileContent` excluded.** |
+| `GET` | `/api/ach/batches/:id/file` | JWT, employee | Download stored CSV for a batch. Employee-only. |
 
 ---
 
@@ -191,6 +194,18 @@ Database: `APIDB` (SQL Server). Schema baseline is in `server/setup.sql` — run
 | `ApprovedSignedAt` | `DATETIME` | (added by migration) |
 | `CreatedAt` | `DATETIME DEFAULT GETDATE()` | |
 | `UpdatedAt` | `DATETIME` | |
+
+### AchBatches
+
+Created by `ensureSchema()` on first boot (uses `IF NOT EXISTS` on `sys.tables`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | `INT IDENTITY PK` | |
+| `GeneratedAt` | `DATETIME NOT NULL DEFAULT GETDATE()` | |
+| `GeneratedBy` | `NVARCHAR(255) NOT NULL` | Employee email |
+| `AppCount` | `INT NOT NULL` | Number of applications in this batch |
+| `FileContent` | `NVARCHAR(MAX) NOT NULL` | **⚠ SENSITIVE — employee-only.** Contains unencrypted bank routing and account numbers for all applications in the batch. Never returned by `GET /api/ach/batches`; only returned by `GET /api/ach/batches/:id/file` (employee role required). Consider encrypting with the existing AES-256-GCM helpers if the DB is shared or externally accessible. |
 
 ### Password reset (manual)
 ```bash
@@ -344,9 +359,10 @@ Context value keys: `isAuthenticated`, `currentUser`, `error`, `login`, `signup`
 ## EmployeeDashboard Tabs
 
 `EmployeeDashboard` has three tabs (internal `activeTab` state — not React Router routes):
-- **All Applications** — full application list; approve/reject with board-signer entry; signature status panel; sync button
+- **All Applications** — full application list; approve/reject with board-signer entry; signature status panel; sync button; row selection for ACH file generation
 - **Members** — member account management: list, create, reset password, delete; members with existing applications cannot be deleted
 - **Employee Accounts** — employee account management: list with inline name editing, create, reset password, delete; admin account and self are protected
+- **ACH History** — list of generated ACH batches; each row has a Download CSV button to re-download via `GET /api/ach/batches/:id/file`
 
 ---
 
@@ -371,6 +387,54 @@ Each major component has a dedicated CSS file in `src/styles/`. Step-specific st
 ## PDF Export
 
 `src/utils/pdfExport.js` generates a full HTML string from the application's `fullData` blob, HTML-escaping all values via `esc()`, then opens it in a new window and calls `window.print()`. All state codes are translated to full names using the shared `US_STATES` array. Falls back to a file download if the popup is blocked.
+
+---
+
+## ACH File
+
+### File layout
+
+Comma-delimited (`.csv`), UTF-8, CRLF line endings, header row, no footer. Values containing commas or double-quotes are RFC 4180-quoted; CR/LF inside values are replaced with a space.
+
+| Column | Source |
+|---|---|
+| `GHRA#` | `Applications.GhraNumber` |
+| `Member Name` | `FormData.memberName` |
+| `Authorized Representative Name` | `FormData.authorizedRepFirstName` + `authorizedRepLastName` |
+| `Bank Name` | Corporate ACH bank account `bankName` |
+| `Routing Number` | Corporate ACH bank account `transitAbaNumber` (9 clean digits) |
+| `Account Number` | Corporate ACH bank account `accountNumber` (digits only, spaces/hyphens stripped) |
+| `Amount` | `400.00` (hardcoded) |
+
+### Bank account selection rule
+
+The corporate ACH account is used: `formData.achInfoFor.corporate === true` and `formData.achToBankMapping.corporate` resolves to a bank account in `formData.bankAccounts[]`. If corporate ACH is not set up the application is rejected with a 422 error.
+
+### Validation (server-side, 422 returned if any app fails)
+
+- `achInfoFor.corporate` must be `true`; bank account must exist in `bankAccounts[]`
+- Bank name, routing number, and account number must all be present
+- Routing number: exactly 9 digits after stripping non-digits; ABA checksum `(3(d1+d4+d7) + 7(d2+d5+d8) + (d3+d6+d9)) mod 10 === 0`
+- Account number: digits only after stripping spaces/hyphens; 4–17 digits
+
+### Security
+
+- Routing and account numbers are **never logged**, even on error. If debugging, mask to last 4 digits.
+- Error messages to the browser say "Routing number is invalid" — they never echo the value.
+- `AchBatches.FileContent` holds unencrypted bank details. `GET /api/ach/batches` excludes it. Only `GET /api/ach/batches/:id/file` returns it, and only to employees.
+- **Encryption recommendation:** encrypt `FileContent` at rest with the existing AES-256-GCM helpers (`ssnEncrypt`/`ssnDecrypt` + `SSN_ENCRYPTION_KEY`) the same way owner SSNs are handled. Not yet implemented.
+
+### Manual test checklist
+
+- [ ] Application with a valid single corporate bank account → CSV downloads, ACH date stamped, batch appears in ACH History
+- [ ] Application where `achInfoFor.corporate` is false → 422 "No corporate ACH account" error shown, nothing generated
+- [ ] Application with a missing routing number → 422 "Routing number is missing"
+- [ ] Application with a routing number that fails the ABA checksum → 422 "ABA checksum failed"
+- [ ] Application with a routing number that is not 9 digits → 422 "must be exactly 9 digits"
+- [ ] Application with a non-digit account number → 422 "must contain digits only"
+- [ ] Application with multiple bank accounts, corporate ACH mapped correctly → uses that account, no ambiguity error
+- [ ] Mix of valid and invalid apps selected → 422 lists each failing store by name; no file generated, no dates stamped
+- [ ] ACH History tab: batches appear in reverse-chronological order; Download CSV re-downloads the original file
 
 ---
 

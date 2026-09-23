@@ -2,7 +2,7 @@ import { createContext, useState, useCallback } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN = 'http://localhost:3001' //import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -280,9 +280,58 @@ export const AuthProvider = ({ children }) => {
         headers: authHeaders(token),
         body: JSON.stringify({ applicationIds })
       })
-      const data = await res.json()
-      if (!res.ok) return { success: false, error: data.error || 'Failed to generate ACH' }
-      return { success: true, updated: data.updated }
+      if (res.status === 422) {
+        const data = await res.json()
+        return { success: false, validationErrors: data.validationErrors || [] }
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        return { success: false, error: data.error || `Server error ${res.status}` }
+      }
+      const blob = await res.blob()
+      const cd   = res.headers.get('Content-Disposition') || ''
+      const m    = cd.match(/filename="([^"]+)"/)
+      const filename = m ? m[1] : `ghra-ach-${new Date().toISOString().slice(0, 10)}.csv`
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url; a.download = filename; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      return { success: true, count: applicationIds.length }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const getAchBatches = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/ach/batches`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) return []
+      return await res.json()
+    } catch {
+      return []
+    }
+  }, [token])
+
+  const downloadAchBatch = useCallback(async (batchId) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/ach/batches/${batchId}/file`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        return { success: false, error: data.error || `Server error ${res.status}` }
+      }
+      const blob = await res.blob()
+      const cd   = res.headers.get('Content-Disposition') || ''
+      const m    = cd.match(/filename="([^"]+)"/)
+      const filename = m ? m[1] : `ghra-ach-batch-${batchId}.csv`
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url; a.download = filename; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      return { success: true }
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
@@ -655,6 +704,8 @@ export const AuthProvider = ({ children }) => {
       downloadAllDocuments,
       downloadApplicationPackage,
       generateAch,
+      getAchBatches,
+      downloadAchBatch,
       downloadCombinedPdf,
       testDropboxSign,
       createMemberAccount,

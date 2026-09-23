@@ -42,7 +42,7 @@ function EmployeeDashboard() {
     createMemberAccount, resetMemberPassword,
     getMembers, deleteMember,
     getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName,
-    updateGhraNumber, downloadApplicationPackage, generateAch
+    updateGhraNumber, downloadApplicationPackage, generateAch, getAchBatches, downloadAchBatch
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -71,6 +71,12 @@ function EmployeeDashboard() {
   // Docs download
   const [docsDownloading, setDocsDownloading] = useState(new Set())
   const [achToast, setAchToast] = useState(null)
+  const [achValidationErrors, setAchValidationErrors] = useState(null)
+
+  // ACH History tab
+  const [achBatches, setAchBatches] = useState([])
+  const [achBatchesLoading, setAchBatchesLoading] = useState(false)
+  const [achBatchDownloading, setAchBatchDownloading] = useState(null)
 
   // Dropbox Sign test modal
   const [showDsTest, setShowDsTest] = useState(false)
@@ -151,9 +157,17 @@ function EmployeeDashboard() {
     setEmployeesLoading(false)
   }
 
+  const loadAchBatches = async () => {
+    setAchBatchesLoading(true)
+    const data = await getAchBatches()
+    setAchBatches(data || [])
+    setAchBatchesLoading(false)
+  }
+
   useEffect(() => {
-    if (activeTab === 'members') loadMembers()
-    if (activeTab === 'employees') loadEmployees()
+    if (activeTab === 'members')    loadMembers()
+    if (activeTab === 'employees')  loadEmployees()
+    if (activeTab === 'achHistory') loadAchBatches()
   }, [activeTab])
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -529,37 +543,23 @@ function EmployeeDashboard() {
   }
 
   const generateAchCsv = async () => {
-    const selected = applications.filter(a => selectedIds.has(a.Id))
-    if (!selected.length) return
-    const escape = (v) => {
-      const s = String(v ?? '')
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-    }
-    const header = 'GHRA #,Member Name,Authorized Representative Name,Amount'
-    const rows = selected.map(a => {
-      const repName = [a.AuthRepFirstName, a.AuthRepLastName].filter(Boolean).join(' ')
-      return [escape(a.GhraNumber || ''), escape(a.StoreName || ''), escape(repName), '400.00'].join(',')
-    })
-    const csv = [header, ...rows].join('\r\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `ghra-ach-${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 5000)
-
-    const ids = Array.from(selectedIds)
+    if (!selectedIds.size) return
+    setAchValidationErrors(null)
+    setAchToast(null)
+    const ids    = Array.from(selectedIds)
     const result = await generateAch(ids)
     if (result.success) {
       const data = await getAllApplications()
       setApplications(data || [])
       setSelectedIds(new Set())
       setAchToast({ type: 'success', text: `ACH file generated for ${ids.length} application${ids.length !== 1 ? 's' : ''}` })
+      setTimeout(() => setAchToast(null), 6000)
+    } else if (result.validationErrors) {
+      setAchValidationErrors(result.validationErrors)
     } else {
-      setAchToast({ type: 'error', text: `ACH date update failed: ${result.error}` })
+      setAchToast({ type: 'error', text: result.error || 'ACH generation failed' })
+      setTimeout(() => setAchToast(null), 6000)
     }
-    setTimeout(() => setAchToast(null), 6000)
   }
 
   return (
@@ -608,6 +608,12 @@ function EmployeeDashboard() {
         >
           Employee Accounts
         </button>
+        <button
+          className={`tab-button${activeTab === 'achHistory' ? ' tab-button--active' : ''}`}
+          onClick={() => setActiveTab('achHistory')}
+        >
+          ACH History
+        </button>
       </nav>
 
       <main className="employee-dashboard-main">
@@ -635,6 +641,26 @@ function EmployeeDashboard() {
                 }}>
                   {achToast.text}
                 </span>
+              )}
+              {achValidationErrors && (
+                <div style={{
+                  background: '#fff3cd', border: '1px solid #ffc107', borderRadius: 6,
+                  padding: '10px 14px', fontSize: 13, maxWidth: 520, lineHeight: 1.5,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                    <strong style={{ color: '#856404' }}>ACH generation failed — fix these issues first:</strong>
+                    <button onClick={() => setAchValidationErrors(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, lineHeight: 1, color: '#856404', padding: '0 0 0 8px' }}>✕</button>
+                  </div>
+                  {achValidationErrors.map(ve => (
+                    <div key={ve.id} style={{ marginBottom: 6 }}>
+                      <strong>{ve.storeName || `Application #${ve.id}`}:</strong>
+                      <ul style={{ margin: '2px 0 0 16px', padding: 0 }}>
+                        {ve.errors.map((e, i) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
               )}
               {hasActiveFilters && (
                 <button className="clear-filters-button" onClick={handleClearFilters}>
@@ -1164,6 +1190,59 @@ function EmployeeDashboard() {
               </button>
             </div>
           </form>
+          </>}
+
+          {/* ── ACH History tab ───────────────────────────────────────────── */}
+          {activeTab === 'achHistory' && <>
+          <div className="content-header">
+            <h2>ACH History</h2>
+            <div className="content-header-right">
+              <button className="refresh-button" onClick={loadAchBatches} disabled={achBatchesLoading}>
+                {achBatchesLoading ? 'Loading…' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {achBatchesLoading ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>Loading…</p>
+          ) : achBatches.length === 0 ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>No ACH batches have been generated yet.</p>
+          ) : (
+            <div className="table-container">
+              <table className="applications-table">
+                <thead>
+                  <tr>
+                    <th>Date Generated</th>
+                    <th>Generated By</th>
+                    <th style={{ textAlign: 'center' }}>Applications</th>
+                    <th style={{ textAlign: 'center' }}>File</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {achBatches.map(batch => (
+                    <tr key={batch.Id}>
+                      <td>{new Date(batch.GeneratedAt).toLocaleString()}</td>
+                      <td>{batch.GeneratedBy}</td>
+                      <td style={{ textAlign: 'center' }}>{batch.AppCount}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          className="resend-button"
+                          disabled={achBatchDownloading === batch.Id}
+                          onClick={async () => {
+                            setAchBatchDownloading(batch.Id)
+                            await downloadAchBatch(batch.Id)
+                            setAchBatchDownloading(null)
+                          }}
+                        >
+                          {achBatchDownloading === batch.Id ? 'Downloading…' : 'Download CSV'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           </>}
 
         </div>
