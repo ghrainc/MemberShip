@@ -165,8 +165,16 @@
   background: #f0f4ff;
 }
 .mfu-drop-zone.compact {
-  padding: 16px 20px;
+  flex-direction: row;
+  min-height: 48px;
+  padding: 0 16px;
+  gap: 12px;
+  justify-content: flex-start;
+  align-items: center;
 }
+.mfu-drop-zone.compact .upload-icon { width: 20px; height: 20px; }
+.mfu-drop-zone.compact .upload-hint { display: none; }
+.mfu-drop-zone.compact .mfu-zone-label { font-size: 13px; }
 .mfu-drop-zone.is-uploading { cursor: wait; opacity: 0.8; }
 
 .mfu-input {
@@ -285,7 +293,34 @@
   color: #7f8c8d;
 }
 
+.mfu-hint-line {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin: 0 0 8px 0;
+}
+
+.mfu-camera-btn {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  background: white;
+  color: var(--ghra-navy);
+  border: 1px solid var(--ghra-navy);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.mfu-camera-btn:hover { background: var(--ghra-navy); color: white; }
+.mfu-camera-icon { width: 16px; height: 16px; }
+
 @media (max-width: 480px) {
-  .mfu-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+  .mfu-grid { grid-template-columns: repeat(3, 1fr); }
+  .mfu-card-thumb { aspect-ratio: 1; height: auto; }
+  .mfu-slot { padding: 14px; }
+  .mfu-camera-btn { display: flex; }
   .mfu-drop-zone { padding: 20px 14px; }
 }

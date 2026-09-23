@@ -4,9 +4,12 @@ import { AuthContext } from '../context/AuthContext'
 import { generateApplicationPDF } from '../utils/pdfExport'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
 import { US_STATES } from '../utils/usStates'
+import { getAllSlots, normaliseDocuments } from '../utils/documentSlots'
+import { AuthenticatedThumbnail, DocIcon } from './MultiFileUploader'
 import ProgressIndicator from './ProgressIndicator'
 import ApprovalDialog from './ApprovalDialog'
 import '../styles/ViewApplication.css'
+import '../styles/MultiFileUploader.css'
 
 // ── Value → Display label lookup maps ────────────────────────────────────────
 
@@ -93,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -110,6 +113,7 @@ function ViewApplication() {
   const [editGhraLoading, setEditGhraLoading] = useState(false)
   const [editGhraError, setEditGhraError] = useState('')
   const [approving, setApproving]       = useState(false)
+  const [lightboxSrc, setLightboxSrc]   = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -164,6 +168,17 @@ function ViewApplication() {
 
   const handleEdit = () => {
     navigate(`/employee/application/${id}/edit/step/1`)
+  }
+
+  const closeLightbox = () => {
+    setLightboxSrc(prev => { if (prev) URL.revokeObjectURL(prev); return null })
+  }
+
+  const IMAGE_EXTS_VA = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
+  const isImageFile = (name) => {
+    const i = (name || '').lastIndexOf('.')
+    const ext = i >= 0 ? name.slice(i).toLowerCase() : ''
+    return IMAGE_EXTS_VA.has(ext)
   }
 
   if (loading) {
@@ -531,51 +546,76 @@ function ViewApplication() {
         )
 
       case 9: {
-        const owners = data.owners || []
-        const multipleOwners = owners.length > 1
-        const docFields = [
-          ...(multipleOwners
-            ? owners.map((o, i) => ({
-                key: `driverLicense_owner_${i}`,
-                label: `Driver License — ${[o.firstName, o.lastName].filter(Boolean).join(' ') || `Owner ${i + 1}`}`
-              }))
-            : [{ key: 'driverLicenseCopies', label: 'Driver License Copies' }]),
-          { key: 'salesTaxPermit',          label: 'Sales Tax Permit' },
-          { key: 'articlesOfIncorporation', label: 'Articles of Incorporation/Certificate of Formation' },
-          { key: 'irsDocument',             label: 'IRS Document' },
-          { key: 'tobaccoPermit',           label: 'Tobacco Permit' },
-          { key: 'beerLicense',             label: 'Beer License' },
-          { key: 'voidCheck',               label: 'Void Check' }
-        ]
+        const docs = normaliseDocuments(data)
+        const slots = getAllSlots(data.owners || [])
         return (
           <fieldset className="form-section">
             <legend>Documents</legend>
-            <Section title="Uploaded Documents">
-              <div className="documents-review-list">
-                {docFields.map(({ key, label: docLabel }) => {
-                  const val = data[key]
-                  const uploaded = !!val
-                  const originalName = typeof val === 'object' ? val.originalName : (val || null)
-                  const hasUrl = typeof val === 'object' && !!val.url
-                  return (
-                    <div key={key} className="document-review-item">
-                      <span className={`doc-status-icon ${uploaded ? 'uploaded' : 'missing'}`}>
-                        {uploaded ? '✓' : '✕'}
-                      </span>
-                      <span className="doc-review-label">{docLabel}</span>
-                      {uploaded && originalName && (
-                        <span className="doc-review-filename">{originalName}</span>
-                      )}
-                      {hasUrl && (
-                        <button type="button" className="doc-preview-link" onClick={() => openDocument(val.url)}>
-                          Preview
-                        </button>
+            {slots.map(slot => {
+              const slotFiles = docs[slot.id] || []
+              return (
+                <div key={slot.id} style={{ marginBottom: 20 }}>
+                  <div className="mfu-slot-header" style={{ marginBottom: 8 }}>
+                    <div className="mfu-title-row">
+                      <h3 className="mfu-title">{slot.title}</h3>
+                      {slot.required
+                        ? <span className="required-badge">Required</span>
+                        : <span className="optional-badge">Optional</span>
+                      }
+                      {slotFiles.length > 0 && (
+                        <span className="mfu-count">{slotFiles.length} file{slotFiles.length !== 1 ? 's' : ''}</span>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-            </Section>
+                  </div>
+                  {slotFiles.length === 0 ? (
+                    <p style={{ color: '#95a5a6', fontSize: 13, margin: 0 }}>No files uploaded</p>
+                  ) : (
+                    <>
+                      <div className="mfu-grid">
+                        {slotFiles.map((f, index) => {
+                          const name = f.originalName || f.filename || ''
+                          return (
+                            <div key={f.filename || index} className="mfu-card">
+                              <div
+                                className="mfu-card-thumb"
+                                onClick={async () => {
+                                  if (!f.url) return
+                                  if (isImageFile(name)) {
+                                    const url = await fetchDocumentBlobUrl(f.url)
+                                    if (url) setLightboxSrc(prev => { if (prev) URL.revokeObjectURL(prev); return url })
+                                  } else {
+                                    openDocument(f.url)
+                                  }
+                                }}
+                                title="Click to preview"
+                              >
+                                {isImageFile(name) && f.url
+                                  ? <AuthenticatedThumbnail storedUrl={f.url} altText={name} />
+                                  : <DocIcon filename={name} />
+                                }
+                              </div>
+                              <div className="mfu-card-footer">
+                                <span className="mfu-card-name" title={name}>{name}</span>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {slotFiles.length >= 2 && (
+                        <button type="button" className="mfu-combined-btn" onClick={() => downloadCombinedPdf(application.Id, slot.id)}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                          Download combined PDF
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </fieldset>
         )
       }
@@ -835,6 +875,18 @@ function ViewApplication() {
           prefillLoading={approvalDialog.action === 'approve' ? prefillLoading : false}
           currentUser={currentUser}
         />
+      )}
+
+      {lightboxSrc && (
+        <div className="mfu-lightbox" onClick={closeLightbox}>
+          <button type="button" className="mfu-lightbox-close" onClick={closeLightbox}>×</button>
+          <img
+            src={lightboxSrc}
+            className="mfu-lightbox-img"
+            alt="Preview"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
       )}
     </div>
   )

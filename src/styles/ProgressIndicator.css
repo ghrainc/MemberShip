@@ -6,6 +6,15 @@
   box-shadow: 0 1px 4px rgba(27, 42, 91, 0.1);
 }
 
+/* Current-step summary line — always visible */
+.step-summary {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ghra-slate);
+  text-align: center;
+  margin-bottom: 14px;
+}
+
 /* Thin progress bar — solid navy, no gradient */
 .progress-bar {
   width: 100%;
@@ -95,11 +104,15 @@
   font-weight: 700;
 }
 
-/* Completed label: navy */
+/* Completed label: slate */
 .step-indicator.completed .step-title {
-  color: var(--ghra-navy);
+  color: var(--ghra-slate);
   font-weight: 600;
 }
+
+/* Full title visible by default; short title hidden until mobile */
+.step-title-full  { display: block; }
+.step-title-short { display: none; }
 
 @media (max-width: 768px) {
   .steps-indicator {
@@ -129,19 +142,27 @@
     gap: 8px;
   }
 
+  /* Smaller circles at narrow widths to leave room for the label */
   .step-circle {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     font-size: 12px;
   }
 
+  /* Show short labels; restore font size (was 9px hidden) */
   .step-title {
-    font-size: 9px;
-    display: none;
+    font-size: 11px;
   }
+
+  .step-title-full  { display: none; }
+  .step-title-short { display: block; }
 
   .progress-container {
     padding: 12px 16px;
     margin-bottom: 16px;
+  }
+
+  .step-summary {
+    font-size: 12px;
   }
 }

@@ -45,7 +45,7 @@ async function fixExifAndResize(file) {
   }
 }
 
-function AuthenticatedThumbnail({ storedUrl, altText }) {
+export function AuthenticatedThumbnail({ storedUrl, altText }) {
   const { fetchDocumentBlobUrl } = useContext(AuthContext)
   const [src, setSrc] = useState(null)
 
@@ -68,7 +68,7 @@ function AuthenticatedThumbnail({ storedUrl, altText }) {
   return <img src={src} alt={altText} className="mfu-thumb-img" />
 }
 
-function DocIcon({ filename }) {
+export function DocIcon({ filename }) {
   const pdf = isPdf(filename)
   return (
     <svg viewBox="0 0 24 24" className={`mfu-doc-icon${pdf ? ' pdf' : ''}`} fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -90,7 +90,8 @@ function MultiFileUploader({
   const [cardDragIndex, setCardDragIndex] = useState(null)
   const [cardDragOverIndex, setCardDragOverIndex] = useState(null)
   const [lightboxSrc, setLightboxSrc] = useState(null)
-  const inputRef = useRef(null)
+  const inputRef  = useRef(null)
+  const cameraRef = useRef(null)
 
   const allErrors = [...localErrors, ...(error ? [error] : [])]
 
@@ -207,6 +208,10 @@ function MultiFileUploader({
       </div>
 
       {files.length > 0 && (
+        <p className="mfu-hint-line">PDF, Word, or image — max 10 MB per file</p>
+      )}
+
+      {files.length > 0 && (
         <div className="mfu-grid">
           {files.map((f, index) => {
             const name = f.originalName || f.filename || ''
@@ -272,10 +277,36 @@ function MultiFileUploader({
             <span className="mfu-zone-label">
               {files.length > 0 ? 'Add more files' : 'Drop files here or click to browse'}
             </span>
-            <span className="upload-hint">PDF, Word, or image — max 10 MB per file</span>
+            {files.length === 0 && <span className="upload-hint">PDF, Word, or image — max 10 MB per file</span>}
           </>
         )}
       </div>
+
+      {files.length > 0 && (
+        <>
+          <input
+            ref={cameraRef}
+            type="file"
+            multiple
+            accept="image/*"
+            capture="environment"
+            onChange={handleInputChange}
+            className="mfu-input"
+          />
+          <button
+            type="button"
+            className="mfu-camera-btn"
+            onClick={() => !uploading && cameraRef.current?.click()}
+            disabled={uploading}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mfu-camera-icon">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            Take photo
+          </button>
+        </>
+      )}
 
       {files.length >= 2 && downloadCombinedPdf && applicationId && (
         <button type="button" className="mfu-combined-btn" onClick={() => downloadCombinedPdf(applicationId, slot.id)}>

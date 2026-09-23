@@ -316,6 +316,8 @@
 }
 
 @media (max-width: 480px) {
+  .documents-list { gap: 12px; }
+
   .document-title-section {
     flex-direction: column;
     align-items: flex-start;
