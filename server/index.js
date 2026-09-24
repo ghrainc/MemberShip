@@ -1651,9 +1651,9 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
     const db = await getPool()
     const result = await db.request()
       .input('id', sql.Int, req.params.id)
-      .query('SELECT SignatureRequestId, ReferencesSignatureRequestId, UserEmail FROM Applications WHERE Id = @id')
+      .query('SELECT SignatureRequestId, ReferencesSignatureRequestId, UserEmail, FormData FROM Applications WHERE Id = @id')
     if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
-    const { SignatureRequestId, ReferencesSignatureRequestId, UserEmail } = result.recordset[0]
+    const { SignatureRequestId, ReferencesSignatureRequestId, UserEmail, FormData: rawFormData } = result.recordset[0]
 
     const api = new SignatureRequestApi()
     api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
@@ -1682,11 +1682,74 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
       const s2 = sigs.find(x => x.signerRole === 'Reference 2 - Membership Application')
       if (s1) out.reference1 = { email: s1.signerEmailAddress, status: s1.statusCode, signatureId: s1.signatureId }
       if (s2) out.reference2 = { email: s2.signerEmailAddress, status: s2.statusCode, signatureId: s2.signatureId }
+      out.referencesRequestExists = true
+    } else {
+      // No references request yet — fall back to stored FormData emails so the dialog can pre-fill
+      let fd = {}
+      try { fd = JSON.parse(rawFormData || '{}') } catch {}
+      out.reference1 = { email: (fd.reference1Email || '').trim(), status: null, signatureId: null }
+      out.reference2 = { email: (fd.reference2Email || '').trim(), status: null, signatureId: null }
+      out.referencesRequestExists = false
     }
 
     res.json(out)
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message || 'Unknown error'
+    res.status(500).json({ error: detail })
+  }
+})
+
+// POST /api/applications/:id/send-references  — create the references signature request when it was never sent
+// body: { reference1Email?, reference2Email? } — optional overrides for the stored FormData addresses
+app.post('/api/applications/:id/send-references', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query('SELECT ReferencesSignatureRequestId, FormData FROM Applications WHERE Id = @id')
+    if (!result.recordset.length) return res.status(404).json({ error: 'Not found' })
+
+    const row = result.recordset[0]
+    if (row.ReferencesSignatureRequestId) {
+      return res.status(409).json({ error: 'A references signature request has already been sent for this application.' })
+    }
+
+    let fd = {}
+    try { fd = JSON.parse(row.FormData || '{}') } catch {}
+
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const { reference1Email: override1, reference2Email: override2 } = req.body || {}
+    if (override1 !== undefined) {
+      const v = (override1 || '').trim()
+      if (!emailRe.test(v)) return res.status(400).json({ error: 'Invalid email address for Reference 1.' })
+      fd = { ...fd, reference1Email: v }
+    }
+    if (override2 !== undefined) {
+      const v = (override2 || '').trim()
+      if (!emailRe.test(v)) return res.status(400).json({ error: 'Invalid email address for Reference 2.' })
+      fd = { ...fd, reference2Email: v }
+    }
+
+    const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd)
+
+    await db.request()
+      .input('refSigId',  sql.NVarChar, refSigId)
+      .input('ref1SigId', sql.NVarChar, ref1SignatureId || null)
+      .input('ref2SigId', sql.NVarChar, ref2SignatureId || null)
+      .input('id2',       sql.Int,      req.params.id)
+      .query(`UPDATE Applications
+              SET ReferencesSignatureRequestId = @refSigId,
+                  ReferencesSignatureStatus    = 'sent',
+                  Ref1SignatureId              = @ref1SigId,
+                  Ref2SignatureId              = @ref2SigId,
+                  Ref1SignatureStatus          = 'awaiting_signature',
+                  Ref2SignatureStatus          = 'awaiting_signature'
+              WHERE Id = @id2`)
+
+    res.json({ message: 'References request sent.' })
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message || 'Failed to send references request'
     res.status(500).json({ error: detail })
   }
 })

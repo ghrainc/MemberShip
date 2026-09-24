@@ -2,7 +2,7 @@ import { createContext, useState, useCallback, useEffect, useRef } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN =   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN =   'http://localhost:3001'//import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -566,6 +566,22 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const sendReferencesRequest = useCallback(async (appId, reference1Email, reference2Email) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/send-references`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ reference1Email, reference2Email })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Request failed' }
+      return { success: true, message: data.message }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
   const employeeUpdateApplication = useCallback(async (appId, formData) => {
     if (!token) return false
     try {
@@ -787,6 +803,7 @@ export const AuthProvider = ({ children }) => {
       syncSignatureStatuses,
       getSignatureStatus,
       resendSignature,
+      sendReferencesRequest,
       changePassword,
       createMember,
       uploadDocument,
