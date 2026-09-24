@@ -192,6 +192,21 @@
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+/* Uppercase only within the membership form wizard — not login, dashboard, etc. */
+.membership-container .form-input {
+  text-transform: uppercase;
+}
+
+/* Inputs that must never be uppercased, even inside the form wizard */
+.membership-container .form-select,
+.membership-container .form-input[type="email"],
+.membership-container .form-input[type="password"],
+.membership-container .form-input[type="date"],
+.membership-container .form-input[type="number"],
+.membership-container .form-input[type="tel"] {
+  text-transform: none;
+}
+
 .form-input:focus,
 .form-select:focus {
   outline: none;

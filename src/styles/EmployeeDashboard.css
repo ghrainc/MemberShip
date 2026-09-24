@@ -166,6 +166,49 @@
   margin: 0;
 }
 
+.retry-button {
+  margin-top: 16px;
+  background: var(--ghra-navy);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 9px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry-button:hover {
+  background: #243575;
+}
+
+.session-warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff3cd;
+  color: #856404;
+  border-bottom: 2px solid #ffc107;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+}
+
+.session-warning-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #856404;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 .applications-table-wrapper {
   background: var(--ghra-white);
   border-radius: 8px;
@@ -420,6 +463,13 @@
   width: 440px;
   max-width: 90vw;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Confirm dialogs: sized to fit one or two sentences without awkward wrapping */
+.modal-content--confirm {
+  width: 460px;
 }
 
 .modal-header {
@@ -505,11 +555,47 @@
   font-weight: 500;
 }
 
+/* Body for simple confirm dialogs (not full forms) */
+.modal-body {
+  padding: 20px 24px 24px;
+}
+
+.modal-body p {
+  font-size: 14px;
+  color: var(--ghra-slate);
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
 .modal-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
   margin-top: 8px;
+}
+
+/* Standard (non-destructive) confirm action — navy */
+.modal-confirm-button {
+  background: var(--ghra-navy);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+}
+
+.modal-confirm-button:hover:not(:disabled) {
+  background: #243575;
+  box-shadow: 0 2px 8px rgba(27, 42, 91, 0.25);
+}
+
+.modal-confirm-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .modal-submit-button {
@@ -1087,12 +1173,12 @@
   align-items: center;
   gap: 5px;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 
 .delete-confirm-inline > span {
   color: #c0392b;
   font-weight: 600;
-  white-space: nowrap;
 }
 
 .delete-confirm-yes {
@@ -1357,6 +1443,95 @@
 
 .ach-export-button:hover {
   background: #229954;
+}
+
+.archive-button {
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.archive-button:hover {
+  background: #5a6268;
+}
+
+.unarchive-button {
+  background: var(--ghra-navy);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.unarchive-button:hover {
+  background: #243575;
+}
+
+/* Inner sub-tabs within All Applications */
+.inner-tab-nav {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--ghra-line);
+  padding-bottom: 0;
+}
+
+.inner-tab-button {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ghra-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s;
+}
+
+.inner-tab-button:hover {
+  color: var(--ghra-slate);
+}
+
+.inner-tab-button--active {
+  color: var(--ghra-navy);
+  font-weight: 700;
+  border-bottom-color: var(--ghra-navy);
+}
+
+.inner-tab-count {
+  background: var(--ghra-mist);
+  color: var(--ghra-slate);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inner-tab-button--active .inner-tab-count {
+  background: var(--ghra-navy);
+  color: white;
+}
+
+.archive-info-column {
+  min-width: 110px;
+}
+
+.archive-info-cell {
+  min-width: 110px;
 }
 
 .ghra-number-column {

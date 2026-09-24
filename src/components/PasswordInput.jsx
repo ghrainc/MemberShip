@@ -14,6 +14,7 @@ function PasswordInput({ id, value, onChange, placeholder, className }) {
         placeholder={placeholder}
         className={className}
         autoComplete="off"
+        style={{ textTransform: 'none' }}
       />
       <button
         type="button"

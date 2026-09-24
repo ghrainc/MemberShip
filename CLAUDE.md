@@ -294,7 +294,12 @@ Custom fields populated at approval time:
 - `StaffFirstName` / `StaffLastName` — the approving employee's name (from JWT claims; a `console.warn` fires if these are blank — fix by editing the employee name in Employee Accounts)
 - `DateApproved` — ISO `YYYY-MM-DD` format
 - `VerificationFirstName` / `VerificationLastName` / `ApprovedFirstName` / `ApprovedLastName` — board signer names
+- `AuthRepAddress` — Auth Rep's home address as a single line: `Street, City, State Zip` (e.g. `123 Main Street, Houston, TX 77002`). Built by `formatAuthRepAddress(formData)` from `authorizedRepAddress`, `authorizedRepCity`, `authorizedRepState`, `authorizedRepZip`. Empty parts are skipped (no stray commas). A `console.warn` fires with the app ID and missing part names if any part is absent; approval is not blocked.
 - All member form fields (address, bank accounts, owners, ACH, etc.) — see the mapping in `server/index.js`
+
+**Manual test (DS test mode):**
+- [ ] Approve an application that has a full Auth Rep address (street, city, state, zip) with `DS_TEST_MODE=true`; open the signed document and confirm `AuthRepAddress` shows the complete one-line address.
+- [ ] Approve an application with one address part missing; confirm approval succeeds and `console.warn` logs the app ID and the missing part name(s).
 
 > **Sender identity:** Signing requests appear from the account that owns the `DROPBOX_SIGN_API_KEY`, not the approving employee. The employee's email appears in the request message only.
 

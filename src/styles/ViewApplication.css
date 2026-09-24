@@ -120,6 +120,40 @@
   margin: 6px 0 0 0;
 }
 
+.archived-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-left: 5px solid #6c757d;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.archived-banner-icon { font-size: 18px; }
+
+.archived-banner-text {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #444;
+}
+
+.archived-banner-unarchive {
+  background: var(--ghra-navy);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.archived-banner-unarchive:hover { background: #243575; }
+
 .reviewer-comments-banner {
   border-radius: 8px;
   padding: 16px 20px;

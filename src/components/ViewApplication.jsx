@@ -96,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -750,6 +750,30 @@ function ViewApplication() {
           </div>
         )}
       </div>
+
+      {application.IsArchived && isEmployee && (
+        <div className="archived-banner">
+          <span className="archived-banner-icon">🗄</span>
+          <span className="archived-banner-text">
+            Archived
+            {application.ArchivedAt && ` on ${new Date(application.ArchivedAt).toLocaleDateString()}`}
+            {application.ArchivedBy && ` by ${application.ArchivedBy}`}
+          </span>
+          <button
+            type="button"
+            className="archived-banner-unarchive"
+            onClick={async () => {
+              const result = await unarchiveApplications([application.Id])
+              if (result.success) {
+                const updated = await getApplicationById(id)
+                if (updated) setApplication(updated)
+              }
+            }}
+          >
+            Restore
+          </button>
+        </div>
+      )}
 
       {application.Notes && (
         <div className={`reviewer-comments-banner ${application.Status === 'rejected' ? 'banner-rejected' : application.Status === 'approved' ? 'banner-approved' : 'banner-info'}`}>

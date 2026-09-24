@@ -1,8 +1,8 @@
-import { createContext, useState, useCallback } from 'react'
+import { createContext, useState, useCallback, useEffect, useRef } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN =   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -15,6 +15,14 @@ export function resolveDocumentUrl(storedUrl) {
   const m = storedUrl.match(/^https?:\/\/[^/]+(\/uploads\/.+)$/)
   if (m) return `${API_ORIGIN}/api/documents/${m[1].slice('/uploads/'.length)}`
   return storedUrl
+}
+
+// Decode JWT exp claim without a library. Returns 0 on any failure.
+function getTokenExp(token) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(payload)).exp || 0
+  } catch { return 0 }
 }
 
 function authHeaders(token) {
@@ -44,6 +52,77 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(loadUserFromStorage)
   const [token, setToken] = useState(() => localStorage.getItem('ghra_token'))
   const [error, setError] = useState('')
+  const [sessionExpiredMessage, setSessionExpiredMessage] = useState('')
+  const [sessionWarning, setSessionWarning] = useState(false)
+
+  const warningTimerRef = useRef(null)
+  const logoutTimerRef  = useRef(null)
+
+  const clearTimers = useCallback(() => {
+    if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null }
+    if (logoutTimerRef.current)  { clearTimeout(logoutTimerRef.current);  logoutTimerRef.current  = null }
+  }, [])
+
+  // Called whenever we have a new token — arms the warning + auto-logout timers.
+  const armExpiryTimers = useCallback((tok) => {
+    clearTimers()
+    setSessionWarning(false)
+    const exp = getTokenExp(tok)
+    if (!exp) return
+    const now    = Math.floor(Date.now() / 1000)
+    const ttl    = exp - now          // seconds until expiry
+    const warnIn = (ttl - 300) * 1000 // 5 min before (ms)
+    const outIn  = ttl * 1000
+
+    if (warnIn > 0) {
+      warningTimerRef.current = setTimeout(() => setSessionWarning(true), warnIn)
+    }
+    if (outIn > 0) {
+      logoutTimerRef.current = setTimeout(() => {
+        setIsAuthenticated(false)
+        setCurrentUser(null)
+        setToken(null)
+        clearAuthFromStorage()
+        clearTimers()
+        setSessionWarning(false)
+        setSessionExpiredMessage('Your session has expired. Please sign in again.')
+      }, outIn)
+    }
+  }, [clearTimers])
+
+  // Arm timers on mount if there is already a stored token.
+  useEffect(() => {
+    const stored = localStorage.getItem('ghra_token')
+    if (stored) {
+      // If the token is already past expiry, force logout immediately.
+      const exp = getTokenExp(stored)
+      const now = Math.floor(Date.now() / 1000)
+      if (exp && exp <= now) {
+        clearAuthFromStorage()
+        setIsAuthenticated(false)
+        setCurrentUser(null)
+        setToken(null)
+        setSessionExpiredMessage('Your session has expired. Please sign in again.')
+      } else {
+        armExpiryTimers(stored)
+      }
+    }
+    return () => clearTimers()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Central handler: call this when any API returns 401.
+  const forceLogout = useCallback((msg = 'Your session has expired. Please sign in again.') => {
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+    setToken(null)
+    clearAuthFromStorage()
+    clearTimers()
+    setSessionWarning(false)
+    setSessionExpiredMessage(msg)
+  }, [clearTimers])
+
+  const dismissSessionWarning = useCallback(() => setSessionWarning(false), [])
+  const clearSessionExpiredMessage = useCallback(() => setSessionExpiredMessage(''), [])
 
   const login = useCallback(async (email, password) => {
     setError('')
@@ -66,13 +145,15 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true)
       setCurrentUser(user)
       saveAuthToStorage(data.token, user)
+      setSessionExpiredMessage('')
+      armExpiryTimers(data.token)
       return { success: true, mustChangePassword: !!data.mustChangePassword }
     } catch {
       const msg = 'Unable to connect to server'
       setError(msg)
       return { success: false, error: msg }
     }
-  }, [])
+  }, [armExpiryTimers])
 
   const employeeLogin = useCallback(async (email, password) => {
     setError('')
@@ -95,13 +176,15 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true)
       setCurrentUser(user)
       saveAuthToStorage(data.token, user)
+      setSessionExpiredMessage('')
+      armExpiryTimers(data.token)
       return { success: true, mustChangePassword: !!data.mustChangePassword }
     } catch {
       const msg = 'Unable to connect to server'
       setError(msg)
       return { success: false, error: msg }
     }
-  }, [])
+  }, [armExpiryTimers])
 
   const signup = useCallback(async (email, password, confirmPassword) => {
     setError('')
@@ -135,8 +218,11 @@ export const AuthProvider = ({ children }) => {
     setCurrentUser(null)
     setToken(null)
     setError('')
+    setSessionExpiredMessage('')
+    setSessionWarning(false)
     clearAuthFromStorage()
-  }, [])
+    clearTimers()
+  }, [clearTimers])
 
   const saveDraft = useCallback(async (applicationId, currentStep, formData) => {
     if (!token) return null
@@ -189,14 +275,15 @@ export const AuthProvider = ({ children }) => {
   }, [token])
 
   const getAllApplications = useCallback(async () => {
-    if (!token) return []
+    if (!token) return null
     try {
       const res = await fetch(`${API}/applications/all`, { headers: authHeaders(token) })
-      return res.ok ? await res.json() : []
+      if (res.status === 401 || res.status === 403) { forceLogout(); return null }
+      return res.ok ? await res.json() : null
     } catch {
-      return []
+      return null
     }
-  }, [token])
+  }, [token, forceLogout])
 
   // Fetches a document with the auth token and opens it in a new tab as a blob URL.
   const openDocument = useCallback(async (storedUrl) => {
@@ -678,6 +765,11 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       currentUser,
       error,
+      sessionExpiredMessage,
+      sessionWarning,
+      clearSessionExpiredMessage,
+      dismissSessionWarning,
+      forceLogout,
       login,
       signup,
       employeeLogin,

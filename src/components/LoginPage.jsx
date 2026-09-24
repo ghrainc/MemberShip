@@ -5,7 +5,7 @@ import PasswordInput from './PasswordInput'
 import '../styles/LoginPage.css'
 
 function LoginPage() {
-  const { login, signup, error, employeeLogin, isAuthenticated, currentUser } = useContext(AuthContext)
+  const { login, signup, error, employeeLogin, isAuthenticated, currentUser, sessionExpiredMessage, clearSessionExpiredMessage } = useContext(AuthContext)
   const navigate = useNavigate()
   const [isSignup, setIsSignup] = useState(false)
   const [isEmployee, setIsEmployee] = useState(false)
@@ -114,6 +114,12 @@ function LoginPage() {
             />
           </div>
 
+          {sessionExpiredMessage && (
+            <div className="session-expired-message" role="alert">
+              {sessionExpiredMessage}
+              <button type="button" className="session-expired-dismiss" onClick={clearSessionExpiredMessage} aria-label="Dismiss">✕</button>
+            </div>
+          )}
           {successMessage && <div className="success-message">{successMessage}</div>}
           {(localError || error) && <div className="error-message">{localError || error}</div>}
 

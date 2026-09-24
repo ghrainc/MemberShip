@@ -7,6 +7,33 @@ import { normaliseDocuments } from '../utils/documentSlots'
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
 
+const SKIP_UPPERCASE_CLIENT = new Set([
+  'email', 'userEmail', 'password', 'newPassword', 'confirmPassword',
+  'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher',
+  'businessType', 'storeCondition', 'businessProperty', 'ownershipType',
+  'storeSpannerBoard', 'hfbContribute', 'akdnContribute', 'hardLiquor', 'ageRequirement',
+  'closedSundayAfter9pm', 'warehouseDelivery', 'previousMember', 'fuelAvailability', 'pos',
+  'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
+  'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
+])
+
+function uppercaseFieldValue(name, value) {
+  if (typeof value !== 'string') return value
+  if (SKIP_UPPERCASE_CLIENT.has(name)) return value
+  if (name.toLowerCase().endsWith('email')) return value
+  return value.toUpperCase()
+}
+
+// Uppercase a text input while preserving cursor position.
+function applyUppercaseWithCursor(e, value) {
+  const upper = uppercaseFieldValue(e.target.name, value)
+  if (upper === value) return value
+  const { selectionStart, selectionEnd } = e.target
+  e.target.value = upper
+  try { e.target.setSelectionRange(selectionStart, selectionEnd) } catch {}
+  return upper
+}
+
 const formatPhone = (value) => {
   const digits = value.replace(/\D/g, '').slice(0, 10)
   if (digits.length > 6) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
@@ -386,7 +413,14 @@ function MembershipForm({ isEmployeeEdit = false }) {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
-    const finalValue = type === 'checkbox' ? checked : PHONE_FIELDS.has(name) ? formatPhone(value) : value
+    let finalValue
+    if (type === 'checkbox') {
+      finalValue = checked
+    } else if (PHONE_FIELDS.has(name)) {
+      finalValue = formatPhone(value)
+    } else {
+      finalValue = applyUppercaseWithCursor(e, value)
+    }
     setFormData(prev => ({ ...prev, [name]: finalValue }))
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }))
   }
@@ -446,7 +480,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
 
   const handleOwnerChange = (index, field, value) => {
     const updatedOwners = [...formData.owners]
-    updatedOwners[index][field] = OWNER_PHONE_FIELDS.has(field) ? formatPhone(value) : value
+    updatedOwners[index][field] = OWNER_PHONE_FIELDS.has(field) ? formatPhone(value) : uppercaseFieldValue(field, value)
     setFormData(prev => ({ ...prev, owners: updatedOwners }))
   }
 

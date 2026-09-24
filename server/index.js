@@ -94,6 +94,52 @@ function processOwnerSsnsForSave(formData) {
   }
 }
 
+// Keys whose values must never be uppercased.
+const SKIP_UPPERCASE_KEYS = new Set([
+  // Emails
+  'email', 'userEmail',
+  // Auth / passwords (handled elsewhere)
+  'password', 'newPassword', 'confirmPassword',
+  // Sensitive financial / ID numbers
+  'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher', 'ssnEncrypted',
+  // Dropbox Sign / signature artefacts
+  'GhraNumber',
+  // Stored document references / filenames
+  'url', 'filename', 'originalName', 'filePath',
+  // Boolean / enum / code fields — casing is meaningful
+  'businessType', 'storeCondition', 'businessProperty', 'ownershipType',
+  'storeSpannerBoard', 'hfbContribute', 'akdnContribute', 'hardLiquor', 'ageRequirement',
+  'closedSundayAfter9pm', 'warehouseDelivery', 'previousMember', 'fuelAvailability', 'pos',
+  'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
+  'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
+])
+
+function uppercaseValue(key, value) {
+  if (SKIP_UPPERCASE_KEYS.has(key)) return value
+  // Skip keys that end in 'email' (e.g. referenceEmail1)
+  if (typeof key === 'string' && key.toLowerCase().endsWith('email')) return value
+  // Safety net: any key resembling a password must reach bcrypt exactly as typed
+  if (typeof key === 'string' && /password|pass|pwd|secret|token|hash/i.test(key)) return value
+  if (typeof value !== 'string') return value
+  return value.toUpperCase()
+}
+
+function uppercaseFormData(obj) {
+  if (!obj || typeof obj !== 'object') return obj
+  if (Array.isArray(obj)) return obj.map(item => uppercaseFormData(item))
+  const out = {}
+  for (const [k, v] of Object.entries(obj)) {
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      out[k] = uppercaseFormData(v)
+    } else if (Array.isArray(v)) {
+      out[k] = v.map(item => (item && typeof item === 'object') ? uppercaseFormData(item) : uppercaseValue(k, item))
+    } else {
+      out[k] = uppercaseValue(k, v)
+    }
+  }
+  return out
+}
+
 // Replace ssnEncrypted with masked ssn string for client-facing responses
 function maskOwnerSsns(formData) {
   if (!formData?.owners?.length) return formData
@@ -129,7 +175,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     'Approved: Elected Board Signer',
     'MembershipAdmin',
   ]
-  const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName', 'StaffFirstName', 'StaffLastName', 'DateApproved']
+  const REQUIRED_CUSTOM_FIELDS = ['VerificationFirstName', 'VerificationLastName', 'ApprovedFirstName', 'ApprovedLastName', 'StaffFirstName', 'StaffLastName', 'DateApproved', 'AuthRepAddress']
   const templateApi = new TemplateApi()
   templateApi.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
   const tmplRes = await templateApi.templateGet(DROPBOX_SIGN_TEMPLATE_ID)
@@ -191,6 +237,15 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     const parts = [b.bankAddress, b.bankCity, b.bankState, b.bankZip].filter(Boolean)
     return parts.length ? parts.join(', ') : null
   }
+  // Format Auth Rep home address: "Street, City, State Zip" — skips missing parts
+  const formatAuthRepAddress = (fd) => {
+    const street   = (fd.authorizedRepAddress || '').trim()
+    const city     = (fd.authorizedRepCity    || '').trim()
+    const state    = (fd.authorizedRepState   || '').trim()
+    const zip      = (fd.authorizedRepZip     || '').trim()
+    const stateZip = [state, zip].filter(Boolean).join(' ')
+    return [street, city, stateZip].filter(Boolean).join(', ')
+  }
 
   const customFields = [
     // ── Business identity ─────────────────────────────────────────────────────
@@ -229,6 +284,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     cf('AuthRepCell',      owner1.mobilePhone),
     cf('AuthRepDL',        owner1.driverLicense),
     cf('AuthRepState',     owner1.stateIssued),
+    cf('AuthRepAddress',   formatAuthRepAddress(formData)),
     // AuthRepSS — collected in form (owner.ssn) but not wired to this template field
 
     // ── Owners 2–10 (dynamic) ─────────────────────────────────────────────────
@@ -722,6 +778,28 @@ async function ensureSchema() {
           FileContent NVARCHAR(MAX) NOT NULL
         )
     `)
+    // Archive columns — IsArchived flag pattern (Status is never changed by archiving)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'IsArchived'
+      )
+        ALTER TABLE Applications ADD IsArchived BIT NOT NULL DEFAULT 0
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ArchivedBy'
+      )
+        ALTER TABLE Applications ADD ArchivedBy NVARCHAR(255) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ArchivedAt'
+      )
+        ALTER TABLE Applications ADD ArchivedAt DATETIME NULL
+    `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
   }
@@ -1096,7 +1174,7 @@ app.delete('/api/employees/:id', authMiddleware, async (req, res) => {
 app.post('/api/applications/draft', authMiddleware, async (req, res) => {
   const { applicationId, currentStep, formData: rawFormData } = req.body
   const userEmail = req.user.email
-  const formData = processOwnerSsnsForSave(rawFormData)
+  const formData = uppercaseFormData(processOwnerSsnsForSave(rawFormData))
 
   try {
     const db = await getPool()
@@ -1142,7 +1220,7 @@ app.post('/api/applications/draft', authMiddleware, async (req, res) => {
 // POST /api/applications/submit  — final submission
 app.post('/api/applications/submit', authMiddleware, async (req, res) => {
   const { applicationId, formData: rawFormData } = req.body
-  const formData = processOwnerSsnsForSave(rawFormData)
+  const formData = uppercaseFormData(processOwnerSsnsForSave(rawFormData))
   const userEmail = req.user.email
 
   try {
@@ -1365,7 +1443,8 @@ app.get('/api/applications/all', authMiddleware, async (req, res) => {
                      a.AdminSignerFirstName, a.AdminSignerLastName, a.AdminSignerEmail,
                      a.AdminSignatureId, a.AdminSignatureStatus, a.AdminSignedAt,
                      a.GhraNumber, a.GhraNumberSource, a.GhraNumberUpdatedBy, a.GhraNumberUpdatedAt, a.GhraNumberIssue,
-                     a.AchAuthorizationDate, a.SignedAt
+                     a.AchAuthorizationDate, a.SignedAt,
+                     a.IsArchived, a.ArchivedBy, a.ArchivedAt
               FROM Applications a
               LEFT JOIN Users u ON u.Email = a.UserEmail
               ORDER BY a.CreatedAt DESC`)
@@ -1452,6 +1531,17 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
       let fd = {}
       try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
       const { UserEmail } = existing.recordset[0]
+
+      // Warn if Auth Rep address is partial — do not block the approval
+      const missingAddrParts = [
+        fd.authorizedRepAddress?.trim() ? null : 'street',
+        fd.authorizedRepCity?.trim()    ? null : 'city',
+        fd.authorizedRepState?.trim()   ? null : 'state',
+        fd.authorizedRepZip?.trim()     ? null : 'zip',
+      ].filter(Boolean)
+      if (missingAddrParts.length) {
+        console.warn(`[approval] app ${req.params.id}: AuthRepAddress missing: ${missingAddrParts.join(', ')}`)
+      }
 
       try {
         const { signatureRequestId, verificationSignatureId, approvedSignatureId, adminSignatureId } =
@@ -1917,7 +2007,7 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
 app.put('/api/applications/:id', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
   const { formData: rawFormData } = req.body
-  const formData = processOwnerSsnsForSave(rawFormData)
+  const formData = uppercaseFormData(processOwnerSsnsForSave(rawFormData))
   try {
     const db = await getPool()
     const storeName = formData.memberName || formData.storeNameCertification || ''
@@ -1932,6 +2022,78 @@ app.put('/api/applications/:id', authMiddleware, async (req, res) => {
               SET FormData = @formData, StoreName = @storeName, StoreAddress = @storeAddress, UpdatedAt = GETDATE()
               WHERE Id = @id`)
     res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/applications/archive  — set IsArchived=1 (employee-only)
+app.post('/api/applications/archive', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { applicationIds } = req.body
+  if (!Array.isArray(applicationIds) || applicationIds.length === 0)
+    return res.status(400).json({ error: 'applicationIds must be a non-empty array' })
+  const ids = applicationIds.map(n => parseInt(n, 10))
+  if (ids.some(isNaN)) return res.status(400).json({ error: 'All applicationIds must be integers' })
+  try {
+    const db = await getPool()
+    const t = db.transaction()
+    await t.begin()
+    try {
+      for (const id of ids) {
+        await t.request()
+          .input('id',         sql.Int,         id)
+          .input('archivedBy', sql.NVarChar(255), req.user.email)
+          .query(`UPDATE Applications
+                  SET IsArchived = 1, ArchivedBy = @archivedBy, ArchivedAt = GETDATE()
+                  WHERE Id = @id`)
+      }
+      await t.commit()
+      res.json({ success: true, count: ids.length })
+    } catch (err) {
+      await t.rollback()
+      throw err
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/applications/unarchive  — set IsArchived=0 (employee-only)
+app.post('/api/applications/unarchive', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { applicationIds } = req.body
+  if (!Array.isArray(applicationIds) || applicationIds.length === 0)
+    return res.status(400).json({ error: 'applicationIds must be a non-empty array' })
+  const ids = applicationIds.map(n => parseInt(n, 10))
+  if (ids.some(isNaN)) return res.status(400).json({ error: 'All applicationIds must be integers' })
+  try {
+    const db = await getPool()
+    // Gather current status for each so we can report where they land after unarchive
+    const idList = ids.join(',')
+    const t = db.transaction()
+    await t.begin()
+    try {
+      for (const id of ids) {
+        await t.request()
+          .input('id', sql.Int, id)
+          .query(`UPDATE Applications
+                  SET IsArchived = 0, ArchivedBy = NULL, ArchivedAt = NULL
+                  WHERE Id = @id`)
+      }
+      await t.commit()
+    } catch (err) {
+      await t.rollback()
+      throw err
+    }
+
+    // Determine Active vs Completed counts: Active = no GhraNumber, Completed = has GhraNumber
+    const afterResult = await db.request().query(
+      `SELECT Id, GhraNumber FROM Applications WHERE Id IN (${idList})`
+    )
+    const completedCount = afterResult.recordset.filter(r => !!r.GhraNumber).length
+    const activeCount    = ids.length - completedCount
+    res.json({ success: true, count: ids.length, activeCount, completedCount, message: `${ids.length} unarchived — ${activeCount} to Active, ${completedCount} to Completed` })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2019,13 +2181,15 @@ app.get('/api/applications/:id/package', authMiddleware, async (req, res) => {
       skipped.push('Signed Application PDF — no signature request sent for this application')
     }
 
-    // 2. Attachments from FormData + disk
+    // 2. Attachments from FormData + disk — all flat in ATTACHMENTS/ with slot-title prefix
     const slots = getServerDocSlots(formData.owners || [])
     const documents = normaliseServerDocuments(formData)
     const uploadDir = path.join(__dirname, 'UploadedDocuments', String(appId))
+    const usedNames = new Set()
 
     for (const slot of slots) {
       const files = (documents[slot.id] || []).filter(f => f.filename)
+      const slotLabel = (slot.title || slot.id).toUpperCase()
       for (let i = 0; i < files.length; i++) {
         const f = files[i]
         const filename = path.basename(f.filename || '')
@@ -2035,8 +2199,19 @@ app.get('/api/applications/:id/package', authMiddleware, async (req, res) => {
           skipped.push(`${slot.title} — ${f.originalName || filename} (not found on disk)`)
           continue
         }
-        const pageLabel = files.length > 1 ? `Page ${String(i + 1).padStart(2, '0')} - ` : ''
-        items.push({ archiveName: `Attachments/${slot.title}/${pageLabel}${f.originalName || filename}`, filePath })
+        const originalName = f.originalName || filename
+        const pageLabel = files.length > 1 ? `PAGE ${String(i + 1).padStart(2, '0')} - ` : ''
+        let candidate = `ATTACHMENTS/${slotLabel} - ${pageLabel}${originalName}`
+        // Deduplicate: append counter if the same archive name already used
+        if (usedNames.has(candidate)) {
+          const ext = path.extname(originalName)
+          const base = originalName.slice(0, originalName.length - ext.length)
+          let counter = 2
+          while (usedNames.has(`ATTACHMENTS/${slotLabel} - ${pageLabel}${base} (${counter})${ext}`)) counter++
+          candidate = `ATTACHMENTS/${slotLabel} - ${pageLabel}${base} (${counter})${ext}`
+        }
+        usedNames.add(candidate)
+        items.push({ archiveName: candidate, filePath })
       }
     }
 
@@ -2094,7 +2269,7 @@ app.post('/api/ach/generate', authMiddleware, async (req, res) => {
     const reqDb = db.request()
     ids.forEach((id, i) => reqDb.input(`id${i}`, sql.Int, id))
     const rows  = (await reqDb.query(
-      `SELECT Id, StoreName, GhraNumber, FormData FROM Applications WHERE Id IN (${ph})`
+      `SELECT Id, StoreName, GhraNumber, FormData, IsArchived FROM Applications WHERE Id IN (${ph})`
     )).recordset
 
     // CSV-escape a value: replace CR/LF with space, then quote if it contains , or "
@@ -2114,6 +2289,10 @@ app.post('/api/ach/generate', authMiddleware, async (req, res) => {
       const mapping = fd.achToBankMapping || {}
       const banks   = fd.bankAccounts     || []
       const errors  = []
+
+      if (row.IsArchived) {
+        errors.push('Application is archived — unarchive it before generating ACH')
+      }
 
       if (!ach.corporate) {
         errors.push('No corporate ACH account — cannot determine the account to debit for the membership fee')

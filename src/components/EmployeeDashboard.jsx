@@ -1,4 +1,4 @@
-import { useState, useContext, useEffect } from 'react'
+import { useState, useContext, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
@@ -36,18 +36,69 @@ function getAuthRepState(app) {
 
 const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '', achStatus: '' }
 
+function ArchiveConfirmDialog({ action, count, loading, onConfirm, onCancel }) {
+  const primaryRef = useRef(null)
+  const isArchive  = action === 'archive'
+
+  useEffect(() => {
+    primaryRef.current?.focus()
+    const handleKey = (e) => {
+      if (e.key === 'Escape' && !loading) onCancel()
+      if (e.key === 'Enter'  && !loading) onConfirm()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [loading, onCancel, onConfirm])
+
+  const bodyText = isArchive
+    ? count === 1
+      ? 'Archive this application? It will move to the Archive tab and can be restored at any time.'
+      : `Archive these ${count} applications? They will move to the Archive tab and can be restored at any time.`
+    : count === 1
+      ? 'Restore this application? It will return to the Active or Completed tab based on whether a GHRA # has been assigned.'
+      : `Restore these ${count} applications? They will return to the Active or Completed tabs based on whether a GHRA # has been assigned.`
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="archive-dialog-title" onClick={() => !loading && onCancel()}>
+      <div className="modal-content modal-content--confirm" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3 id="archive-dialog-title">{isArchive ? 'Archive Applications' : 'Restore Applications'}</h3>
+          <button className="modal-close" onClick={onCancel} disabled={loading} aria-label="Close">✕</button>
+        </div>
+        <div className="modal-body">
+          <p>{bodyText}</p>
+          <div className="modal-actions">
+            <button className="modal-cancel-button" onClick={onCancel} disabled={loading}>Cancel</button>
+            <button
+              ref={primaryRef}
+              className="modal-confirm-button"
+              onClick={onConfirm}
+              disabled={loading}
+            >
+              {loading ? (isArchive ? 'Archiving…' : 'Restoring…') : (isArchive ? 'Archive' : 'Restore')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EmployeeDashboard() {
   const {
     currentUser, getAllApplications, syncSignatureStatuses, testDropboxSign, logout,
     createMemberAccount, resetMemberPassword,
     getMembers, deleteMember,
     getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName,
-    updateGhraNumber, downloadApplicationPackage, generateAch, getAchBatches, downloadAchBatch
+    updateGhraNumber, downloadApplicationPackage, generateAch, getAchBatches, downloadAchBatch,
+    archiveApplications, unarchiveApplications,
+    sessionWarning, dismissSessionWarning
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
   const [searchTerms, setSearchTerms] = useState(EMPTY_FILTERS)
@@ -72,6 +123,14 @@ function EmployeeDashboard() {
   const [docsDownloading, setDocsDownloading] = useState(new Set())
   const [achToast, setAchToast] = useState(null)
   const [achValidationErrors, setAchValidationErrors] = useState(null)
+
+  // Inner sub-tabs within All Applications
+  const [innerTab, setInnerTab] = useState('active') // 'active' | 'completed' | 'archive'
+
+  // Archive confirmation dialog
+  const [archiveConfirm, setArchiveConfirm] = useState(null) // { ids: Set, action: 'archive'|'unarchive' }
+  const [archiveLoading, setArchiveLoading] = useState(false)
+  const [archiveToast, setArchiveToast] = useState(null)
 
   // ACH History tab
   const [achBatches, setAchBatches] = useState([])
@@ -136,12 +195,18 @@ function EmployeeDashboard() {
   const [createEmployeeSuccess, setCreateEmployeeSuccess] = useState('')
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
 
-  useEffect(() => {
-    getAllApplications().then(data => {
-      setApplications(data || [])
-      setLoading(false)
-    })
-  }, [])
+  const loadApplications = useCallback(async () => {
+    setLoadError(false)
+    const data = await getAllApplications()
+    if (data === null) {
+      setLoadError(true)
+    } else {
+      setApplications(data)
+    }
+    setLoading(false)
+  }, [getAllApplications])
+
+  useEffect(() => { loadApplications() }, [loadApplications])
 
   const loadMembers = async () => {
     setMembersLoading(true)
@@ -174,15 +239,20 @@ function EmployeeDashboard() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
+    setLoadError(false)
     await syncSignatureStatuses()
     const data = await getAllApplications()
-    setApplications(data || [])
+    if (data === null) {
+      setLoadError(true)
+    } else {
+      setApplications(data)
+    }
     setRefreshing(false)
   }
 
   const handleBoardSaved = async () => {
     const data = await getAllApplications()
-    setApplications(data || [])
+    if (data !== null) setApplications(data)
   }
 
   const handleSearchChange = (field, value) => setSearchTerms(prev => ({ ...prev, [field]: value }))
@@ -194,7 +264,14 @@ function EmployeeDashboard() {
 
   const hasActiveFilters = Object.values(searchTerms).some(v => v !== '')
 
-  const filteredApplications = applications.filter(app => {
+  // Inner-tab partition
+  const activeApps    = applications.filter(a => !a.IsArchived && !a.GhraNumber)
+  const completedApps = applications.filter(a => !a.IsArchived &&  a.GhraNumber)
+  const archiveApps   = applications.filter(a =>  a.IsArchived)
+
+  const innerTabApps = innerTab === 'active' ? activeApps : innerTab === 'completed' ? completedApps : archiveApps
+
+  const filteredApplications = innerTabApps.filter(app => {
     const repFullName = `${app.AuthRepFirstName || ''} ${app.AuthRepLastName || ''}`.trim()
     const dateStr = app.CreatedAt ? app.CreatedAt.slice(0, 10) : ''
     let statusMatch = true
@@ -523,8 +600,8 @@ function EmployeeDashboard() {
   }
 
   const countLabel = hasActiveFilters
-    ? `${sortedApplications.length} of ${applications.length} application${applications.length !== 1 ? 's' : ''}`
-    : `${applications.length} application${applications.length !== 1 ? 's' : ''}`
+    ? `${sortedApplications.length} of ${innerTabApps.length} application${innerTabApps.length !== 1 ? 's' : ''}`
+    : `${innerTabApps.length} application${innerTabApps.length !== 1 ? 's' : ''}`
 
   const visibleIds = sortedApplications.map(a => a.Id)
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id))
@@ -542,6 +619,46 @@ function EmployeeDashboard() {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
   }
 
+  const handleSwitchInnerTab = (tab) => {
+    setInnerTab(tab)
+    setSelectedIds(new Set())
+    setSearchTerms(EMPTY_FILTERS)
+  }
+
+  const handleArchiveSelected = () => {
+    if (!selectedIds.size) return
+    setArchiveConfirm({ ids: new Set(selectedIds), action: 'archive' })
+  }
+
+  const handleUnarchiveSelected = () => {
+    if (!selectedIds.size) return
+    setArchiveConfirm({ ids: new Set(selectedIds), action: 'unarchive' })
+  }
+
+  const handleArchiveConfirm = async () => {
+    if (!archiveConfirm) return
+    setArchiveLoading(true)
+    const ids = Array.from(archiveConfirm.ids)
+    const fn  = archiveConfirm.action === 'archive' ? archiveApplications : unarchiveApplications
+    const result = await fn(ids)
+    setArchiveLoading(false)
+    setArchiveConfirm(null)
+    if (result.success) {
+      const data = await getAllApplications()
+      if (data !== null) setApplications(data)
+      setSelectedIds(new Set())
+      const n   = ids.length
+      const msg = archiveConfirm.action === 'archive'
+        ? `${n === 1 ? '1 application' : `${n} applications`} moved to Archive`
+        : `${n === 1 ? '1 application' : `${n} applications`} restored`
+      setArchiveToast({ type: 'success', text: msg })
+      setTimeout(() => setArchiveToast(null), 6000)
+    } else {
+      setArchiveToast({ type: 'error', text: result.error || 'Operation failed' })
+      setTimeout(() => setArchiveToast(null), 6000)
+    }
+  }
+
   const generateAchCsv = async () => {
     if (!selectedIds.size) return
     setAchValidationErrors(null)
@@ -550,7 +667,7 @@ function EmployeeDashboard() {
     const result = await generateAch(ids)
     if (result.success) {
       const data = await getAllApplications()
-      setApplications(data || [])
+      if (data !== null) setApplications(data)
       setSelectedIds(new Set())
       setAchToast({ type: 'success', text: `ACH file generated for ${ids.length} application${ids.length !== 1 ? 's' : ''}` })
       setTimeout(() => setAchToast(null), 6000)
@@ -564,6 +681,12 @@ function EmployeeDashboard() {
 
   return (
     <div className="employee-dashboard-container">
+      {sessionWarning && (
+        <div className="session-warning-banner" role="alert">
+          <span>Your session will expire in 5 minutes. Please save your work and sign in again to continue.</span>
+          <button type="button" className="session-warning-dismiss" onClick={dismissSessionWarning} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <header className="employee-dashboard-header">
         <div className="header-content">
           <div className="header-left">
@@ -627,10 +750,30 @@ function EmployeeDashboard() {
               <p className="application-count">
                 {loading ? 'Loading...' : countLabel}
               </p>
-              {selectedIds.size > 0 && (
+              {selectedIds.size > 0 && innerTab !== 'archive' && (
                 <button className="ach-export-button" onClick={generateAchCsv}>
                   Download ACH File ({selectedIds.size})
                 </button>
+              )}
+              {selectedIds.size > 0 && innerTab !== 'archive' && (
+                <button className="archive-button" onClick={handleArchiveSelected}>
+                  Archive ({selectedIds.size})
+                </button>
+              )}
+              {selectedIds.size > 0 && innerTab === 'archive' && (
+                <button className="modal-confirm-button" onClick={handleUnarchiveSelected}>
+                  Restore ({selectedIds.size})
+                </button>
+              )}
+              {archiveToast && (
+                <span style={{
+                  padding: '4px 12px', borderRadius: 4, fontSize: 13, fontWeight: 500,
+                  background: archiveToast.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: archiveToast.type === 'success' ? '#155724' : '#721c24',
+                  border: `1px solid ${archiveToast.type === 'success' ? '#c3e6cb' : '#f5c6cb'}`,
+                }}>
+                  {archiveToast.text}
+                </span>
               )}
               {achToast && (
                 <span style={{
@@ -673,13 +816,46 @@ function EmployeeDashboard() {
             </div>
           </div>
 
+          {/* Inner sub-tabs */}
+          {!loading && !loadError && (
+            <div className="inner-tab-nav">
+              <button
+                className={`inner-tab-button${innerTab === 'active' ? ' inner-tab-button--active' : ''}`}
+                onClick={() => handleSwitchInnerTab('active')}
+              >
+                Active <span className="inner-tab-count">{activeApps.length}</span>
+              </button>
+              <button
+                className={`inner-tab-button${innerTab === 'completed' ? ' inner-tab-button--active' : ''}`}
+                onClick={() => handleSwitchInnerTab('completed')}
+              >
+                Completed <span className="inner-tab-count">{completedApps.length}</span>
+              </button>
+              <button
+                className={`inner-tab-button${innerTab === 'archive' ? ' inner-tab-button--active' : ''}`}
+                onClick={() => handleSwitchInnerTab('archive')}
+              >
+                Archive <span className="inner-tab-count">{archiveApps.length}</span>
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="empty-state"><p>Loading applications...</p></div>
-          ) : applications.length === 0 ? (
+          ) : loadError ? (
+            <div className="empty-state load-error-state">
+              <div className="empty-icon">⚠️</div>
+              <h3>Could Not Load Applications</h3>
+              <p>There was a problem loading the applications. This may be a connection issue or your session may have expired.</p>
+              <button className="retry-button" onClick={() => { setLoading(true); loadApplications() }}>
+                Retry
+              </button>
+            </div>
+          ) : innerTabApps.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon">📋</div>
-              <h3>No Applications</h3>
-              <p>There are no applications to review at this time.</p>
+              <h3>{innerTab === 'archive' ? 'No Archived Applications' : 'No Applications'}</h3>
+              <p>{innerTab === 'archive' ? 'No applications have been archived.' : 'There are no applications to review at this time.'}</p>
             </div>
           ) : (
             <div className="applications-table-wrapper">
@@ -768,13 +944,18 @@ function EmployeeDashboard() {
                     <th className="ghra-number-column">
                       <span className="th-label">GHRA #</span>
                     </th>
+                    {innerTab === 'archive' && (
+                      <th className="archive-info-column">
+                        <span className="th-label">Archived</span>
+                      </th>
+                    )}
                     <th className="action-column">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sortedApplications.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="empty-filter-row">
+                      <td colSpan={innerTab === 'archive' ? 10 : 9} className="empty-filter-row">
                         No applications match the current filters.{' '}
                         <button className="clear-filters-inline" onClick={handleClearFilters}>Clear Filters</button>
                       </td>
@@ -887,6 +1068,16 @@ function EmployeeDashboard() {
                               </div>
                             )}
                           </td>
+                          {innerTab === 'archive' && (
+                            <td className="archive-info-cell">
+                              {app.ArchivedAt && (
+                                <div style={{ fontSize: 12, lineHeight: 1.4 }}>
+                                  <div>{formatDate(app.ArchivedAt)}</div>
+                                  {app.ArchivedBy && <div style={{ color: 'var(--ghra-muted)', fontSize: 11 }}>{app.ArchivedBy}</div>}
+                                </div>
+                              )}
+                            </td>
+                          )}
                           <td className="action-cell action-cell--column">
                             <button className="view-button" onClick={() => navigate(`/employee/application/${app.Id}`)}>
                               View
@@ -1005,8 +1196,8 @@ function EmployeeDashboard() {
                             </button>
                           ) : memberDeletePending?.id === m.Id ? (
                             <span className="delete-confirm-inline">
-                              <span>Delete?</span>
-                              <button className="delete-confirm-yes" onClick={() => handleDeleteMember(m.Id)}>Yes</button>
+                              <span>Delete permanently?</span>
+                              <button className="delete-confirm-yes" onClick={() => handleDeleteMember(m.Id)}>Delete</button>
                               <button className="delete-confirm-cancel" onClick={() => setMemberDeletePending(null)}>Cancel</button>
                             </span>
                           ) : (
@@ -1128,8 +1319,8 @@ function EmployeeDashboard() {
                           {!isAdmin && !isSelf && !isEditing && (
                             employeeDeletePending?.id === emp.Id ? (
                               <span className="delete-confirm-inline">
-                                <span>Delete?</span>
-                                <button className="delete-confirm-yes" onClick={() => handleDeleteEmployee(emp.Id)}>Yes</button>
+                                <span>Delete permanently?</span>
+                                <button className="delete-confirm-yes" onClick={() => handleDeleteEmployee(emp.Id)}>Delete</button>
                                 <button className="delete-confirm-cancel" onClick={() => setEmployeeDeletePending(null)}>Cancel</button>
                               </span>
                             ) : (
@@ -1291,6 +1482,17 @@ function EmployeeDashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── Archive / Restore confirmation dialog ───────────────────────── */}
+      {archiveConfirm && (
+        <ArchiveConfirmDialog
+          action={archiveConfirm.action}
+          count={archiveConfirm.ids.size}
+          loading={archiveLoading}
+          onConfirm={handleArchiveConfirm}
+          onCancel={() => !archiveLoading && setArchiveConfirm(null)}
+        />
       )}
 
       {/* ── Resend signature modal ───────────────────────────────────────── */}
