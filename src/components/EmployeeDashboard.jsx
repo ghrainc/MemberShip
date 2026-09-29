@@ -36,7 +36,7 @@ function getAuthRepState(app) {
 
 const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '', achStatus: '' }
 
-function ArchiveConfirmDialog({ action, count, loading, onConfirm, onCancel }) {
+function ArchiveConfirmDialog({ action, count, loading, error, onConfirm, onCancel }) {
   const primaryRef = useRef(null)
   const isArchive  = action === 'archive'
 
@@ -62,18 +62,24 @@ function ArchiveConfirmDialog({ action, count, loading, onConfirm, onCancel }) {
     <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="archive-dialog-title" onClick={() => !loading && onCancel()}>
       <div className="modal-content modal-content--confirm" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3 id="archive-dialog-title">{isArchive ? 'Archive Applications' : 'Restore Applications'}</h3>
+          <h3 id="archive-dialog-title" style={{ userSelect: 'none' }}>{isArchive ? 'Archive Applications' : 'Restore Applications'}</h3>
           <button className="modal-close" onClick={onCancel} disabled={loading} aria-label="Close">✕</button>
         </div>
         <div className="modal-body">
           <p>{bodyText}</p>
+          {error && (
+            <p style={{ color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: 4, padding: '6px 10px', margin: '8px 0 0', fontSize: 13 }}>
+              {error}
+            </p>
+          )}
           <div className="modal-actions">
-            <button className="modal-cancel-button" onClick={onCancel} disabled={loading}>Cancel</button>
+            <button className="modal-cancel-button" onClick={onCancel} disabled={loading} style={{ userSelect: 'none' }}>Cancel</button>
             <button
               ref={primaryRef}
               className="modal-confirm-button"
               onClick={onConfirm}
               disabled={loading}
+              style={{ userSelect: 'none' }}
             >
               {loading ? (isArchive ? 'Archiving…' : 'Restoring…') : (isArchive ? 'Archive' : 'Restore')}
             </button>
@@ -130,6 +136,7 @@ function EmployeeDashboard() {
   // Archive confirmation dialog
   const [archiveConfirm, setArchiveConfirm] = useState(null) // { ids: Set, action: 'archive'|'unarchive' }
   const [archiveLoading, setArchiveLoading] = useState(false)
+  const [archiveError, setArchiveError] = useState(null)
   const [archiveToast, setArchiveToast] = useState(null)
 
   // ACH History tab
@@ -638,24 +645,31 @@ function EmployeeDashboard() {
   const handleArchiveConfirm = async () => {
     if (!archiveConfirm) return
     setArchiveLoading(true)
-    const ids = Array.from(archiveConfirm.ids)
-    const fn  = archiveConfirm.action === 'archive' ? archiveApplications : unarchiveApplications
-    const result = await fn(ids)
-    setArchiveLoading(false)
-    setArchiveConfirm(null)
+    setArchiveError(null)
+    const ids    = Array.from(archiveConfirm.ids)
+    const action = archiveConfirm.action
+    const fn     = action === 'archive' ? archiveApplications : unarchiveApplications
+    let result
+    try {
+      result = await fn(ids)
+    } finally {
+      setArchiveLoading(false)
+    }
     if (result.success) {
-      const data = await getAllApplications()
-      if (data !== null) setApplications(data)
-      setSelectedIds(new Set())
+      setArchiveConfirm(null)
+      try {
+        const data = await getAllApplications()
+        if (data !== null) setApplications(data)
+        setSelectedIds(new Set())
+      } catch {}
       const n   = ids.length
-      const msg = archiveConfirm.action === 'archive'
+      const msg = action === 'archive'
         ? `${n === 1 ? '1 application' : `${n} applications`} moved to Archive`
         : `${n === 1 ? '1 application' : `${n} applications`} restored`
       setArchiveToast({ type: 'success', text: msg })
       setTimeout(() => setArchiveToast(null), 6000)
     } else {
-      setArchiveToast({ type: 'error', text: result.error || 'Operation failed' })
-      setTimeout(() => setArchiveToast(null), 6000)
+      setArchiveError(result.error || 'Operation failed')
     }
   }
 
@@ -1102,8 +1116,12 @@ function EmployeeDashboard() {
                                 disabled={docsDownloading.has(app.Id)}
                                 onClick={async () => {
                                   setDocsDownloading(prev => new Set([...prev, app.Id]))
-                                  const result = await downloadApplicationPackage(app.Id)
-                                  setDocsDownloading(prev => { const n = new Set(prev); n.delete(app.Id); return n })
+                                  let result
+                                  try {
+                                    result = await downloadApplicationPackage(app.Id)
+                                  } finally {
+                                    setDocsDownloading(prev => { const n = new Set(prev); n.delete(app.Id); return n })
+                                  }
                                   if (!result.success) setAchToast({ type: 'error', text: `Download failed: ${result.error}` })
                                 }}
                                 title="Download application package"
@@ -1421,8 +1439,11 @@ function EmployeeDashboard() {
                           disabled={achBatchDownloading === batch.Id}
                           onClick={async () => {
                             setAchBatchDownloading(batch.Id)
-                            await downloadAchBatch(batch.Id)
-                            setAchBatchDownloading(null)
+                            try {
+                              await downloadAchBatch(batch.Id)
+                            } finally {
+                              setAchBatchDownloading(null)
+                            }
                           }}
                         >
                           {achBatchDownloading === batch.Id ? 'Downloading…' : 'Download CSV'}
@@ -1490,8 +1511,9 @@ function EmployeeDashboard() {
           action={archiveConfirm.action}
           count={archiveConfirm.ids.size}
           loading={archiveLoading}
+          error={archiveError}
           onConfirm={handleArchiveConfirm}
-          onCancel={() => !archiveLoading && setArchiveConfirm(null)}
+          onCancel={() => { if (!archiveLoading) { setArchiveConfirm(null); setArchiveError(null) } }}
         />
       )}
 

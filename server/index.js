@@ -31,6 +31,8 @@ const {
 } = require('@dropbox/sign')
 
 const { buildReferenceCustomFields } = require('./dropboxSignMapping')
+const { logDsEvent, dsCall } = require('./ds/logDsEvent')
+const { logApplicationAction } = require('./audit/logApplicationAction')
 
 // ── SSN encryption (AES-256-GCM) ────────────────────────────────────────────
 
@@ -140,6 +142,20 @@ function uppercaseFormData(obj) {
   return out
 }
 
+function diffFormData(oldFd, newFd) {
+  const allKeys = new Set([...Object.keys(oldFd || {}), ...Object.keys(newFd || {})])
+  const changes = []
+  for (const key of allKeys) {
+    const oldVal = (oldFd || {})[key]
+    const newVal = (newFd || {})[key]
+    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      changes.push({ field: key, old: oldVal, new: newVal })
+    }
+    if (changes.length >= 50) { changes.push({ field: '…', note: 'truncated' }); break }
+  }
+  return changes
+}
+
 // Replace ssnEncrypted with masked ssn string for client-facing responses
 function maskOwnerSsns(formData) {
   if (!formData?.owners?.length) return formData
@@ -161,7 +177,7 @@ const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_
 // boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email }, membershipAdmin: { firstName, lastName, email } }
 // reviewerEmail = employee who approved the application (used in the signing request message)
 // staffFirstName / staffLastName = approving employee's name pre-filled into the document
-async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail, staffFirstName, staffLastName) {
+async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerEmail, staffFirstName, staffLastName, db = null, performedBy = null, appId = null) {
   if (!DROPBOX_SIGN_TEMPLATE_ID) {
     throw new Error('DS_TEMPLATE_ID is not set in .env')
   }
@@ -429,7 +445,19 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     request.message = `Your signature is required for the GHRA Membership Application. This request was sent by ${reviewerEmail}.`
   }
 
-  const response = await api.signatureRequestSendWithTemplate(request)
+  const response = await dsCall(db, {
+    appId, operation: 'signatureRequestSendWithTemplate', performedBy,
+    requestSummary: {
+      templateIds: request.templateIds,
+      signers: request.signers?.map(s => ({ role: s.role, email: s.emailAddress, name: s.name })),
+    },
+  }, () => api.signatureRequestSendWithTemplate(request), r => {
+    const sr = r.body.signatureRequest
+    return {
+      signatureRequestId: sr.signatureRequestId,
+      signatures: (sr.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, status: s.statusCode, email: s.signerEmailAddress })),
+    }
+  })
   const sr     = response.body.signatureRequest
   const sigs   = sr.signatures || []
   const vSig   = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
@@ -443,7 +471,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
   }
 }
 
-async function sendReferencesRequest(formData) {
+async function sendReferencesRequest(formData, db = null, performedBy = null, appId = null) {
   if (!DROPBOX_SIGN_REFERENCES_TEMPLATE_ID) {
     throw new Error('DROPBOX_SIGN_REFERENCES_TEMPLATE_ID is not set in .env')
   }
@@ -476,7 +504,19 @@ async function sendReferencesRequest(formData) {
   request.customFields = buildReferenceCustomFields(formData)
   request.testMode     = process.env.DS_TEST_MODE === 'true'
 
-  const response = await api.signatureRequestSendWithTemplate(request)
+  const response = await dsCall(db, {
+    appId, operation: 'signatureRequestSendWithTemplate[refs]', performedBy,
+    requestSummary: {
+      templateIds: request.templateIds,
+      signers: request.signers?.map(s => ({ role: s.role, email: s.emailAddress, name: s.name })),
+    },
+  }, () => api.signatureRequestSendWithTemplate(request), r => {
+    const sr = r.body.signatureRequest
+    return {
+      signatureRequestId: sr.signatureRequestId,
+      signatures: (sr.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, status: s.statusCode, email: s.signerEmailAddress })),
+    }
+  })
   const sr   = response.body.signatureRequest
   const sigs = sr.signatures || []
   const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
@@ -799,6 +839,40 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'ArchivedAt'
       )
         ALTER TABLE Applications ADD ArchivedAt DATETIME NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DsEventLog' AND type = 'U')
+        CREATE TABLE DsEventLog (
+          Id                  INT IDENTITY(1,1) PRIMARY KEY,
+          ApplicationId       INT NULL,
+          Direction           NVARCHAR(20) NOT NULL,
+          Operation           NVARCHAR(100) NOT NULL,
+          SignatureRequestId  NVARCHAR(255) NULL,
+          Success             BIT NOT NULL DEFAULT 0,
+          HttpStatus          INT NULL,
+          ErrorCode           NVARCHAR(100) NULL,
+          ErrorMessage        NVARCHAR(MAX) NULL,
+          RequestSummary      NVARCHAR(MAX) NULL,
+          ResponseSummary     NVARCHAR(MAX) NULL,
+          DurationMs          INT NULL,
+          PerformedBy         NVARCHAR(255) NULL,
+          CreatedAt           DATETIME NOT NULL DEFAULT GETDATE()
+        )
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ApplicationAuditLog' AND type = 'U')
+        CREATE TABLE ApplicationAuditLog (
+          Id              INT IDENTITY(1,1) PRIMARY KEY,
+          ApplicationId   INT NOT NULL,
+          Action          NVARCHAR(50) NOT NULL,
+          PerformedBy     NVARCHAR(255) NOT NULL,
+          PerformedByRole NVARCHAR(20) NULL,
+          Details         NVARCHAR(MAX) NULL,
+          PreviousStatus  NVARCHAR(20) NULL,
+          NewStatus       NVARCHAR(20) NULL,
+          IpAddress       NVARCHAR(45) NULL,
+          CreatedAt       DATETIME NOT NULL DEFAULT GETDATE()
+        )
     `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
@@ -1248,6 +1322,13 @@ app.post('/api/applications/submit', authMiddleware, async (req, res) => {
                     AchAuthorizationDate = CASE WHEN @achDate IS NOT NULL AND AchAuthorizationDate IS NULL THEN @achDate ELSE AchAuthorizationDate END
                 WHERE Id = @id AND UserEmail = @email`)
       res.json({ applicationId })
+      try {
+        await logApplicationAction(db, {
+          appId: parseInt(applicationId, 10),
+          action: 'submitted', performedBy: req.user.email, performedByRole: req.user.role,
+          newStatus: 'submitted', ipAddress: req.ip,
+        })
+      } catch {}
     } else {
       const result = await db.request()
         .input('email', sql.NVarChar, userEmail)
@@ -1259,6 +1340,13 @@ app.post('/api/applications/submit', authMiddleware, async (req, res) => {
                 OUTPUT INSERTED.Id
                 VALUES (@email, @storeName, @storeAddress, 'submitted', 10, @formData, @achDate)`)
       res.json({ applicationId: result.recordset[0].Id })
+      try {
+        await logApplicationAction(db, {
+          appId: result.recordset[0].Id,
+          action: 'submitted', performedBy: req.user.email, performedByRole: req.user.role,
+          newStatus: 'submitted', ipAddress: req.ip,
+        })
+      } catch {}
     }
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -1297,7 +1385,7 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
       try {
         // Membership + board signers
         if (row.SignatureRequestId) {
-          const r    = await api.signatureRequestGet(row.SignatureRequestId)
+          const r    = await dsCall(db, { appId: row.Id, operation: 'signatureRequestGet', performedBy: req.user.email, signatureRequestId: row.SignatureRequestId, requestSummary: { signatureRequestId: row.SignatureRequestId } }, () => api.signatureRequestGet(row.SignatureRequestId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
           const sr   = r.body.signatureRequest
           const sigs = sr.signatures || []
           const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
@@ -1365,7 +1453,7 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
 
         // Reference signers — update per-signer status and signatureId by role name
         if (row.ReferencesSignatureRequestId) {
-          const r    = await api.signatureRequestGet(row.ReferencesSignatureRequestId)
+          const r    = await dsCall(db, { appId: row.Id, operation: 'signatureRequestGet[refs]', performedBy: req.user.email, signatureRequestId: row.ReferencesSignatureRequestId, requestSummary: { signatureRequestId: row.ReferencesSignatureRequestId } }, () => api.signatureRequestGet(row.ReferencesSignatureRequestId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
           const sigs = r.body.signatureRequest.signatures || []
           const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
           const s2   = sigs.find(s => s.signerRole === 'Reference 2 - Membership Application')
@@ -1380,6 +1468,9 @@ app.post('/api/applications/sync-statuses', authMiddleware, async (req, res) => 
                         Ref2SignatureStatus = @ref2Status, Ref2SignatureId = @ref2SigId
                     WHERE Id = @id`)
         }
+        try {
+          await logApplicationAction(db, { appId: row.Id, action: 'status_synced', performedBy: req.user.email, performedByRole: req.user.role, ipAddress: req.ip })
+        } catch {}
       } catch {
         // Non-fatal — continue syncing other applications
       }
@@ -1487,23 +1578,49 @@ app.get('/api/applications/:id', authMiddleware, async (req, res) => {
 app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
   const { status, notes, boardSigners } = req.body
+  if (status !== 'approved' && status !== 'rejected') {
+    return res.status(400).json({ error: `Invalid status "${status}". Must be "approved" or "rejected".` })
+  }
   try {
     const db = await getPool()
 
     // Load existing history to append to it
     const existing = await db.request()
       .input('id', sql.Int, req.params.id)
-      .query('SELECT CommentsHistory, FormData, UserEmail FROM Applications WHERE Id = @id')
+      .query('SELECT CommentsHistory, FormData, UserEmail, StoreName, Status AS PreviousStatus, SignatureRequestId, ReferencesSignatureRequestId FROM Applications WHERE Id = @id')
     if (!existing.recordset.length) return res.status(404).json({ error: 'Not found' })
 
+    const { CommentsHistory, FormData, UserEmail, StoreName, PreviousStatus: existingStatus, SignatureRequestId: existingSigId, ReferencesSignatureRequestId: existingRefSigId } = existing.recordset[0]
+
     let history = []
-    try { history = JSON.parse(existing.recordset[0]?.CommentsHistory || '[]') } catch {}
-    if (notes) {
-      history.push({ status, comment: notes, reviewedBy: req.user.email, reviewedAt: new Date().toISOString() })
-    }
+    try { history = JSON.parse(CommentsHistory || '[]') } catch {}
+    history.push({ status, comment: notes || '', reviewedBy: req.user.email, reviewedAt: new Date().toISOString() })
     const historyJson = JSON.stringify(history)
 
     if (status === 'approved') {
+      // Guard: approval only allowed from 'submitted'
+      if (existingStatus !== 'submitted') {
+        try {
+          await logApplicationAction(db, {
+            appId: parseInt(req.params.id, 10), action: 'approve_blocked',
+            performedBy: req.user.email, performedByRole: req.user.role,
+            details: { reason: `approval attempted from status "${existingStatus}"`, requestedStatus: 'approved' },
+            previousStatus: existingStatus, ipAddress: req.ip,
+          })
+        } catch {}
+        return res.status(409).json({ error: `Cannot approve: application status is "${existingStatus}". Only applications with status "submitted" can be approved.` })
+      }
+      if (existingSigId) {
+        try {
+          await logApplicationAction(db, {
+            appId: parseInt(req.params.id, 10), action: 'approve_blocked',
+            performedBy: req.user.email, performedByRole: req.user.role,
+            details: { reason: 'signature request already exists', signatureRequestId: existingSigId },
+            previousStatus: existingStatus, ipAddress: req.ip,
+          })
+        } catch {}
+        return res.status(409).json({ error: 'A Dropbox Sign request has already been sent for this application. Use "Resend Signature Request" to manage existing signers.' })
+      }
       // MembershipAdmin signer is the approving employee — never trust the request body for this.
       // Also guards StaffFirstName/StaffLastName in the DS document (replaces the old console.warn).
       if (!req.user.firstName?.trim() || !req.user.lastName?.trim()) {
@@ -1529,8 +1646,7 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
 
       // For approvals: DS send drives the status — do not set 'approved' unless send succeeds
       let fd = {}
-      try { fd = JSON.parse(existing.recordset[0].FormData || '{}') } catch {}
-      const { UserEmail } = existing.recordset[0]
+      try { fd = JSON.parse(FormData || '{}') } catch {}
 
       // Warn if Auth Rep address is partial — do not block the approval
       const missingAddrParts = [
@@ -1545,7 +1661,7 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
 
       try {
         const { signatureRequestId, verificationSignatureId, approvedSignatureId, adminSignatureId } =
-          await sendSignatureRequest(fd, UserEmail, { verification: v, approved: a, membershipAdmin: adm }, req.user.email, req.user.firstName, req.user.lastName)
+          await sendSignatureRequest(fd, UserEmail, { verification: v, approved: a, membershipAdmin: adm }, req.user.email, req.user.firstName, req.user.lastName, db, req.user.email, parseInt(req.params.id, 10))
 
         // DS succeeded — commit status = pending_signature with reviewer + board signer fields
         await db.request()
@@ -1587,7 +1703,7 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
 
         // Send references signature request (non-fatal)
         try {
-          const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd)
+          const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd, db, req.user.email, parseInt(req.params.id, 10))
           await db.request()
             .input('refSigId',    sql.NVarChar, refSigId)
             .input('ref1SigId',   sql.NVarChar, ref1SignatureId || null)
@@ -1604,6 +1720,23 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
         } catch (refErr) {
           console.error('References signature request failed:', refErr.body?.error?.errorMsg || refErr.message)
         }
+
+        try {
+          await logApplicationAction(db, {
+            appId: parseInt(req.params.id, 10), action: 'approved',
+            performedBy: req.user.email, performedByRole: req.user.role,
+            details: {
+              comment: notes || '', signatureRequestId,
+              boardSigners: {
+                verification: { name: `${v.firstName} ${v.lastName}`, email: v.email },
+                approved:     { name: `${a.firstName} ${a.lastName}`, email: a.email },
+                admin:        { name: `${adm.firstName} ${adm.lastName}`, email: adm.email },
+              },
+            },
+            previousStatus: existingStatus,
+            newStatus: 'pending_signature', ipAddress: req.ip,
+          })
+        } catch {}
 
         return res.json({ success: true, status: 'pending_signature', signatureRequestId })
       } catch (dsErr) {
@@ -1624,7 +1757,20 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
       }
     }
 
-    // rejected / any other status — update status directly then send notification email
+    // Hard block: if a DS signature request exists, rejection is not allowed via the app.
+    // The employee must cancel the request in Dropbox Sign first, then return here to reject.
+    if (existingSigId) {
+      try {
+        await logApplicationAction(db, {
+          appId: parseInt(req.params.id, 10), action: 'reject_blocked',
+          performedBy: req.user.email, performedByRole: req.user.role,
+          details: { reason: 'signature request exists — manual DS cancellation required', signatureRequestId: existingSigId },
+          previousStatus: existingStatus, ipAddress: req.ip,
+        })
+      } catch {}
+      return res.status(409).json({ error: 'This application has already been sent for signature and cannot be rejected. Cancel the signature request in Dropbox Sign first.' })
+    }
+
     await db.request()
       .input('id', sql.Int, req.params.id)
       .input('status', sql.NVarChar, status)
@@ -1635,8 +1781,16 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
               SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
               WHERE Id = @id`)
 
-    const { UserEmail, StoreName } = existing.recordset[0]
     sendStatusEmail(UserEmail, StoreName, status, notes).catch(() => {})
+
+    try {
+      await logApplicationAction(db, {
+        appId: parseInt(req.params.id, 10), action: 'rejected',
+        performedBy: req.user.email, performedByRole: req.user.role,
+        details: { comment: notes || '' },
+        previousStatus: existingStatus, newStatus: 'rejected', ipAddress: req.ip,
+      })
+    } catch {}
 
     res.json({ success: true })
   } catch (err) {
@@ -1660,8 +1814,9 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
 
     const out = {}
 
+    const appIdNum = parseInt(req.params.id, 10)
     if (SignatureRequestId) {
-      const r = await api.signatureRequestGet(SignatureRequestId)
+      const r = await dsCall(db, { appId: appIdNum, operation: 'signatureRequestGet', performedBy: req.user.email, signatureRequestId: SignatureRequestId, requestSummary: { signatureRequestId: SignatureRequestId } }, () => api.signatureRequestGet(SignatureRequestId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
       const sigs = r.body.signatureRequest.signatures || []
       const s    = sigs.find(x => x.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
       const v    = sigs.find(x => x.signerRole === 'Verification: Elected Board Signer')
@@ -1676,7 +1831,7 @@ app.get('/api/applications/:id/signature-status', authMiddleware, async (req, re
     }
 
     if (ReferencesSignatureRequestId) {
-      const r = await api.signatureRequestGet(ReferencesSignatureRequestId)
+      const r = await dsCall(db, { appId: appIdNum, operation: 'signatureRequestGet[refs]', performedBy: req.user.email, signatureRequestId: ReferencesSignatureRequestId, requestSummary: { signatureRequestId: ReferencesSignatureRequestId } }, () => api.signatureRequestGet(ReferencesSignatureRequestId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
       const sigs = r.body.signatureRequest.signatures || []
       const s1 = sigs.find(x => x.signerRole === 'Reference 1 - Membership Application')
       const s2 = sigs.find(x => x.signerRole === 'Reference 2 - Membership Application')
@@ -1731,7 +1886,7 @@ app.post('/api/applications/:id/send-references', authMiddleware, async (req, re
       fd = { ...fd, reference2Email: v }
     }
 
-    const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd)
+    const { signatureRequestId: refSigId, ref1SignatureId, ref2SignatureId } = await sendReferencesRequest(fd, db, req.user.email, parseInt(req.params.id, 10))
 
     await db.request()
       .input('refSigId',  sql.NVarChar, refSigId)
@@ -1746,6 +1901,14 @@ app.post('/api/applications/:id/send-references', authMiddleware, async (req, re
                   Ref1SignatureStatus          = 'awaiting_signature',
                   Ref2SignatureStatus          = 'awaiting_signature'
               WHERE Id = @id2`)
+
+    try {
+      await logApplicationAction(db, {
+        appId: parseInt(req.params.id, 10), action: 'references_sent',
+        performedBy: req.user.email, performedByRole: req.user.role,
+        details: { signatureRequestId: refSigId }, ipAddress: req.ip,
+      })
+    } catch {}
 
     res.json({ message: 'References request sent.' })
   } catch (err) {
@@ -1787,7 +1950,7 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
     api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
 
     // Fetch live signer list to find signatureId and current email
-    const dsRes = await api.signatureRequestGet(sigReqId)
+    const dsRes = await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestGet', performedBy: req.user.email, signatureRequestId: sigReqId, requestSummary: { signatureRequestId: sigReqId } }, () => api.signatureRequestGet(sigReqId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
     const sigs = dsRes.body.signatureRequest.signatures || []
     const signer = sigs.find(s => s.signerRole === role)
     if (!signer) return res.status(404).json({ error: `Signer role "${role}" not found in signature request.` })
@@ -1813,7 +1976,7 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
       const updateReq = new SignatureRequestUpdateRequest()
       updateReq.signatureId  = signer.signatureId
       updateReq.emailAddress = newEmail
-      const updateRes = await api.signatureRequestUpdate(sigReqId, updateReq)
+      const updateRes = await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestUpdate', performedBy: req.user.email, signatureRequestId: sigReqId, requestSummary: { signatureRequestId: sigReqId, signatureId: signer.signatureId, newEmail } }, () => api.signatureRequestUpdate(sigReqId, updateReq), r => ({ signatureRequestId: r.body?.signatureRequest?.signatureRequestId, signatures: (r.body?.signatureRequest?.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, email: s.signerEmailAddress })) }))
 
       // Grab the new signatureId DS assigns to the updated signer
       const updatedSigs = updateRes.body?.signatureRequest?.signatures || []
@@ -1882,12 +2045,20 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
       }
       // member target — status is derived from app.Status, no per-signer DB column
 
+      try {
+        await logApplicationAction(db, {
+          appId: parseInt(req.params.id, 10), action: 'signature_email_redirected',
+          performedBy: req.user.email, performedByRole: req.user.role,
+          details: { target, oldEmail: currentEmail, newEmail }, ipAddress: req.ip,
+        })
+      } catch {}
+
       return res.json({ success: true, message: `Email updated to ${newEmail} — a new signing link has been sent.` })
     } else {
       // Same email → just remind
       const remindReq = new SignatureRequestRemindRequest()
       remindReq.emailAddress = currentEmail
-      await api.signatureRequestRemind(sigReqId, remindReq)
+      await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestRemind', performedBy: req.user.email, signatureRequestId: sigReqId, requestSummary: { signatureRequestId: sigReqId, emailAddress: currentEmail } }, () => api.signatureRequestRemind(sigReqId, remindReq), () => null)
 
       // Reset per-signer status back to awaiting so it reflects the resend
       if (target === 'reference1') {
@@ -1911,6 +2082,14 @@ app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res
           .input('id2', sql.Int, req.params.id)
           .query(`UPDATE Applications SET AdminSignatureStatus = 'awaiting_signature' WHERE Id = @id2`)
       }
+
+      try {
+        await logApplicationAction(db, {
+          appId: parseInt(req.params.id, 10), action: 'signature_resent',
+          performedBy: req.user.email, performedByRole: req.user.role,
+          details: { target, email: currentEmail }, ipAddress: req.ip,
+        })
+      } catch {}
 
       return res.json({ success: true, message: `Reminder sent to ${currentEmail}.` })
     }
@@ -1936,6 +2115,8 @@ app.patch('/api/applications/:id/ghra-number', authMiddleware, async (req, res) 
 
   try {
     const db = await getPool()
+    const oldGhra = await db.request().input('id', sql.Int, appId).query('SELECT GhraNumber FROM Applications WHERE Id = @id')
+    const prevGhraNumber = oldGhra.recordset[0]?.GhraNumber || null
     const result = await db.request()
       .input('id',       sql.Int,      appId)
       .input('num',      sql.NVarChar, ghraNumber ? ghraNumber.trim() : null)
@@ -1950,6 +2131,13 @@ app.patch('/api/applications/:id/ghra-number', authMiddleware, async (req, res) 
               WHERE Id = @id`)
     if (result.rowsAffected[0] === 0) return res.status(404).json({ error: 'Application not found' })
     res.json({ success: true })
+    const ghraAction = ghraNumber ? (prevGhraNumber ? 'ghra_number_changed' : 'ghra_number_set') : 'ghra_number_cleared'
+    try {
+      await logApplicationAction(db, {
+        appId, action: ghraAction, performedBy: req.user.email, performedByRole: req.user.role,
+        details: { old: prevGhraNumber, new: ghraNumber || null }, ipAddress: req.ip,
+      })
+    } catch {}
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1985,7 +2173,7 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
         const updateReq = new SignatureRequestUpdateRequest()
         updateReq.signatureId  = row.VerificationSignatureId
         updateReq.emailAddress = verification.email
-        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updateRes = await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestUpdate[verification]', performedBy: req.user.email, signatureRequestId: row.SignatureRequestId, requestSummary: { signatureRequestId: row.SignatureRequestId, signatureId: row.VerificationSignatureId, newEmail: verification.email } }, () => api.signatureRequestUpdate(row.SignatureRequestId, updateReq), r => ({ signatureRequestId: r.body?.signatureRequest?.signatureRequestId, signatures: (r.body?.signatureRequest?.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, email: s.signerEmailAddress })) }))
         const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
           .find(s => s.signerRole === 'Verification: Elected Board Signer')
         newSigId = updatedSig?.signatureId || newSigId
@@ -2012,7 +2200,7 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
         const updateReq = new SignatureRequestUpdateRequest()
         updateReq.signatureId  = row.ApprovedSignatureId
         updateReq.emailAddress = approved.email
-        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updateRes = await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestUpdate[approved]', performedBy: req.user.email, signatureRequestId: row.SignatureRequestId, requestSummary: { signatureRequestId: row.SignatureRequestId, signatureId: row.ApprovedSignatureId, newEmail: approved.email } }, () => api.signatureRequestUpdate(row.SignatureRequestId, updateReq), r => ({ signatureRequestId: r.body?.signatureRequest?.signatureRequestId, signatures: (r.body?.signatureRequest?.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, email: s.signerEmailAddress })) }))
         const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
           .find(s => s.signerRole === 'Approved: Elected Board Signer')
         newSigId = updatedSig?.signatureId || newSigId
@@ -2039,7 +2227,7 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
         const updateReq = new SignatureRequestUpdateRequest()
         updateReq.signatureId  = row.AdminSignatureId
         updateReq.emailAddress = membershipAdmin.email
-        const updateRes = await api.signatureRequestUpdate(row.SignatureRequestId, updateReq)
+        const updateRes = await dsCall(db, { appId: parseInt(req.params.id, 10), operation: 'signatureRequestUpdate[admin]', performedBy: req.user.email, signatureRequestId: row.SignatureRequestId, requestSummary: { signatureRequestId: row.SignatureRequestId, signatureId: row.AdminSignatureId, newEmail: membershipAdmin.email } }, () => api.signatureRequestUpdate(row.SignatureRequestId, updateReq), r => ({ signatureRequestId: r.body?.signatureRequest?.signatureRequestId, signatures: (r.body?.signatureRequest?.signatures || []).map(s => ({ role: s.signerRole, signatureId: s.signatureId, email: s.signerEmailAddress })) }))
         const updatedSig = (updateRes.body?.signatureRequest?.signatures || [])
           .find(s => s.signerRole === 'MembershipAdmin')
         newSigId = updatedSig?.signatureId || newSigId
@@ -2060,6 +2248,13 @@ app.patch('/api/applications/:id/board-signers', authMiddleware, async (req, res
     }
 
     res.json({ success: true })
+    try {
+      await logApplicationAction(db, {
+        appId: parseInt(req.params.id, 10), action: 'board_signers_updated',
+        performedBy: req.user.email, performedByRole: req.user.role,
+        details: { verification, approved, membershipAdmin }, ipAddress: req.ip,
+      })
+    } catch {}
   } catch (err) {
     const detail = err.body?.error?.errorMsg || err.message
     res.status(500).json({ error: detail })
@@ -2073,6 +2268,9 @@ app.put('/api/applications/:id', authMiddleware, async (req, res) => {
   const formData = uppercaseFormData(processOwnerSsnsForSave(rawFormData))
   try {
     const db = await getPool()
+    const oldRow = await db.request().input('id', sql.Int, req.params.id).query('SELECT FormData, Status FROM Applications WHERE Id = @id')
+    let oldFd = {}; try { oldFd = JSON.parse(oldRow.recordset[0]?.FormData || '{}') } catch {}
+    const editPrevStatus = oldRow.recordset[0]?.Status || null
     const storeName = formData.memberName || formData.storeNameCertification || ''
     const storeAddress = [formData.storeAddress, formData.storeCity, formData.storeZip]
       .filter(Boolean).join(', ')
@@ -2085,6 +2283,14 @@ app.put('/api/applications/:id', authMiddleware, async (req, res) => {
               SET FormData = @formData, StoreName = @storeName, StoreAddress = @storeAddress, UpdatedAt = GETDATE()
               WHERE Id = @id`)
     res.json({ success: true })
+    try {
+      await logApplicationAction(db, {
+        appId: parseInt(req.params.id, 10), action: 'edited',
+        performedBy: req.user.email, performedByRole: req.user.role,
+        details: { changedFields: diffFormData(oldFd, formData) },
+        previousStatus: editPrevStatus, ipAddress: req.ip,
+      })
+    } catch {}
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2113,6 +2319,12 @@ app.post('/api/applications/archive', authMiddleware, async (req, res) => {
       }
       await t.commit()
       res.json({ success: true, count: ids.length })
+      try {
+        const dbA = await getPool()
+        for (const archId of ids) {
+          await logApplicationAction(dbA, { appId: archId, action: 'archived', performedBy: req.user.email, performedByRole: req.user.role, ipAddress: req.ip })
+        }
+      } catch {}
     } catch (err) {
       await t.rollback()
       throw err
@@ -2157,6 +2369,12 @@ app.post('/api/applications/unarchive', authMiddleware, async (req, res) => {
     const completedCount = afterResult.recordset.filter(r => !!r.GhraNumber).length
     const activeCount    = ids.length - completedCount
     res.json({ success: true, count: ids.length, activeCount, completedCount, message: `${ids.length} unarchived — ${activeCount} to Active, ${completedCount} to Completed` })
+    try {
+      const dbU = await getPool()
+      for (const unarchId of ids) {
+        await logApplicationAction(dbU, { appId: unarchId, action: 'unarchived', performedBy: req.user.email, performedByRole: req.user.role, ipAddress: req.ip })
+      }
+    } catch {}
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2229,7 +2447,7 @@ app.get('/api/applications/:id/package', authMiddleware, async (req, res) => {
       try {
         const api = new SignatureRequestApi()
         api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
-        const pdfRes = await api.signatureRequestFiles(appRow.SignatureRequestId, 'pdf')
+        const pdfRes = await dsCall(db, { appId, operation: 'signatureRequestFiles', performedBy: req.user.email, signatureRequestId: appRow.SignatureRequestId, requestSummary: { signatureRequestId: appRow.SignatureRequestId, fileType: 'pdf' } }, () => api.signatureRequestFiles(appRow.SignatureRequestId, 'pdf'), r => ({ byteLength: Buffer.isBuffer(r.body) ? r.body.length : null }))
         const pdfBuffer = Buffer.isBuffer(pdfRes.body) ? pdfRes.body : Buffer.from(pdfRes.body)
         if (pdfBuffer.length > 0) {
           items.push({ archiveName: `Signed Application/GHRA-${appId}-${safeStore}-Membership-Signed.pdf`, buffer: pdfBuffer })
@@ -2431,6 +2649,12 @@ app.post('/api/ach/generate', authMiddleware, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="ghra-ach-${dateStr}.csv"`)
     res.setHeader('X-Ach-Batch-Id', String(batchId ?? ''))
     res.send(Buffer.from(fileContent, 'utf8'))
+    try {
+      const dbAch = await getPool()
+      for (const achId of ids) {
+        await logApplicationAction(dbAch, { appId: achId, action: 'ach_generated', performedBy: req.user.email, performedByRole: req.user.role, details: { batchId }, ipAddress: req.ip })
+      }
+    } catch {}
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2511,6 +2735,9 @@ app.post('/api/documents/upload', authMiddleware, (req, res) => {
         originalName,
         url: `/uploads/${appId}/${filename}`
       })
+      try {
+        await logApplicationAction(db, { appId, action: 'document_uploaded', performedBy: req.user.email, performedByRole: req.user.role, details: { slot: safeDocId, originalName, filename }, ipAddress: req.ip })
+      } catch {}
     } catch (err) {
       res.status(500).json({ error: err.message })
     }
@@ -2555,6 +2782,9 @@ app.delete('/api/documents/:applicationId/:docId', authMiddleware, async (req, r
       }
     }
     res.json({ deleted })
+    try {
+      await logApplicationAction(db, { appId, action: 'document_deleted', performedBy: req.user.email, performedByRole: req.user.role, details: { filename: safeDocId }, ipAddress: req.ip })
+    } catch {}
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2815,10 +3045,33 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
     .update(String(event_time) + String(event_type))
     .digest('hex')
   if (event_hash !== expectedHash) {
+    try {
+      const dbLog = await getPool()
+      await logDsEvent(dbLog, {
+        appId: null, direction: 'inbound', operation: 'webhook[failed_hmac]',
+        signatureRequestId: event?.signature_request?.signature_request_id ?? null,
+        success: false, errorCode: 'HMAC_MISMATCH',
+        errorMessage: 'Webhook HMAC verification failed',
+        requestSummary: { eventType: event_type },
+        performedBy: 'webhook',
+      })
+    } catch {}
     return res.status(200).send('Hello API Event Received')
   }
 
   const eventType = event?.event?.event_type
+
+  // Log all verified inbound webhook events
+  try {
+    const dbLog = await getPool()
+    await logDsEvent(dbLog, {
+      appId: null, direction: 'inbound', operation: `webhook[${eventType}]`,
+      signatureRequestId: event?.signature_request?.signature_request_id ?? null,
+      success: true,
+      requestSummary: { eventType, signatureRequestId: event?.signature_request?.signature_request_id },
+      performedBy: 'webhook',
+    })
+  } catch {}
   if (eventType === 'signature_request_signed' || eventType === 'signature_request_all_signed') {
     const sigReqId = event?.signature_request?.signature_request_id
     if (sigReqId) {
@@ -2836,14 +3089,14 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
           .query(`SELECT Id FROM Applications WHERE SignatureRequestId = @sigId`)
 
         if (memMatch.recordset.length > 0) {
-          const r    = await api.signatureRequestGet(sigReqId)
+          const appId  = memMatch.recordset[0].Id
+          const r    = await dsCall(db, { appId, operation: 'signatureRequestGet', performedBy: 'webhook', signatureRequestId: sigReqId, requestSummary: { signatureRequestId: sigReqId } }, () => api.signatureRequestGet(sigReqId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
           const sr   = r.body.signatureRequest
           const sigs = sr.signatures || []
           const rep    = sigs.find(s => s.signerRole === DROPBOX_SIGN_SIGNER_ROLE)
           const verify = sigs.find(s => s.signerRole === 'Verification: Elected Board Signer')
           const appr   = sigs.find(s => s.signerRole === 'Approved: Elected Board Signer')
           const admin  = sigs.find(s => s.signerRole === 'MembershipAdmin')
-          const appId  = memMatch.recordset[0].Id
 
           const dbRow2 = await db.request()
             .input('id', sql.Int, appId)
@@ -2909,11 +3162,11 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
           .query(`SELECT Id FROM Applications WHERE ReferencesSignatureRequestId = @sigId2`)
 
         if (refMatch.recordset.length > 0) {
-          const r    = await api.signatureRequestGet(sigReqId)
+          const appId = refMatch.recordset[0].Id
+          const r    = await dsCall(db, { appId, operation: 'signatureRequestGet[refs]', performedBy: 'webhook', signatureRequestId: sigReqId, requestSummary: { signatureRequestId: sigReqId } }, () => api.signatureRequestGet(sigReqId), r => ({ signatureRequestId: r.body.signatureRequest.signatureRequestId, signatures: (r.body.signatureRequest.signatures || []).map(s => ({ role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress })) }))
           const sigs = r.body.signatureRequest.signatures || []
           const s1   = sigs.find(s => s.signerRole === 'Reference 1 - Membership Application')
           const s2   = sigs.find(s => s.signerRole === 'Reference 2 - Membership Application')
-          const appId = refMatch.recordset[0].Id
 
           await db.request()
             .input('ref1Status', sql.NVarChar, s1?.statusCode  || null)
@@ -2941,6 +3194,72 @@ app.post('/api/webhooks/dropbox-sign', upload.none(), async (req, res) => {
   }
 
   return res.status(200).send('Hello API Event Received')
+})
+
+// GET /api/applications/:id/audit  — employee-only, newest first
+app.get('/api/applications/:id/audit', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const result = await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query(`SELECT Id, ApplicationId, Action, PerformedBy, PerformedByRole, Details, PreviousStatus, NewStatus, IpAddress, CreatedAt
+              FROM ApplicationAuditLog WHERE ApplicationId = @id ORDER BY CreatedAt DESC`)
+    res.json({ entries: result.recordset })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── DS Event Log ─────────────────────────────────────────────────────────────
+
+// GET /api/ds-events?applicationId=N&success=true|false&from=ISO&to=ISO&page=N
+app.get('/api/ds-events', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const { applicationId, success, from, to, page = '1' } = req.query
+    const PAGE_SIZE = 100
+    const offset    = (Math.max(1, parseInt(page, 10)) - 1) * PAGE_SIZE
+
+    const clauses = []
+    const inputs  = []
+
+    if (applicationId) {
+      clauses.push('ApplicationId = @applicationId')
+      inputs.push({ name: 'applicationId', type: sql.Int, value: parseInt(applicationId, 10) })
+    }
+    if (success !== undefined) {
+      clauses.push('Success = @success')
+      inputs.push({ name: 'success', type: sql.Bit, value: success === 'true' ? 1 : 0 })
+    }
+    if (from) {
+      clauses.push('CreatedAt >= @from')
+      inputs.push({ name: 'from', type: sql.DateTime, value: new Date(from) })
+    }
+    if (to) {
+      clauses.push('CreatedAt <= @to')
+      inputs.push({ name: 'to', type: sql.DateTime, value: new Date(to) })
+    }
+
+    const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''
+    const req2  = db.request()
+    for (const i of inputs) req2.input(i.name, i.type, i.value)
+    req2.input('pageSize', sql.Int, PAGE_SIZE)
+    req2.input('offset',   sql.Int, offset)
+
+    const result = await req2.query(`
+      SELECT Id, ApplicationId, Direction, Operation, SignatureRequestId, Success, HttpStatus,
+             ErrorCode, ErrorMessage, RequestSummary, ResponseSummary, DurationMs, PerformedBy, CreatedAt
+      FROM DsEventLog
+      ${where}
+      ORDER BY CreatedAt DESC
+      OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+    `)
+    res.json({ events: result.recordset })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 // ── Start ────────────────────────────────────────────────────────────────────

@@ -582,6 +582,29 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const getDsEvents = useCallback(async (appId) => {
+    if (!token) return { events: [] }
+    try {
+      const params = appId ? `?applicationId=${encodeURIComponent(appId)}` : ''
+      const res = await fetch(`${API}/ds-events${params}`, { headers: authHeaders(token) })
+      if (!res.ok) return { events: [] }
+      return await res.json()
+    } catch {
+      return { events: [] }
+    }
+  }, [token])
+
+  const getAuditLog = useCallback(async (appId) => {
+    if (!token) return { entries: [] }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/audit`, { headers: authHeaders(token) })
+      if (!res.ok) return { entries: [] }
+      return await res.json()
+    } catch {
+      return { entries: [] }
+    }
+  }, [token])
+
   const employeeUpdateApplication = useCallback(async (appId, formData) => {
     if (!token) return false
     try {
@@ -760,6 +783,48 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const archiveApplications = useCallback(async (applicationIds) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+      const res = await fetch(`${API}/applications/archive`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ applicationIds }),
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || `Server error ${res.status}` }
+      return { success: true, count: data.count }
+    } catch (err) {
+      if (err.name === 'AbortError') return { success: false, error: 'Request timed out — please try again' }
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
+  const unarchiveApplications = useCallback(async (applicationIds) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+      const res = await fetch(`${API}/applications/unarchive`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ applicationIds }),
+        signal: controller.signal
+      })
+      clearTimeout(timeout)
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || `Server error ${res.status}` }
+      return { success: true, count: data.count }
+    } catch (err) {
+      if (err.name === 'AbortError') return { success: false, error: 'Request timed out — please try again' }
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token])
+
   const createMember = useCallback(async (email, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
@@ -804,6 +869,8 @@ export const AuthProvider = ({ children }) => {
       getSignatureStatus,
       resendSignature,
       sendReferencesRequest,
+      getDsEvents,
+      getAuditLog,
       changePassword,
       createMember,
       uploadDocument,
@@ -816,6 +883,8 @@ export const AuthProvider = ({ children }) => {
       getAchBatches,
       downloadAchBatch,
       downloadCombinedPdf,
+      archiveApplications,
+      unarchiveApplications,
       testDropboxSign,
       createMemberAccount,
       resetMemberPassword,

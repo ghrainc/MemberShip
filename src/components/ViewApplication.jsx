@@ -96,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -114,6 +114,21 @@ function ViewApplication() {
   const [editGhraError, setEditGhraError] = useState('')
   const [approving, setApproving]       = useState(false)
   const [lightboxSrc, setLightboxSrc]   = useState(null)
+
+  const [dsActivityOpen, setDsActivityOpen]     = useState(false)
+  const [dsEvents, setDsEvents]                 = useState(null)
+  const [dsEventsLoading, setDsEventsLoading]   = useState(false)
+  const [dsEventsError, setDsEventsError]       = useState(null)
+  const [expandedDsRow, setExpandedDsRow]       = useState(null)
+
+  const [auditOpen, setAuditOpen]               = useState(false)
+  const [auditEntries, setAuditEntries]          = useState(null)
+  const [auditLoading, setAuditLoading]          = useState(false)
+  const [auditError, setAuditError]              = useState(null)
+  const [expandedAuditRow, setExpandedAuditRow]  = useState(null)
+
+  const [unarchiving, setUnarchiving] = useState(false)
+  const [unarchiveError, setUnarchiveError] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -151,6 +166,36 @@ function ViewApplication() {
 
   const handleBack = () => {
     navigate(isEmployee ? '/employee' : '/dashboard')
+  }
+
+  const handleDsActivityOpen = async () => {
+    if (!dsActivityOpen && dsEvents === null && !dsEventsLoading) {
+      setDsEventsLoading(true)
+      try {
+        const result = await getDsEvents(id)
+        setDsEvents(result.events || [])
+      } catch (err) {
+        setDsEventsError(err.message)
+      } finally {
+        setDsEventsLoading(false)
+      }
+    }
+    setDsActivityOpen(v => !v)
+  }
+
+  const handleAuditOpen = async () => {
+    if (!auditOpen && auditEntries === null && !auditLoading) {
+      setAuditLoading(true)
+      try {
+        const result = await getAuditLog(id)
+        setAuditEntries(result.entries || [])
+      } catch (err) {
+        setAuditError(err.message)
+      } finally {
+        setAuditLoading(false)
+      }
+    }
+    setAuditOpen(v => !v)
   }
 
   const handleSaveGhraNumber = async () => {
@@ -759,18 +804,33 @@ function ViewApplication() {
             {application.ArchivedAt && ` on ${new Date(application.ArchivedAt).toLocaleDateString()}`}
             {application.ArchivedBy && ` by ${application.ArchivedBy}`}
           </span>
+          {unarchiveError && (
+            <span style={{ color: '#721c24', fontSize: 12, marginLeft: 8 }}>{unarchiveError}</span>
+          )}
           <button
             type="button"
             className="archived-banner-unarchive"
+            disabled={unarchiving}
             onClick={async () => {
-              const result = await unarchiveApplications([application.Id])
+              setUnarchiving(true)
+              setUnarchiveError(null)
+              let result
+              try {
+                result = await unarchiveApplications([application.Id])
+              } finally {
+                setUnarchiving(false)
+              }
               if (result.success) {
-                const updated = await getApplicationById(id)
-                if (updated) setApplication(updated)
+                try {
+                  const updated = await getApplicationById(id)
+                  if (updated) setApplication(updated)
+                } catch {}
+              } else {
+                setUnarchiveError(result.error || 'Restore failed')
               }
             }}
           >
-            Restore
+            {unarchiving ? 'Restoring…' : 'Restore'}
           </button>
         </div>
       )}
@@ -859,12 +919,34 @@ function ViewApplication() {
               <button type="button" onClick={handleEdit} className="nav-button edit-action-button">
                 ✎ Edit
               </button>
-              <button type="button" onClick={handleApproveClick} disabled={!['submitted', 'approved'].includes(application.Status) || approving} className="nav-button approve-action-button">
-                {approving ? 'Approving…' : '✓ Approve'}
-              </button>
-              <button type="button" onClick={handleRejectClick} disabled={['rejected', 'signed'].includes(application.Status) || approving} className="nav-button reject-action-button">
-                ✕ Reject
-              </button>
+              {(() => {
+                const alreadySent = application.Status === 'pending_signature' || application.Status === 'signed' || !!application.SignatureRequestId
+                const approveDisabled = application.Status !== 'submitted' || !!application.SignatureRequestId || approving
+                const rejectDisabled  = application.Status !== 'submitted' || !!application.SignatureRequestId || approving
+                const sentTip = 'This application has already been approved and sent for signature.'
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleApproveClick}
+                      disabled={approveDisabled}
+                      title={alreadySent ? sentTip : undefined}
+                      className="nav-button approve-action-button"
+                    >
+                      {approving ? 'Approving…' : '✓ Approve'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRejectClick}
+                      disabled={rejectDisabled}
+                      title={alreadySent ? sentTip : undefined}
+                      className="nav-button reject-action-button"
+                    >
+                      ✕ Reject
+                    </button>
+                  </>
+                )
+              })()}
             </>
           )}
           <button type="button" onClick={() => generateApplicationPDF(application)} className="nav-button download-button">
@@ -877,6 +959,14 @@ function ViewApplication() {
           )}
         </div>
 
+        {isEmployee && application?.Status === 'rejected' && application?.SignatureRequestId && (
+          <div className="rejected-sig-warning">
+            <strong>Warning:</strong> This application was rejected but a Dropbox Sign request exists
+            ({application.SignatureRequestId.slice(0, 12)}…). The member may still hold a live signing link.
+            Verify in Dropbox Sign that the request was cancelled.
+          </div>
+        )}
+
         {approvalError && (
           <div className="approval-error-banner">
             <strong>Approval failed:</strong> {approvalError}
@@ -884,6 +974,148 @@ function ViewApplication() {
           </div>
         )}
       </div>
+
+      {isEmployee && (
+        <div className="ds-activity-panel">
+          <button className="ds-activity-toggle" onClick={handleDsActivityOpen}>
+            <span>Signature Activity</span>
+            <span className="ds-activity-chevron">{dsActivityOpen ? '▲' : '▼'}</span>
+          </button>
+          {dsActivityOpen && (
+            <div className="ds-activity-body">
+              {dsEventsLoading ? (
+                <p className="ds-activity-loading">Loading…</p>
+              ) : dsEventsError ? (
+                <p className="ds-activity-error">Error: {dsEventsError}</p>
+              ) : !dsEvents?.length ? (
+                <p className="ds-activity-empty">No Dropbox Sign activity recorded for this application yet.</p>
+              ) : (
+                <table className="ds-activity-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Operation</th>
+                      <th>Direction</th>
+                      <th>Result</th>
+                      <th>Error</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dsEvents.map(ev => (
+                      <tr key={ev.Id}>
+                        <td colSpan={6} style={{ padding: 0 }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <tbody>
+                              <tr className={`ds-ev-row ${ev.Success ? 'ds-ev-ok' : 'ds-ev-fail'}`}>
+                                <td className="ds-ev-time">{new Date(ev.CreatedAt).toLocaleString()}</td>
+                                <td className="ds-ev-op">{ev.Operation}</td>
+                                <td className="ds-ev-dir">{ev.Direction}</td>
+                                <td className="ds-ev-status">{ev.Success ? '✓' : '✗'}</td>
+                                <td className="ds-ev-err">{ev.ErrorCode ? `${ev.ErrorCode}: ${ev.ErrorMessage || ''}` : (ev.ErrorMessage || '')}</td>
+                                <td className="ds-ev-actions">
+                                  <button className="ds-ev-expand" onClick={() => setExpandedDsRow(expandedDsRow === ev.Id ? null : ev.Id)}>
+                                    {expandedDsRow === ev.Id ? 'Hide' : 'Details'}
+                                  </button>
+                                </td>
+                              </tr>
+                              {expandedDsRow === ev.Id && (
+                                <tr className="ds-ev-detail-row">
+                                  <td colSpan={6}>
+                                    <div className="ds-ev-detail">
+                                      {ev.RequestSummary && (
+                                        <div><strong>Request:</strong><pre className="ds-ev-json">{ev.RequestSummary}</pre></div>
+                                      )}
+                                      {ev.ResponseSummary && (
+                                        <div><strong>Response:</strong><pre className="ds-ev-json">{ev.ResponseSummary}</pre></div>
+                                      )}
+                                      {!ev.RequestSummary && !ev.ResponseSummary && (
+                                        <p>No detail captured.</p>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isEmployee && (
+        <div className="ds-activity-panel">
+          <button className="ds-activity-toggle" onClick={handleAuditOpen}>
+            <span>Activity Log</span>
+            <span className="ds-activity-chevron">{auditOpen ? '▲' : '▼'}</span>
+          </button>
+          {auditOpen && (
+            <div className="ds-activity-body">
+              {auditLoading ? (
+                <p className="ds-activity-loading">Loading…</p>
+              ) : auditError ? (
+                <p className="ds-activity-error">Error: {auditError}</p>
+              ) : !auditEntries?.length ? (
+                <p className="ds-activity-empty">No activity recorded for this application yet.</p>
+              ) : (
+                <table className="ds-activity-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>By</th>
+                      <th>Status change</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditEntries.map(ev => (
+                      <tr key={ev.Id}>
+                        <td colSpan={5} style={{ padding: 0 }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <tbody>
+                              <tr className={`ds-ev-row ${ev.Action === 'rejected' ? 'ds-ev-fail' : ev.Action === 'approved' ? 'ds-ev-ok' : ''}`}>
+                                <td className="ds-ev-time">{new Date(ev.CreatedAt).toLocaleString()}</td>
+                                <td className="ds-ev-op">{ev.Action.replace(/_/g, ' ')}</td>
+                                <td className="ds-ev-dir" style={{ fontSize: 11 }}>{ev.PerformedBy}</td>
+                                <td className="ds-ev-dir" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                                  {ev.PreviousStatus && ev.NewStatus ? `${ev.PreviousStatus} → ${ev.NewStatus}` : (ev.NewStatus || '')}
+                                </td>
+                                <td className="ds-ev-actions">
+                                  {ev.Details && (
+                                    <button className="ds-ev-expand" onClick={() => setExpandedAuditRow(expandedAuditRow === ev.Id ? null : ev.Id)}>
+                                      {expandedAuditRow === ev.Id ? 'Hide' : 'Details'}
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                              {expandedAuditRow === ev.Id && ev.Details && (
+                                <tr className="ds-ev-detail-row">
+                                  <td colSpan={5}>
+                                    <div className="ds-ev-detail">
+                                      <pre className="ds-ev-json">{ev.Details}</pre>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <footer className="view-app-footer">
         <p>This is a read-only view of your submitted application. To make changes, please create a new application.</p>

@@ -87,11 +87,13 @@ This is a **GHRA (Greater Houston Retailers Cooperative Association) Membership 
 | `GET` | `/api/applications/last-board-signers` | JWT, employee | Returns board signer fields from the most recently approved/pending_signature/signed app that has them set; used to pre-fill the approval dialog |
 | `GET` | `/api/applications/all` | JWT, employee | All applications; strips `FormData` from response but exposes `AuthRepFirstName`/`AuthRepLastName` from FormData; includes all board signer + signature status columns |
 | `GET` | `/api/applications/:id` | JWT | Full application; employee or owning member; SSNs returned masked (`***-**-XXXX`) |
-| `PATCH` | `/api/applications/:id/status` | JWT, employee | Approve or reject; approval triggers DS membership send + DS references send (non-fatal), stores board signer fields, sets status to `pending_signature`; rejection sets status directly; appends to `CommentsHistory`; fires email notification |
+| `PATCH` | `/api/applications/:id/status` | JWT, employee | Approve or reject. See **Status Transition Rules** for guards. Approval triggers DS membership send + DS references send (non-fatal), stores board signer fields, sets status to `pending_signature`. Rejection sets status directly and fires email notification. Appends to `CommentsHistory`. Blocked attempts are audit-logged as `approve_blocked` / `reject_blocked`. |
 | `GET` | `/api/applications/:id/signature-status` | JWT, employee | Live DS signer statuses for member, board signers, and references |
 | `POST` | `/api/applications/:id/resend/:target` | JWT, employee | Remind or redirect a signer; `target` one of `member`, `reference1`, `reference2`, `verification_board_signer`, `approved_board_signer`; body `{ email? }` — if email differs, calls DS `signatureRequestUpdate` to redirect |
 | `PATCH` | `/api/applications/:id/board-signers` | JWT, employee | Update board signer names/emails after approval; calls DS `signatureRequestUpdate` if email changes and the signer hasn't yet signed |
 | `PUT` | `/api/applications/:id` | JWT, employee | Employee direct edit of FormData |
+| `GET` | `/api/applications/:id/audit` | JWT, employee | Application audit log; newest-first; returns `{ entries: [] }` |
+| `GET` | `/api/ds-events` | JWT, employee | DS event log; query params: `applicationId`, `success`, `from`, `to`, `page`; 100 rows/page newest-first |
 
 #### Document routes
 
@@ -195,6 +197,27 @@ Database: `APIDB` (SQL Server). Schema baseline is in `server/setup.sql` — run
 | `CreatedAt` | `DATETIME DEFAULT GETDATE()` | |
 | `UpdatedAt` | `DATETIME` | |
 
+### DsEventLog
+
+Created by `ensureSchema()` on first boot (uses `IF NOT EXISTS` on `sys.tables`). Stores all outbound DS SDK calls and inbound webhook events with masked payloads. Pruned via `server/scripts/pruneDsEventLog.js`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | `INT IDENTITY PK` | |
+| `ApplicationId` | `INT NULL` | FK to Applications; null for webhook events where the app isn't yet resolved |
+| `Direction` | `NVARCHAR(20) NOT NULL` | `'outbound'` or `'inbound'` |
+| `Operation` | `NVARCHAR(100) NOT NULL` | e.g. `signatureRequestGet`, `webhook[signature_request_signed]` |
+| `SignatureRequestId` | `NVARCHAR(255) NULL` | DS signature request ID if known |
+| `Success` | `BIT NOT NULL DEFAULT 0` | 1 = success, 0 = failure |
+| `HttpStatus` | `INT NULL` | HTTP status code from DS (outbound) |
+| `ErrorCode` | `NVARCHAR(100) NULL` | DS `errorName` or Node `err.code` |
+| `ErrorMessage` | `NVARCHAR(MAX) NULL` | DS `errorMsg` or `err.message` |
+| `RequestSummary` | `NVARCHAR(MAX) NULL` | JSON summary of the outgoing request (masked) |
+| `ResponseSummary` | `NVARCHAR(MAX) NULL` | JSON summary of the response (masked) |
+| `DurationMs` | `INT NULL` | Wall-clock ms for the DS call |
+| `PerformedBy` | `NVARCHAR(255) NULL` | Employee email or `'webhook'` |
+| `CreatedAt` | `DATETIME NOT NULL DEFAULT GETDATE()` | |
+
 ### AchBatches
 
 Created by `ensureSchema()` on first boot (uses `IF NOT EXISTS` on `sys.tables`).
@@ -206,6 +229,27 @@ Created by `ensureSchema()` on first boot (uses `IF NOT EXISTS` on `sys.tables`)
 | `GeneratedBy` | `NVARCHAR(255) NOT NULL` | Employee email |
 | `AppCount` | `INT NOT NULL` | Number of applications in this batch |
 | `FileContent` | `NVARCHAR(MAX) NOT NULL` | **⚠ SENSITIVE — employee-only.** Contains unencrypted bank routing and account numbers for all applications in the batch. Never returned by `GET /api/ach/batches`; only returned by `GET /api/ach/batches/:id/file` (employee role required). Consider encrypting with the existing AES-256-GCM helpers if the DB is shared or externally accessible. |
+
+### ApplicationAuditLog
+
+Created by `ensureSchema()` on first boot (uses `IF NOT EXISTS` on `sys.tables`). Records all significant employee-initiated actions on applications for compliance and debugging. Retention recommendation: 7 years (treat as a financial record — it is the record of who approved/rejected what).
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | `INT IDENTITY PK` | |
+| `ApplicationId` | `INT NOT NULL` | FK to Applications |
+| `Action` | `NVARCHAR(50) NOT NULL` | See action list below |
+| `PerformedBy` | `NVARCHAR(255) NOT NULL` | Employee or member email |
+| `PerformedByRole` | `NVARCHAR(20) NULL` | `'employee'` or `'member'` |
+| `Details` | `NVARCHAR(MAX) NULL` | JSON blob; masked by `maskDsPayload`; truncated at 16 KB |
+| `PreviousStatus` | `NVARCHAR(20) NULL` | Application status before the action |
+| `NewStatus` | `NVARCHAR(20) NULL` | Application status after the action |
+| `IpAddress` | `NVARCHAR(45) NULL` | IPv4 or IPv6 from `req.ip` |
+| `CreatedAt` | `DATETIME NOT NULL DEFAULT GETDATE()` | |
+
+Actions logged: `submitted`, `approved`, `rejected`, `edited`, `ghra_number_set`, `ghra_number_changed`, `ghra_number_cleared`, `board_signers_updated`, `signature_email_redirected`, `signature_resent`, `references_sent`, `archived`, `unarchived`, `status_synced`, `ach_generated`, `document_uploaded`, `document_deleted`
+
+Not logged (too noisy, no diagnostic value): `draft_saved`, `viewed`
 
 ### Password reset (manual)
 ```bash
@@ -330,6 +374,70 @@ Providing a `{ email }` body redirects the request to a new email address via DS
 
 `POST /api/webhooks/dropbox-sign` verifies the HMAC-SHA256 signature using `DROPBOX_SIGN_API_KEY` as the key and `event_time + event_type` as the message before processing any event. On `signature_request_signed` or `signature_request_all_signed`, it fetches the live signer state from DS (not from the webhook payload) and updates the relevant per-signer status columns. Always responds `200 Hello API Event Received`.
 
+### Status Transition Rules
+
+These rules are enforced both server-side (`PATCH /api/applications/:id/status`) and in the UI (ViewApplication approve/reject buttons).
+
+| Current status | `SignatureRequestId` set? | Approve allowed? | Reject allowed? |
+|---|---|---|---|
+| `submitted` | No | ✓ Yes | ✓ Yes |
+| `submitted` | Yes (unusual) | ✗ No — 409 | ✗ No — 409 |
+| `pending_signature` | Yes | ✗ No — 409 | ✗ No — 409 |
+| `signed` | Yes | ✗ No — 409 | ✗ No — 409 |
+| `rejected` | No | ✗ No — 409 | ✗ (already rejected) |
+| `draft` | — | ✗ No — 409 | ✗ No — 409 |
+
+**Approval guard:** `PreviousStatus` must be `"submitted"`. Any other starting status returns 409.
+
+**Rejection guard:** If `SignatureRequestId` is set, rejection is blocked with 409 — "This application has already been sent for signature and cannot be rejected. Cancel the signature request in Dropbox Sign first." The employee must cancel the DS request manually in the Dropbox Sign dashboard before the application can be rejected in the app.
+
+**Rationale:** Once a DS signature request is sent, the member already has a live signing link in their inbox. The app cannot reliably prevent them from signing. The previous approach (auto-cancel on reject) was removed because auto-cancel silently fails for already-signed requests, leaving the member with a signed document while the app records a rejection. Requiring manual DS cancellation forces a deliberate human decision before the data is written.
+
+**UI enforcement (ViewApplication):** Both Approve and Reject buttons are disabled whenever `status !== 'submitted'` or `SignatureRequestId` is set. A tooltip reads "This application has already been approved and sent for signature." for post-approval states.
+
+**Blocked attempts are audit-logged** as `approve_blocked` / `reject_blocked` with the reason in `Details`, so you can see in the Activity Log if someone tried to approve/reject an already-sent application.
+
+### DS Event Logging
+
+Every outbound DS SDK call and every inbound webhook event is logged to the `DsEventLog` table via `server/ds/logDsEvent.js`. Logging never breaks the operation — errors are swallowed and printed to the console.
+
+**Logged operations:** `signatureRequestSendWithTemplate`, `signatureRequestSendWithTemplate[refs]`, `signatureRequestGet`, `signatureRequestGet[refs]`, `signatureRequestUpdate[verification|approved|admin]`, `signatureRequestRemind`, `signatureRequestFiles`, `webhook[<event_type>]`, `webhook[failed_hmac]`
+
+**Masking rules (enforced by `maskDsPayload` in `server/ds/logDsEvent.js`):**
+- Drop entirely: any key matching `/ssn|social/i` or `/password|secret|token|api_?key/i`
+- Mask to last 4 digits: any key matching `/account|routing/i` with a string value
+- Keep: signer emails, names, roles, templateIds, signatureRequestIds, statuses
+- Truncate at 8 KB: `toSummary()` stringifies and slices if too large
+
+**View logs:** `GET /api/ds-events` (employee only). Query params: `applicationId`, `success`, `from` (ISO date), `to` (ISO date), `page` (default 1, 100 rows/page). Also surfaced in the collapsed "Signature Activity" panel on each ViewApplication page.
+
+**Retention / pruning:** `node server/scripts/pruneDsEventLog.js [--dry-run] [--days=N]` — defaults to 180 days. Run periodically (e.g. monthly cron). Use `--dry-run` first to preview.
+
+**Manual test checklist:**
+- [ ] **Successful send:** Approve an application with valid reference emails. Open `GET /api/ds-events?applicationId=<id>` — verify two rows: `signatureRequestSendWithTemplate` (membership) and `signatureRequestSendWithTemplate[refs]` (references), both `Success=1`, with signer emails in `ResponseSummary`.
+- [ ] **Failed send:** Approve with an invalid DS template ID (or revoke the API key temporarily). Check that a row appears with `Success=0` and the DS error in `ErrorMessage`; confirm the approval request also returned 500 to the client.
+- [ ] **Verified webhook:** Trigger a signer action in DS test mode. Confirm a `webhook[signature_request_signed]` row appears with `Direction=inbound`, `Success=1`, and a `signatureRequestGet` row below it.
+- [ ] **Failed HMAC:** POST to `/api/webhooks/dropbox-sign` with a forged or missing hash. Confirm a `webhook[failed_hmac]` row appears with `Success=0` and `ErrorCode=HMAC_MISMATCH`. Confirm the server still returned 200.
+- [ ] **Masking:** Open any `RequestSummary` or `ResponseSummary` in the Signature Activity panel — confirm no `api_key`, SSN, or unmasked account/routing numbers appear.
+
+### Application Audit Log
+
+`server/audit/logApplicationAction.js` logs every significant employee-initiated application action to the `ApplicationAuditLog` table. Each call is fire-and-forget — all errors are caught and printed to console, never surfaced to the client.
+
+**Table:** `ApplicationAuditLog` — see Database Schema section for column definitions.
+
+**API:** `GET /api/applications/:id/audit` (employee only) — returns `{ entries: [] }` newest-first.
+
+**Frontend:** Surfaced in the collapsed "Activity Log" panel on the ViewApplication page (employees only). Reuses the same `ds-activity-panel` / `ds-ev-*` CSS classes.
+
+**Actions logged:** `submitted`, `approved`, `approve_blocked`, `rejected`, `reject_blocked`, `edited`, `ghra_number_set`, `ghra_number_changed`, `ghra_number_cleared`, `board_signers_updated`, `signature_email_redirected`, `signature_resent`, `references_sent`, `archived`, `unarchived`, `status_synced`, `ach_generated`, `document_uploaded`, `document_deleted`
+
+**Not logged:** `draft_saved`, `viewed` — too noisy, no diagnostic value.
+
+**Masking:** The `Details` JSON blob is passed through `maskDsPayload` (same rules as `DsEventLog`) before storage, then truncated at 16 KB.
+
+**Retention:** Treat as a financial record — 7 years minimum. This is the authoritative record of who approved or rejected each application and when.
+
 ---
 
 ## Auth & Security
@@ -355,7 +463,7 @@ Providing a `{ email }` body redirects the request to a new email address via DS
 
 `src/context/AuthContext.jsx` is the central store. It holds the authenticated user, JWT token, and all API call functions. All API calls attach `Authorization: Bearer <token>` automatically.
 
-Context value keys: `isAuthenticated`, `currentUser`, `error`, `login`, `signup`, `employeeLogin`, `logout`, `saveDraft`, `saveApplication`, `getUserApplications`, `getApplicationById`, `getAllApplications`, `updateApplicationStatus`, `updateBoardSigners`, `employeeUpdateApplication`, `getLastBoardSigners`, `syncSignatureStatuses`, `getSignatureStatus`, `resendSignature`, `changePassword`, `createMember`, `uploadDocument`, `removeDocument`, `openDocument`, `testDropboxSign`, `createMemberAccount`, `resetMemberPassword`, `getMembers`, `deleteMember`, `deleteEmployee`, `getEmployees`, `createEmployeeAccount`, `resetEmployeePassword`, `updateEmployeeName`
+Context value keys: `isAuthenticated`, `currentUser`, `error`, `login`, `signup`, `employeeLogin`, `logout`, `saveDraft`, `saveApplication`, `getUserApplications`, `getApplicationById`, `getAllApplications`, `updateApplicationStatus`, `updateBoardSigners`, `employeeUpdateApplication`, `getLastBoardSigners`, `syncSignatureStatuses`, `getSignatureStatus`, `resendSignature`, `sendReferencesRequest`, `getDsEvents`, `getAuditLog`, `changePassword`, `createMember`, `uploadDocument`, `removeDocument`, `openDocument`, `testDropboxSign`, `createMemberAccount`, `resetMemberPassword`, `getMembers`, `deleteMember`, `deleteEmployee`, `getEmployees`, `createEmployeeAccount`, `resetEmployeePassword`, `updateEmployeeName`
 
 `resolveDocumentUrl(storedUrl)` is exported as a standalone helper; it converts a stored `/uploads/<appId>/<file>` path to the authenticated `/api/documents/<appId>/<file>` endpoint on the correct host.
 
