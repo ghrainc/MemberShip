@@ -97,10 +97,22 @@ function processOwnerSsnsForSave(formData) {
 }
 
 // Keys whose values must never be uppercased.
+// All fields whose values come from a fixed option set (selects, radios, checkboxes).
+// Must stay in sync with ENUM_OPTIONS in src/components/MembershipForm.jsx.
+const ENUM_FIELD_NAMES_SERVER = new Set([
+  'ownershipType', 'businessType', 'storeCondition', 'businessProperty',
+  'fuelAvailable',        // NB: was incorrectly listed as 'fuelAvailability' — fixed
+  'scanPOS', 'posSystem',
+  'foodServiceAvailable', 'foodConcept', 'foodServiceBranded', 'bigMardKudosGameday',
+  'walkInCooler', 'walkInFreezer', 'beerCave',
+  'storeSpannerBoard', 'hardLiquor', 'ageRequirement', 'closedSundayAfter9pm',
+  'akdnContribute', 'hfbContribute',
+])
+
 const SKIP_UPPERCASE_KEYS = new Set([
   // Emails
   'email', 'userEmail',
-  // Auth / passwords (handled elsewhere)
+  // Auth / passwords
   'password', 'newPassword', 'confirmPassword',
   // Sensitive financial / ID numbers
   'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher', 'ssnEncrypted',
@@ -108,12 +120,12 @@ const SKIP_UPPERCASE_KEYS = new Set([
   'GhraNumber',
   // Stored document references / filenames
   'url', 'filename', 'originalName', 'filePath',
-  // Boolean / enum / code fields — casing is meaningful
-  'businessType', 'storeCondition', 'businessProperty', 'ownershipType',
-  'storeSpannerBoard', 'hfbContribute', 'akdnContribute', 'hardLiquor', 'ageRequirement',
-  'closedSundayAfter9pm', 'warehouseDelivery', 'previousMember', 'fuelAvailability', 'pos',
+  // Boolean flags
+  'warehouseDelivery', 'previousMember',
   'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
   'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
+  // Enum fields — spread so the list stays in sync with the client definition
+  ...ENUM_FIELD_NAMES_SERVER,
 ])
 
 function uppercaseValue(key, value) {

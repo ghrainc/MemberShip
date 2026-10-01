@@ -7,14 +7,44 @@ import { normaliseDocuments } from '../utils/documentSlots'
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
 
+// All fields whose values come from a fixed option set (selects, radios, checkboxes).
+// Casing is meaningful here — these values are compared against string literals elsewhere.
+// Derived from the actual option sets so a new dropdown can't be missed.
+const ENUM_OPTIONS = {
+  ownershipType:        ['sole-proprietor', 'partnership', 'c-corp', 's-corp', 'llc'],
+  businessType:         ['with-fuel', 'without-fuel'],
+  storeCondition:       ['existing', 'remodeled', 'brand-new'],
+  businessProperty:     ['owned', 'leased'],
+  fuelAvailable:        ['branded', 'unbranded'],
+  scanPOS:              ['yes', 'no'],
+  posSystem:            ['gilbarco-passport', 'verifone', 'ruby', 'other'],
+  foodServiceAvailable: ['yes', 'no'],
+  foodConcept:          ['chicken', 'pizza', 'mexican', 'burger', 'bbq', 'other'],
+  foodServiceBranded:   ['yes', 'no'],
+  bigMardKudosGameday:  ['yes', 'no'],
+  walkInCooler:         ['yes', 'no'],
+  walkInFreezer:        ['yes', 'no'],
+  beerCave:             ['yes', 'no'],
+  storeSpannerBoard:    ['yes', 'no', 'prevMember'],
+  hardLiquor:           ['yes', 'no'],
+  ageRequirement:       ['yes', 'no'],
+  closedSundayAfter9pm: ['yes', 'no'],
+  akdnContribute:       ['yes', 'no'],
+  hfbContribute:        ['yes', 'no'],
+}
+const ENUM_FIELD_NAMES = new Set(Object.keys(ENUM_OPTIONS))
+
 const SKIP_UPPERCASE_CLIENT = new Set([
+  // Auth / credentials
   'email', 'userEmail', 'password', 'newPassword', 'confirmPassword',
+  // Sensitive financial / ID numbers
   'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher',
-  'businessType', 'storeCondition', 'businessProperty', 'ownershipType',
-  'storeSpannerBoard', 'hfbContribute', 'akdnContribute', 'hardLiquor', 'ageRequirement',
-  'closedSundayAfter9pm', 'warehouseDelivery', 'previousMember', 'fuelAvailability', 'pos',
+  // Boolean flags stored as true/false
+  'warehouseDelivery', 'previousMember',
   'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
   'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
+  // Enum fields — spread from ENUM_FIELD_NAMES so the list stays in sync
+  ...ENUM_FIELD_NAMES,
 ])
 
 function uppercaseFieldValue(name, value) {
@@ -418,6 +448,10 @@ function MembershipForm({ isEmployeeEdit = false }) {
       finalValue = checked
     } else if (PHONE_FIELDS.has(name)) {
       finalValue = formatPhone(value)
+    } else if (type === 'radio' || type === 'select-one' || type === 'select-multiple' ||
+               type === 'date' || type === 'number' || type === 'email' || type === 'password') {
+      // Never uppercase enum/typed inputs — their values are codes, not user-entered text
+      finalValue = value
     } else {
       finalValue = applyUppercaseWithCursor(e, value)
     }
