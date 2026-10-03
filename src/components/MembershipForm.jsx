@@ -3,56 +3,10 @@ import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
 import { normaliseDocuments } from '../utils/documentSlots'
+import { uppercaseFieldValue } from '../utils/uppercaseTransform'
 
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
-
-// All fields whose values come from a fixed option set (selects, radios, checkboxes).
-// Casing is meaningful here — these values are compared against string literals elsewhere.
-// Derived from the actual option sets so a new dropdown can't be missed.
-const ENUM_OPTIONS = {
-  ownershipType:        ['sole-proprietor', 'partnership', 'c-corp', 's-corp', 'llc'],
-  businessType:         ['with-fuel', 'without-fuel'],
-  storeCondition:       ['existing', 'remodeled', 'brand-new'],
-  businessProperty:     ['owned', 'leased'],
-  fuelAvailable:        ['branded', 'unbranded'],
-  scanPOS:              ['yes', 'no'],
-  posSystem:            ['gilbarco-passport', 'verifone', 'ruby', 'other'],
-  foodServiceAvailable: ['yes', 'no'],
-  foodConcept:          ['chicken', 'pizza', 'mexican', 'burger', 'bbq', 'other'],
-  foodServiceBranded:   ['yes', 'no'],
-  bigMardKudosGameday:  ['yes', 'no'],
-  walkInCooler:         ['yes', 'no'],
-  walkInFreezer:        ['yes', 'no'],
-  beerCave:             ['yes', 'no'],
-  storeSpannerBoard:    ['yes', 'no', 'prevMember'],
-  hardLiquor:           ['yes', 'no'],
-  ageRequirement:       ['yes', 'no'],
-  closedSundayAfter9pm: ['yes', 'no'],
-  akdnContribute:       ['yes', 'no'],
-  hfbContribute:        ['yes', 'no'],
-}
-const ENUM_FIELD_NAMES = new Set(Object.keys(ENUM_OPTIONS))
-
-const SKIP_UPPERCASE_CLIENT = new Set([
-  // Auth / credentials
-  'email', 'userEmail', 'password', 'newPassword', 'confirmPassword',
-  // Sensitive financial / ID numbers
-  'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher',
-  // Boolean flags stored as true/false
-  'warehouseDelivery', 'previousMember',
-  'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
-  'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
-  // Enum fields — spread from ENUM_FIELD_NAMES so the list stays in sync
-  ...ENUM_FIELD_NAMES,
-])
-
-function uppercaseFieldValue(name, value) {
-  if (typeof value !== 'string') return value
-  if (SKIP_UPPERCASE_CLIENT.has(name)) return value
-  if (name.toLowerCase().endsWith('email')) return value
-  return value.toUpperCase()
-}
 
 // Uppercase a text input while preserving cursor position.
 function applyUppercaseWithCursor(e, value) {

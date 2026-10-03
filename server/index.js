@@ -96,63 +96,7 @@ function processOwnerSsnsForSave(formData) {
   }
 }
 
-// Keys whose values must never be uppercased.
-// All fields whose values come from a fixed option set (selects, radios, checkboxes).
-// Must stay in sync with ENUM_OPTIONS in src/components/MembershipForm.jsx.
-const ENUM_FIELD_NAMES_SERVER = new Set([
-  'ownershipType', 'businessType', 'storeCondition', 'businessProperty',
-  'fuelAvailable',        // NB: was incorrectly listed as 'fuelAvailability' — fixed
-  'scanPOS', 'posSystem',
-  'foodServiceAvailable', 'foodConcept', 'foodServiceBranded', 'bigMardKudosGameday',
-  'walkInCooler', 'walkInFreezer', 'beerCave',
-  'storeSpannerBoard', 'hardLiquor', 'ageRequirement', 'closedSundayAfter9pm',
-  'akdnContribute', 'hfbContribute',
-])
-
-const SKIP_UPPERCASE_KEYS = new Set([
-  // Emails
-  'email', 'userEmail',
-  // Auth / passwords
-  'password', 'newPassword', 'confirmPassword',
-  // Sensitive financial / ID numbers
-  'accountNumber', 'transitAbaNumber', 'ein', 'salesTaxId', 'ssn', 'ssnCipher', 'ssnEncrypted',
-  // Dropbox Sign / signature artefacts
-  'GhraNumber',
-  // Stored document references / filenames
-  'url', 'filename', 'originalName', 'filePath',
-  // Boolean flags
-  'warehouseDelivery', 'previousMember',
-  'membershipAgreement', 'memberRequirements', 'rebateConsent', 'membershipFeeAgreement',
-  'acknowledgement', 'authorizationConsent', 'indemnificationConsent', 'storeProductCategories',
-  // Enum fields — spread so the list stays in sync with the client definition
-  ...ENUM_FIELD_NAMES_SERVER,
-])
-
-function uppercaseValue(key, value) {
-  if (SKIP_UPPERCASE_KEYS.has(key)) return value
-  // Skip keys that end in 'email' (e.g. referenceEmail1)
-  if (typeof key === 'string' && key.toLowerCase().endsWith('email')) return value
-  // Safety net: any key resembling a password must reach bcrypt exactly as typed
-  if (typeof key === 'string' && /password|pass|pwd|secret|token|hash/i.test(key)) return value
-  if (typeof value !== 'string') return value
-  return value.toUpperCase()
-}
-
-function uppercaseFormData(obj) {
-  if (!obj || typeof obj !== 'object') return obj
-  if (Array.isArray(obj)) return obj.map(item => uppercaseFormData(item))
-  const out = {}
-  for (const [k, v] of Object.entries(obj)) {
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      out[k] = uppercaseFormData(v)
-    } else if (Array.isArray(v)) {
-      out[k] = v.map(item => (item && typeof item === 'object') ? uppercaseFormData(item) : uppercaseValue(k, item))
-    } else {
-      out[k] = uppercaseValue(k, v)
-    }
-  }
-  return out
-}
+const { ENUM_FIELD_NAMES_SERVER, SKIP_UPPERCASE_KEYS, uppercaseValue, uppercaseFormData } = require('./utils/uppercaseFormData')
 
 function diffFormData(oldFd, newFd) {
   const allKeys = new Set([...Object.keys(oldFd || {}), ...Object.keys(newFd || {})])
@@ -265,15 +209,7 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
     const parts = [b.bankAddress, b.bankCity, b.bankState, b.bankZip].filter(Boolean)
     return parts.length ? parts.join(', ') : null
   }
-  // Format Auth Rep home address: "Street, City, State Zip" — skips missing parts
-  const formatAuthRepAddress = (fd) => {
-    const street   = (fd.authorizedRepAddress || '').trim()
-    const city     = (fd.authorizedRepCity    || '').trim()
-    const state    = (fd.authorizedRepState   || '').trim()
-    const zip      = (fd.authorizedRepZip     || '').trim()
-    const stateZip = [state, zip].filter(Boolean).join(' ')
-    return [street, city, stateZip].filter(Boolean).join(', ')
-  }
+  const { formatAuthRepAddress } = require('./utils/formatAuthRepAddress')
 
   const customFields = [
     // ── Business identity ─────────────────────────────────────────────────────
@@ -648,12 +584,7 @@ async function getPool() {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-// ABA routing number checksum: (3*odd-pos + 7*even-pos + plain) mod 10 === 0
-function validateAba(nineDigits) {
-  const d = nineDigits.split('').map(Number)
-  return (3 * (d[0] + d[3] + d[6]) + 7 * (d[1] + d[4] + d[7]) + (d[2] + d[5] + d[8])) % 10 === 0
-}
+const { validateAba } = require('./utils/validateAba')
 
 // ── Schema migration ─────────────────────────────────────────────────────────
 
@@ -2565,13 +2496,9 @@ app.post('/api/ach/generate', authMiddleware, async (req, res) => {
       `SELECT Id, StoreName, GhraNumber, FormData, IsArchived FROM Applications WHERE Id IN (${ph})`
     )).recordset
 
-    // CSV-escape a value: replace CR/LF with space, then quote if it contains , or "
-    const csvField = v => {
-      const s = String(v ?? '').replace(/[\r\n]/g, ' ')
-      return /[,"]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-    }
+    const { csvField } = require('./utils/achCsv')
 
-    const validationErrors = []
+const validationErrors = []
     const csvRows          = []
 
     for (const row of rows) {

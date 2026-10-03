@@ -1,5 +1,6 @@
 import { ghraFuelsApplies } from './fuelUtils'
 import { US_STATES } from './usStates'
+import { normaliseDocuments } from './documentSlots'
 
 // HTML-escapes a value before interpolating it into the PDF template.
 const esc = (s) => String(s == null ? '' : s)
@@ -624,7 +625,7 @@ export const generateApplicationPDF = (application) => {
                   ${showOwnerSsn && owner.ssn ? `
                   <div class="info-item">
                     <span class="info-label">SSN</span>
-                    <span class="info-value">${esc(owner.ssn)}</span>
+                    <span class="info-value">${esc(/^\*/.test(owner.ssn) ? owner.ssn : '***-**-' + String(owner.ssn).replace(/\D/g, '').slice(-4).padStart(4, '*'))}</span>
                   </div>
                   ` : ''}
                 </div>
@@ -779,7 +780,7 @@ export const generateApplicationPDF = (application) => {
           <div class="info-grid">
             <div class="info-item">
               <span class="info-label">Void Check</span>
-              <span class="info-value">${data.voidCheck ? (typeof data.voidCheck === 'object' ? esc(data.voidCheck.originalName) : 'Uploaded') : 'Not provided'}</span>
+              <span class="info-value">${(() => { const files = normaliseDocuments(data).voidCheck || []; return files.length ? esc(files[0].originalName || 'Uploaded') : 'Not provided' })()}</span>
             </div>
           </div>
         </div>

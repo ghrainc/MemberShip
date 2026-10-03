@@ -154,8 +154,12 @@ function ViewApplication() {
   const handleApprovalConfirm = async (comments, boardSigners) => {
     const newStatus = approvalDialog.action === 'approve' ? 'approved' : 'rejected'
     setApproving(true)
-    const result = await updateApplicationStatus(id, newStatus, comments, boardSigners)
-    setApproving(false)
+    let result
+    try {
+      result = await updateApplicationStatus(id, newStatus, comments, boardSigners)
+    } finally {
+      setApproving(false)
+    }
     setApprovalDialog(null)
     if (!result.success) {
       setApprovalError(result.error || 'Something went wrong.')
@@ -200,8 +204,12 @@ function ViewApplication() {
 
   const handleSaveGhraNumber = async () => {
     setEditGhraLoading(true)
-    const result = await updateGhraNumber(application.Id, { ghraNumber: editingGhra?.trim() || null })
-    setEditGhraLoading(false)
+    let result
+    try {
+      result = await updateGhraNumber(application.Id, { ghraNumber: editingGhra?.trim() || null })
+    } finally {
+      setEditGhraLoading(false)
+    }
     if (result.success) {
       setApplication(prev => ({ ...prev, GhraNumber: editingGhra?.trim() || null }))
       setEditingGhra(null)
