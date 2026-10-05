@@ -140,7 +140,7 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '' }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '', roles: data.roles || [] }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -171,7 +171,7 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '' }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '', roles: data.roles || [] }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -841,6 +841,320 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
+  const getEmailSettings = useCallback(async () => {
+    if (!token) return null
+    try {
+      const res = await fetch(`${API}/settings/email`, { headers: authHeaders(token) })
+      return res.ok ? await res.json() : null
+    } catch { return null }
+  }, [token])
+
+  const updateEmailSettings = useCallback(async (settings) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/settings/email`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify(settings)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to save' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const sendTestEmail = useCallback(async (to) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/settings/email/test`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ to })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to send' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const getManagers = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/managers`, { headers: authHeaders(token) })
+      return res.ok ? await res.json() : []
+    } catch { return [] }
+  }, [token])
+
+  const createManager = useCallback(async (type, name, email) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/managers`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ type, name, email })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to add', warn: data.warn }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const updateManager = useCallback(async (id, name, email) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/managers/${id}`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({ name, email })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to update' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const deactivateManager = useCallback(async (id) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/managers/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to deactivate' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const resendManagerNotifications = useCallback(async (appId) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/applications/${appId}/resend-manager-notifications`, {
+        method: 'POST',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to send' }
+      return { success: true, sent: data.sent }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  // ── Employee roles (Phase 2) ──────────────────────────────────────────────
+
+  const getEmployeeRoles = useCallback(async (userId) => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/employees/${userId}/roles`, { headers: authHeaders(token) })
+      if (!res.ok) return []
+      return await res.json()
+    } catch { return [] }
+  }, [token])
+
+  const assignEmployeeRole = useCallback(async (userId, role) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/${userId}/roles`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ role })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to assign role' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const removeEmployeeRole = useCallback(async (userId, role) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/employees/${userId}/roles/${role}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to remove role' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  // ── Warehouse applications (Phase 4) ─────────────────────────────────────
+
+  const saveWarehouseDraft = useCallback(async (id, formData) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/warehouse/draft`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ id: id || undefined, formData })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to save' }
+      return { success: true, id: data.id }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const submitWarehouseApplication = useCallback(async (id, formData) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/warehouse/submit`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ id, formData })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to submit' }
+      return { success: true, id: data.id }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const getMyWarehouseApplications = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/warehouse/my`, { headers: authHeaders(token) })
+      if (!res.ok) return []
+      return await res.json()
+    } catch { return [] }
+  }, [token])
+
+  const getAllWarehouseApplications = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/warehouse/all`, { headers: authHeaders(token) })
+      if (!res.ok) return []
+      return await res.json()
+    } catch { return [] }
+  }, [token])
+
+  const getWarehouseApplication = useCallback(async (id) => {
+    if (!token) return null
+    try {
+      const res = await fetch(`${API}/warehouse/${id}`, { headers: authHeaders(token) })
+      if (!res.ok) return null
+      return await res.json()
+    } catch { return null }
+  }, [token])
+
+  const updateWarehouseStatus = useCallback(async (id, status, notes) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/warehouse/${id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ status, notes })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to update status' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const uploadWarehouseDocument = useCallback(async (appId, docId, file) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('applicationId', String(appId))
+      form.append('docId', docId)
+      const res = await fetch(`${API}/warehouse/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Upload failed' }
+      return { success: true, url: data.url, filename: data.filename }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  // ── Fuels applications (Phase 5) ─────────────────────────────────────────
+
+  const saveFuelsDraft = useCallback(async (id, formData) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/fuels/draft`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ id: id || undefined, formData })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to save' }
+      return { success: true, id: data.id }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const submitFuelsApplication = useCallback(async (id, formData) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/fuels/submit`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ id, formData })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to submit' }
+      return { success: true, id: data.id }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const getMyFuelsApplications = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/fuels/my`, { headers: authHeaders(token) })
+      if (!res.ok) return []
+      return await res.json()
+    } catch { return [] }
+  }, [token])
+
+  const getAllFuelsApplications = useCallback(async () => {
+    if (!token) return []
+    try {
+      const res = await fetch(`${API}/fuels/all`, { headers: authHeaders(token) })
+      if (!res.ok) return []
+      return await res.json()
+    } catch { return [] }
+  }, [token])
+
+  const getFuelsApplication = useCallback(async (id) => {
+    if (!token) return null
+    try {
+      const res = await fetch(`${API}/fuels/${id}`, { headers: authHeaders(token) })
+      if (!res.ok) return null
+      return await res.json()
+    } catch { return null }
+  }, [token])
+
+  const updateFuelsStatus = useCallback(async (id, status, notes) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/fuels/${id}/status`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ status, notes })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Failed to update status' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const uploadFuelsDocument = useCallback(async (appId, docId, file) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('applicationId', String(appId))
+      form.append('docId', docId)
+      const res = await fetch(`${API}/fuels/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Upload failed' }
+      return { success: true, url: data.url, filename: data.filename }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
   return (
     <AuthContext.Provider value={{
       isAuthenticated,
@@ -894,7 +1208,32 @@ export const AuthProvider = ({ children }) => {
       getEmployees,
       createEmployeeAccount,
       resetEmployeePassword,
-      updateEmployeeName
+      updateEmployeeName,
+      getEmailSettings,
+      updateEmailSettings,
+      sendTestEmail,
+      getManagers,
+      createManager,
+      updateManager,
+      deactivateManager,
+      resendManagerNotifications,
+      getEmployeeRoles,
+      assignEmployeeRole,
+      removeEmployeeRole,
+      saveWarehouseDraft,
+      submitWarehouseApplication,
+      getMyWarehouseApplications,
+      getAllWarehouseApplications,
+      getWarehouseApplication,
+      updateWarehouseStatus,
+      uploadWarehouseDocument,
+      saveFuelsDraft,
+      submitFuelsApplication,
+      getMyFuelsApplications,
+      getAllFuelsApplications,
+      getFuelsApplication,
+      updateFuelsStatus,
+      uploadFuelsDocument,
     }}>
       {children}
     </AuthContext.Provider>

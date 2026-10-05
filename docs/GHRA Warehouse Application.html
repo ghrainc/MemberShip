@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GHRA Warehouse — Customer Account Application</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===========================================================
+   BRAND — same navy/red system as the trade show registration
+   form so the two read as one family of GHRA business forms.
+   =========================================================== */
+:root{
+  --navy:#14395F; --navy-d:#0E2A48; --navy-l:#2A5B8C; --red:#C8102E;
+  --bg:#F4F6F9; --card:#fff; --line:#E1E7EE; --line-2:#C9D2DD;
+  --text:#1E2B3A; --text-2:#5A6B7D; --ok:#1D7A54; --ok-bg:#EFF7F3; --err-bg:#FDF3F4;
+  --shadow:0 1px 2px rgba(20,57,95,.05), 0 4px 16px -8px rgba(20,57,95,.18);
+  --r:8px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);
+  font-family:"Source Sans 3",system-ui,-apple-system,sans-serif;
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:Montserrat,system-ui,sans-serif;margin:0;letter-spacing:-.01em}
+
+/* ---------- Header ---------- */
+.hdr{background:var(--navy);color:#fff;border-bottom:4px solid var(--red)}
+.hdr-in{max-width:900px;margin:0 auto;padding:32px 24px 36px}
+.mark{display:inline-block;font-family:Montserrat,sans-serif;font-weight:700;font-size:14px;
+  letter-spacing:.18em;border:2px solid rgba(255,255,255,.5);padding:5px 11px;border-radius:4px}
+.hdr h1{font-size:clamp(26px,4.4vw,38px);font-weight:700;line-height:1.15;margin:16px 0 10px}
+.hdr p{margin:0;color:#B9CBDD;max-width:62ch;font-size:16px}
+.hdr .facts{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.hdr .facts span{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  border-radius:20px;padding:6px 14px;font-size:13.5px;color:#DCE7F2}
+
+.wrap{max-width:900px;margin:0 auto;padding:30px 24px 80px}
+
+/* ---------- Cards ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:28px;margin-bottom:24px;box-shadow:var(--shadow)}
+.card-h{margin-bottom:6px;display:flex;align-items:center;gap:12px}
+.card-h h2{font-size:20px;font-weight:700;color:var(--navy)}
+.card-h .step{width:28px;height:28px;flex:none;border-radius:50%;background:var(--navy);color:#fff;
+  font-family:Montserrat,sans-serif;font-size:13px;font-weight:700;display:grid;place-items:center}
+.lede{color:var(--text-2);font-size:15px;margin:0 0 24px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+
+/* ---------- Fields ---------- */
+.grid{display:grid;gap:18px;grid-template-columns:repeat(12,1fr)}
+.f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.c12{grid-column:span 12}.c9{grid-column:span 9}.c8{grid-column:span 8}.c7{grid-column:span 7}
+.c6{grid-column:span 6}.c5{grid-column:span 5}.c4{grid-column:span 4}.c3{grid-column:span 3}
+@media (max-width:640px){.c9,.c8,.c7,.c6,.c5,.c4,.c3{grid-column:span 12}}
+
+label.lb{font-size:14px;font-weight:600;color:var(--text)}
+label.lb .rq{color:var(--red)}
+.note{font-size:13px;color:var(--text-2)}
+
+input[type=text],input[type=email],input[type=tel],input[type=date],input[type=number],select,textarea{
+  font:inherit;font-size:16px;color:var(--text);background:#fff;border:1px solid var(--line-2);
+  border-radius:6px;padding:11px 13px;width:100%;transition:border-color .15s,box-shadow .15s}
+textarea{resize:vertical;min-height:78px}
+select{appearance:none;padding-right:36px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8'><path d='M1 1l5 5 5-5' fill='none' stroke='%235A6B7D' stroke-width='1.6'/></svg>");
+  background-repeat:no-repeat;background-position:right 13px center}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--navy);
+  box-shadow:0 0 0 3px rgba(20,57,95,.13)}
+input.bad,select.bad,textarea.bad,.up.bad{border-color:var(--red);background:var(--err-bg)}
+.err{color:var(--red);font-size:13px;font-weight:500;display:none}
+.err.on{display:block}
+
+/* ---------- Choices ---------- */
+.opt{display:flex;gap:11px;align-items:flex-start;padding:13px 15px;border:1px solid var(--line-2);
+  border-radius:6px;background:#fff;cursor:pointer;transition:border-color .15s,background .15s}
+.opt:hover{border-color:var(--navy-l);background:#FAFCFE}
+.opt input{margin:3px 0 0;width:17px;height:17px;flex:none;accent-color:var(--navy)}
+.opt .t{font-weight:600;font-size:15px;display:block;line-height:1.4}
+.opt .s{color:var(--text-2);font-size:14px;display:block;margin-top:3px}
+.opt:has(input:checked){border-color:var(--navy);background:#F5F9FD;box-shadow:inset 0 0 0 1px var(--navy)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:10px}
+
+.rev{display:none;margin-top:16px;padding:20px;background:#F7FAFC;border:1px solid var(--line);
+  border-left:3px solid var(--navy);border-radius:0 6px 6px 0}
+.rev.on{display:block}
+
+/* ---------- Upload ---------- */
+.up{border:1.5px dashed var(--line-2);border-radius:6px;background:#FAFBFD;padding:18px;
+  text-align:center;cursor:pointer;transition:.15s;position:relative}
+.up:hover,.up.drag{border-color:var(--navy);background:#F3F8FC}
+.up input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.up .ic{color:var(--navy-l);display:block;margin:0 auto 6px}
+.up .t1{font-weight:600;font-size:15px;color:var(--navy)}
+.up .t2{font-size:13px;color:var(--text-2);margin-top:2px}
+.up.has{border-style:solid;border-color:var(--ok);background:var(--ok-bg);text-align:left;
+  display:flex;align-items:center;gap:12px;padding:13px 15px}
+.up.has input[type=file]{display:none}
+.up .thumb{width:44px;height:44px;flex:none;border-radius:4px;object-fit:cover;
+  border:1px solid rgba(0,0,0,.1);background:#fff;display:none}
+.up.has .thumb.on{display:block}
+.up .meta{flex:1;min-width:0;display:none}
+.up.has .meta{display:block}
+.up.has .prompt{display:none}
+.up .fn{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#14503A}
+.up .fs{font-size:13px;color:var(--text-2)}
+.up .rm{display:none;background:none;border:0;color:var(--text-2);cursor:pointer;font-size:22px;
+  line-height:1;padding:4px 8px;border-radius:4px;flex:none}
+.up.has .rm{display:block}
+.up .rm:hover{color:var(--red);background:rgba(200,16,46,.08)}
+
+/* ---------- Repeatable blocks ---------- */
+.blk{border:1px solid var(--line-2);border-radius:var(--r);margin-bottom:18px;overflow:hidden}
+.blk-h{display:flex;align-items:center;gap:12px;background:var(--navy);color:#fff;padding:12px 16px}
+.blk-h .n{font-family:Montserrat,sans-serif;font-size:12px;font-weight:700;letter-spacing:.1em;
+  background:rgba(255,255,255,.16);padding:4px 9px;border-radius:4px;flex:none}
+.blk-h .nm{font-family:Montserrat,sans-serif;font-weight:600;font-size:15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.blk-b{padding:20px 18px 22px;background:#fff}
+.sub{font-family:Montserrat,sans-serif;font-size:13px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--navy);margin:26px 0 14px;padding-bottom:8px;
+  border-bottom:2px solid var(--line);position:relative}
+.sub::after{content:"";position:absolute;left:0;bottom:-2px;width:42px;height:2px;background:var(--red)}
+.sub:first-child{margin-top:0}
+
+/* ---------- Buttons ---------- */
+.btn{font-family:Montserrat,sans-serif;font-weight:600;font-size:14px;border-radius:6px;
+  border:1.5px solid var(--navy);background:#fff;color:var(--navy);padding:10px 18px;
+  cursor:pointer;transition:.15s}
+.btn:hover{background:var(--navy);color:#fff}
+.btn-p{background:var(--navy);color:#fff}
+.btn-p:hover{background:var(--navy-d);border-color:var(--navy-d)}
+.btn-lg{width:100%;padding:16px;font-size:17px}
+.btn-sm{padding:7px 13px;font-size:13px}
+.btn-gh{border-color:var(--line-2);color:var(--text-2);margin-left:auto}
+.btn-gh:hover{background:var(--red);border-color:var(--red);color:#fff}
+.blk-h .btn-gh{color:#C7D6E4;border-color:rgba(255,255,255,.3)}
+.btn:focus-visible{outline:3px solid var(--navy-l);outline-offset:2px}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+
+/* ---------- Legal / signature ---------- */
+.legal{background:#FAFBFD;border:1px solid var(--line);border-radius:6px;padding:18px;
+  font-size:14.5px;line-height:1.55;max-height:220px;overflow-y:auto;margin-bottom:16px}
+.legal p{margin:0 0 12px}.legal p:last-child{margin-bottom:0}
+.legal strong{color:var(--navy)}
+.sig{border:1px solid var(--line-2);border-radius:6px;background:#fff;position:relative;overflow:hidden}
+.sig canvas{display:block;width:100%;height:180px;touch-action:none;cursor:crosshair}
+.sig .ln{position:absolute;left:28px;right:28px;bottom:38px;border-bottom:1px solid var(--line-2);pointer-events:none}
+.sig .hint{position:absolute;left:28px;bottom:16px;font-size:13px;color:var(--text-2);pointer-events:none}
+
+.alert{border:1px solid #F0C4CB;background:var(--err-bg);color:#8C1523;padding:16px 18px;
+  border-radius:6px;font-size:15px;margin-bottom:22px;display:none}
+.alert.on{display:block}
+.alert ul{margin:8px 0 0;padding-left:20px}
+.done{border:1px solid #BFE3D2;background:var(--ok-bg);color:#14503A;padding:24px;
+  border-radius:6px;display:none;text-align:center;margin-top:20px}
+.done.on{display:block}
+
+@media print{.hdr,.btn,.no-print{display:none!important}body{background:#fff}
+  .card,.blk{box-shadow:none;break-inside:avoid}.legal{max-height:none;overflow:visible}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="hdr-in">
+    <span class="mark">GHRA</span>
+    <h1>Warehouse Customer Account Application</h1>
+    <p>Open a wholesale account at the GHRA Warehouse and Distribution Center. Have your sales tax permit handy — you'll upload it as you go.</p>
+    <div class="facts">
+      <span>132,000+ sq ft</span><span>5,600+ products</span>
+      <span>Cash &amp; carry or delivered</span><span>Mon–Sat, 8:30 AM–6 PM</span>
+    </div>
+  </div>
+</header>
+
+<form class="wrap" id="app" novalidate>
+  <div class="alert" id="alert" role="alert" aria-live="assertive"></div>
+
+  <!-- ============ 1. BUSINESS ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">1</span><h2>Business information</h2></div>
+    <p class="lede">The legal entity that will hold the account.</p>
+    <div class="grid">
+      <div class="f c7"><label class="lb" for="b_legal">Legal entity name <span class="rq">*</span></label>
+        <input type="text" id="b_legal" data-req><div class="err"></div></div>
+      <div class="f c5"><label class="lb" for="b_type">Entity type <span class="rq">*</span></label>
+        <select id="b_type" data-req><option value="">Select one</option></select><div class="err"></div></div>
+      <div class="f c12" id="b_type_other_wrap" style="display:none">
+        <label class="lb" for="b_type_other">Describe the entity type <span class="rq">*</span></label>
+        <input type="text" id="b_type_other"><div class="err"></div></div>
+
+      <div class="f c7"><label class="lb" for="b_dba">DBA / store name <span class="rq">*</span></label>
+        <input type="text" id="b_dba" data-req placeholder="The name on your sign"><div class="err"></div></div>
+      <div class="f c5"><label class="lb" for="b_ein">EIN</label>
+        <input type="text" id="b_ein" data-type="ein" placeholder="12-3456789" inputmode="numeric"><div class="err"></div></div>
+
+      <div class="f c4"><label class="lb" for="b_started">Date business started</label>
+        <input type="date" id="b_started"><div class="err"></div></div>
+      <div class="f c4"><label class="lb" for="b_locations">Number of locations <span class="rq">*</span></label>
+        <input type="number" id="b_locations" data-req min="1" value="1"><div class="err"></div></div>
+      <div class="f c4"><label class="lb" for="b_phone">Business phone <span class="rq">*</span></label>
+        <input type="tel" id="b_phone" data-req data-type="phone" placeholder="(713) 555-0134"><div class="err"></div></div>
+
+      <div class="f c6"><label class="lb" for="b_email">Business email <span class="rq">*</span></label>
+        <input type="email" id="b_email" data-req data-type="email"><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="b_contact">Primary contact name <span class="rq">*</span></label>
+        <input type="text" id="b_contact" data-req><div class="err"></div></div>
+
+      <div class="f c12"><div class="sub" style="margin-top:8px">Store physical address</div></div>
+      <div class="f c12"><label class="lb" for="b_addr">Store street address <span class="rq">*</span></label>
+        <input type="text" id="b_addr" data-req><div class="err"></div></div>
+      <div class="f c5"><label class="lb" for="b_city">City <span class="rq">*</span></label>
+        <input type="text" id="b_city" data-req><div class="err"></div></div>
+      <div class="f c3"><label class="lb" for="b_state">State <span class="rq">*</span></label>
+        <input type="text" id="b_state" data-req value="TX" maxlength="2"><div class="err"></div></div>
+      <div class="f c4"><label class="lb" for="b_zip">ZIP <span class="rq">*</span></label>
+        <input type="text" id="b_zip" data-req data-type="zip" inputmode="numeric"><div class="err"></div></div>
+
+      <div class="f c12">
+        <label class="opt"><input type="checkbox" id="mailSame" checked>
+          <span><span class="t">Mailing address is the same</span></span></label>
+      </div>
+      <div class="f c12" id="mailWrap" style="display:none">
+        <div class="grid" style="gap:14px">
+          <div class="f c12"><label class="lb" for="m_addr">Mailing street address <span class="rq">*</span></label>
+            <input type="text" id="m_addr"><div class="err"></div></div>
+          <div class="f c5"><label class="lb" for="m_city">City <span class="rq">*</span></label>
+            <input type="text" id="m_city"><div class="err"></div></div>
+          <div class="f c3"><label class="lb" for="m_state">State <span class="rq">*</span></label>
+            <input type="text" id="m_state" value="TX" maxlength="2"><div class="err"></div></div>
+          <div class="f c4"><label class="lb" for="m_zip">ZIP <span class="rq">*</span></label>
+            <input type="text" id="m_zip" data-type="zip" inputmode="numeric"><div class="err"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 2. OWNERS ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">2</span><h2>Owners and officers</h2></div>
+    <p class="lede">List everyone with 20% or more ownership, plus any officer who will sign for the account. Each person needs a photo ID on file.</p>
+    <div id="owners"></div>
+    <button type="button" class="btn no-print" id="addOwner">+ Add another owner or officer</button>
+  </section>
+
+  <!-- ============ 3. PERMITS ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">3</span><h2>Permits and legal documents</h2></div>
+    <p class="lede">Clear photos or PDFs are fine. We keep these on file as required by the Texas Comptroller.</p>
+
+    <div class="sub">Texas Sales and Use Tax Permit</div>
+    <div class="grid">
+      <div class="f c6"><label class="lb" for="p_tax">Sales and Use Tax Permit # <span class="rq">*</span></label>
+        <input type="text" id="p_tax" data-req data-type="taxid" inputmode="numeric" placeholder="11 digits">
+        <span class="note">11 digits, starting with 1 or 3</span><div class="err"></div></div>
+      <div class="f c12"><label class="lb">Upload the permit <span class="rq">*</span></label>
+        <div id="u_tax"></div><div class="err"></div></div>
+    </div>
+
+    <div class="sub">Tobacco</div>
+    <label class="opt"><input type="checkbox" id="hasTobacco" data-toggle="tob">
+      <span><span class="t">This business sells or purchases tobacco products</span></span></label>
+    <div class="rev" data-panel="tob"><div class="grid">
+      <div class="f c6"><label class="lb" for="p_tob">Tobacco permit # <span class="rq">*</span></label>
+        <input type="text" id="p_tob"><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="p_tob_exp">Expiration date <span class="rq">*</span></label>
+        <input type="date" id="p_tob_exp"><div class="err"></div></div>
+      <div class="f c12"><label class="lb">Upload the tobacco permit <span class="rq">*</span></label>
+        <div id="u_tobacco"></div><div class="err"></div></div>
+    </div></div>
+
+  </section>
+
+  <!-- ============ 4. HOW YOU'LL BUY ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">4</span><h2>How you'll buy</h2></div>
+    <p class="lede">So we can set up your account the right way from day one.</p>
+
+    <div class="sub" style="margin-top:0">Estimated purchasing</div>
+    <div class="grid">
+      <div class="f c6"><label class="lb" for="volume">Estimated weekly purchases <span class="rq">*</span></label>
+        <select id="volume" data-req><option value="">Select one</option>
+          <option>Under $2,500</option><option>$2,500 – $5,000</option><option>$5,000 – $10,000</option>
+          <option>$10,000 – $25,000</option><option>Over $25,000</option></select><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="startDate">When would you like to start?</label>
+        <input type="date" id="startDate"></div>
+    </div>
+
+    <div class="sub">Categories you plan to buy <span class="rq">*</span></div>
+    <div class="opts" id="cats"></div>
+    <div class="err" id="catsErr" style="margin-top:10px"></div>
+  </section>
+
+  <!-- ============ 5. RESALE CERTIFICATE ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">5</span><h2>Texas Sales and Use Tax Resale Certificate</h2></div>
+    <p class="lede">Form 01-339. This goes to GHRA as your supplier and is never filed with the Comptroller. GHRA keeps it on file for four years.</p>
+    <div class="grid">
+      <div class="f c12"><label class="lb" for="rc_name">Purchaser name, exactly as it reads on your permit <span class="rq">*</span></label>
+        <input type="text" id="rc_name" data-req><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="rc_permit">Texas Sales and Use Tax Permit # <span class="rq">*</span></label>
+        <input type="text" id="rc_permit" data-req data-type="taxid" inputmode="numeric">
+        <span class="note">Copied from section 3 if you leave it blank</span><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="rc_phone">Phone <span class="rq">*</span></label>
+        <input type="tel" id="rc_phone" data-req data-type="phone"><div class="err"></div></div>
+      <div class="f c12"><label class="lb" for="rc_items">Items you will buy from GHRA for resale <span class="rq">*</span></label>
+        <textarea id="rc_items" data-req placeholder="Cigarettes, tobacco, candy, snacks, packaged beverages, general merchandise"></textarea><div class="err"></div></div>
+      <div class="f c12"><label class="lb" for="rc_activity">What this business sells in the regular course of business <span class="rq">*</span></label>
+        <textarea id="rc_activity" data-req placeholder="Retail convenience store selling tobacco, snacks, beverages and general merchandise"></textarea><div class="err"></div></div>
+      <div class="f c12">
+        <label class="opt"><input type="checkbox" id="rc_ack">
+          <span><span class="t">I understand what I'm signing</span>
+          <span class="s">I will resell these items in the regular course of business. If I use them for any other purpose, I owe the sales or use tax measured by the purchase price. Giving a resale certificate for goods I know I will not resell is a criminal offense under Texas law, from a Class C misdemeanor up to a felony depending on the amount of tax evaded. This is a blanket certificate covering my purchases from GHRA until I revoke it in writing.</span></span></label>
+        <div class="err" id="rcAckErr"></div>
+      </div>
+      <div class="f c12"><span class="note" id="sellerLine"></span></div>
+    </div>
+  </section>
+
+  <!-- ============ 6. SIGN ============ -->
+  <section class="card">
+    <div class="card-h"><span class="step">6</span><h2>Agree and sign</h2></div>
+    <p class="lede">One signature covers this application and the resale certificate above.</p>
+
+    <div class="legal" id="terms">
+      <p><strong>Account terms.</strong> Everything stated in this application is true and complete. GHRA may verify it, including contacting the bank and trade references listed, and may approve, decline, or set limits on the account at its discretion. Approval is not final until GHRA confirms it in writing.</p>
+      <p><strong>Resale certificate.</strong> The certificate in section 6 is a blanket certificate that applies to purchases from GHRA until revoked in writing. The applicant is responsible for sales or use tax on anything not resold in the regular course of business.</p>
+      <p><strong>Permits.</strong> The applicant will keep every permit listed here current, and will notify GHRA in writing within ten days if any permit lapses, is suspended, or is revoked, or if ownership of the business changes.</p>
+    </div>
+
+    <div class="grid" style="margin-bottom:20px">
+      <div class="f c6"><label class="lb" for="s_name">Your full legal name <span class="rq">*</span></label>
+        <input type="text" id="s_name" data-req><div class="err"></div></div>
+      <div class="f c6"><label class="lb" for="s_title">Your title <span class="rq">*</span></label>
+        <input type="text" id="s_title" data-req placeholder="Owner, Member, President"><div class="err"></div></div>
+    </div>
+
+    <label class="lb" style="display:block;margin-bottom:8px">Signature <span class="rq">*</span></label>
+    <div class="sig">
+      <canvas id="pad" aria-label="Signature drawing area"></canvas>
+      <div class="ln"></div><div class="hint" id="sighint">Sign here with your mouse or finger</div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;margin:10px 0 18px;flex-wrap:wrap">
+      <button type="button" class="btn btn-sm no-print" id="clearsig">Clear</button>
+      <span class="note" id="sigdate"></span>
+    </div>
+    <div class="err" id="sigerr" style="margin:-12px 0 16px"></div>
+
+    <div style="display:grid;gap:10px">
+      <label class="opt"><input type="checkbox" id="agreeTerms">
+        <span><span class="t">I have read and agree to the terms above</span></span></label>
+      <label class="opt"><input type="checkbox" id="esign">
+        <span><span class="t">I agree to sign electronically</span>
+        <span class="s">Under the federal E-SIGN Act and the Texas Uniform Electronic Transactions Act, this signature carries the same legal weight as a handwritten one.</span></span></label>
+    </div>
+    <div class="err" id="checkerr" style="margin-top:12px"></div>
+
+    <div style="margin-top:24px">
+      <button type="submit" class="btn btn-p btn-lg no-print" id="submitBtn">Submit application</button>
+    </div>
+
+    <div class="done" id="done">
+      <h3 style="font-size:19px;margin-bottom:8px;color:#14503A">Application submitted</h3>
+      <p style="margin:0 0 16px">A Warehouse representative will review it and contact you. Most accounts are decided within a few business days.</p>
+      <button type="button" class="btn btn-sm" onclick="window.print()">Print a copy</button>
+    </div>
+  </section>
+</form>
+
+<script>
+/* ===========================================================
+   CONFIG
+   =========================================================== */
+const CONFIG = {
+  seller: {
+    name: 'Greater Houston Retailers Cooperative Association, Inc.',
+    address: '7110 Bellerive Drive, Houston, TX 77036'
+  },
+  upload: { maxMB: 10, accept: 'image/jpeg,image/png,image/heic,image/heif,application/pdf' },
+  endpoint: null   // e.g. '/wp-json/ghra/v1/warehouse-application'
+};
+
+const ENTITY_TYPES = ['Sole Proprietorship','General Partnership','Limited Partnership (LP)',
+  'Limited Liability Partnership (LLP)','Limited Liability Company (LLC)','Series LLC',
+  'C Corporation','S Corporation','Professional Corporation (PC)','Nonprofit Corporation',
+  'Trust','Estate','Joint Venture','Other'];
+const CATEGORIES = ['Tobacco & cigarettes','Candy & gum','Grocery & snacks','Beverages',
+  'Dairy & meat','Frozen food','Automotive','General merchandise','Health & beauty',
+  'Paper & janitorial','Pet care','Food service supplies'];
+
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const kb=b=>b<1048576?(b/1024).toFixed(0)+' KB':(b/1048576).toFixed(1)+' MB';
+let oSeq=0;
+
+$('#sellerLine').textContent='Seller: '+CONFIG.seller.name+', '+CONFIG.seller.address;
+$('#sigdate').textContent='Dated '+new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+$('#b_type').insertAdjacentHTML('beforeend', ENTITY_TYPES.map(t=>'<option>'+t+'</option>').join(''));
+$('#cats').innerHTML = CATEGORIES.map(c=>
+  '<label class="opt"><input type="checkbox" value="'+esc(c)+'"><span><span class="t">'+c+'</span></span></label>').join('');
+
+/* ===========================================================
+   Uploads
+   =========================================================== */
+const FILES = new Map();
+const ICON = '<svg class="ic" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v13"/></svg>';
+
+function uploadHTML(key,sub){
+  return '<div class="up" data-up="'+key+'">'+
+    '<input type="file" accept="'+CONFIG.upload.accept+'" aria-label="Upload '+esc(sub)+'">'+
+    '<div class="prompt">'+ICON+'<div class="t1">Choose a file or drag it here</div>'+
+    '<div class="t2">'+esc(sub)+' &middot; JPG, PNG or PDF &middot; up to '+CONFIG.upload.maxMB+' MB</div></div>'+
+    '<img class="thumb" alt=""><div class="meta"><div class="fn"></div><div class="fs"></div></div>'+
+    '<button type="button" class="rm" aria-label="Remove file">&times;</button></div>';
+}
+function upErr(box,msg){
+  box.classList.add('bad');
+  const e=box.closest('.f')?.querySelector('.err');
+  if(e){ e.textContent=msg; e.classList.add('on'); }
+}
+function attachUpload(box){
+  const key=box.dataset.up, input=box.querySelector('input[type=file]');
+  const setFile=f=>{
+    if(!f) return;
+    if(f.size>CONFIG.upload.maxMB*1048576)
+      return upErr(box,'That file is '+kb(f.size)+'. The limit is '+CONFIG.upload.maxMB+' MB.');
+    if(!CONFIG.upload.accept.split(',').includes(f.type) && !/\.(jpe?g|png|heic|heif|pdf)$/i.test(f.name))
+      return upErr(box,'Upload a JPG, PNG or PDF.');
+    FILES.set(key,f);
+    box.classList.add('has'); box.classList.remove('bad');
+    box.querySelector('.fn').textContent=f.name;
+    box.querySelector('.fs').textContent=kb(f.size)+' \u00b7 ready to upload';
+    const th=box.querySelector('.thumb');
+    if(f.type.startsWith('image/')){ th.src=URL.createObjectURL(f); th.classList.add('on'); }
+    else th.classList.remove('on');
+    box.closest('.f')?.querySelector('.err')?.classList.remove('on');
+  };
+  input.addEventListener('change',e=>setFile(e.target.files[0]));
+  box.addEventListener('dragover',e=>{e.preventDefault();box.classList.add('drag');});
+  box.addEventListener('dragleave',()=>box.classList.remove('drag'));
+  box.addEventListener('drop',e=>{e.preventDefault();box.classList.remove('drag');
+    if(!box.classList.contains('has')) setFile(e.dataTransfer.files[0]);});
+  box.querySelector('.rm').addEventListener('click',e=>{
+    e.stopPropagation(); FILES.delete(key);
+    box.classList.remove('has'); input.value='';
+    box.querySelector('.thumb').classList.remove('on');
+  });
+}
+function mountUploads(root){ $$('.up',root).forEach(b=>{ if(!b.dataset.wired){b.dataset.wired='1';attachUpload(b);} }); }
+
+[['u_tax','Your Texas Sales and Use Tax Permit'],
+ ['u_tobacco','Your Texas tobacco permit']
+].forEach(([id,label])=> $('#'+id).innerHTML = uploadHTML(id.replace('u_','doc_'),label));
+mountUploads(document);
+
+/* ===========================================================
+   Owners
+   =========================================================== */
+function ownerBlock(i){
+  const id='own'+(++oSeq), el=document.createElement('div');
+  el.className='blk'; el.dataset.key=id;
+  el.innerHTML=
+   '<div class="blk-h"><span class="n">'+String(i).padStart(2,'0')+'</span>'+
+     '<span class="nm" data-title>Owner '+i+'</span>'+
+     '<button type="button" class="btn btn-sm btn-gh no-print" data-remove hidden>Remove</button></div>'+
+   '<div class="blk-b"><div class="grid">'+
+     '<div class="f c7"><label class="lb">Full legal name <span class="rq">*</span></label>'+
+       '<input type="text" data-req data-f="name"><div class="err"></div></div>'+
+     '<div class="f c5"><label class="lb">Title <span class="rq">*</span></label>'+
+       '<input type="text" data-req data-f="title" placeholder="Owner, Member, President"><div class="err"></div></div>'+
+     '<div class="f c4"><label class="lb">Ownership % <span class="rq">*</span></label>'+
+       '<input type="number" data-req data-f="pct" min="0" max="100"><div class="err"></div></div>'+
+     '<div class="f c4"><label class="lb">Mobile phone <span class="rq">*</span></label>'+
+       '<input type="tel" data-req data-type="phone" data-f="phone"><div class="err"></div></div>'+
+     '<div class="f c4"><label class="lb">Email <span class="rq">*</span></label>'+
+       '<input type="email" data-req data-type="email" data-f="email"><div class="err"></div></div>'+
+     '<div class="f c7"><label class="lb">Home address <span class="rq">*</span></label>'+
+       '<input type="text" data-req data-f="addr"><div class="err"></div></div>'+
+     '<div class="f c5"><label class="lb">Driver\u2019s license # <span class="rq">*</span></label>'+
+       '<input type="text" data-req data-f="dl"><div class="err"></div></div>'+
+     '<div class="f c12"><label class="lb">Upload photo ID <span class="rq">*</span></label>'+
+       uploadHTML(id+'_photo_id','Driver\u2019s license, state ID or passport')+'<div class="err"></div></div>'+
+   '</div></div>';
+  return el;
+}
+const ownersList=$('#owners');
+function renumberOwners(){
+  const all=$$('.blk',ownersList);
+  all.forEach((b,k)=>{ b.querySelector('.n').textContent=String(k+1).padStart(2,'0');
+    b.querySelector('[data-remove]').hidden = all.length===1; });
+}
+function addOwner(){
+  const el=ownerBlock($$('.blk',ownersList).length+1);
+  ownersList.appendChild(el); mountUploads(el);
+  el.addEventListener('input',e=>{
+    if(e.target.dataset.f==='name')
+      el.querySelector('[data-title]').textContent = e.target.value.trim() || 'Owner';
+    clearErr(e.target);
+  });
+  el.querySelector('[data-remove]').addEventListener('click',()=>{
+    $$('.up',el).forEach(u=>FILES.delete(u.dataset.up));
+    el.remove(); renumberOwners();
+  });
+  renumberOwners(); return el;
+}
+$('#addOwner').addEventListener('click',()=>{
+  const el=addOwner(); el.scrollIntoView({behavior:'smooth',block:'center'});
+  el.querySelector('input').focus({preventScroll:true});
+});
+
+/* ===========================================================
+   Conditional reveals
+   =========================================================== */
+$('#app').addEventListener('change', e=>{
+  const t=e.target;
+  if(t.dataset.toggle){
+    const p=$('[data-panel="'+t.dataset.toggle+'"]');
+    if(p){
+      if(t.type==='radio'){
+        const on=$$('input[name="'+t.name+'"][data-toggle="'+t.dataset.toggle+'"]').some(x=>x.checked);
+        p.classList.toggle('on',on);
+      } else p.classList.toggle('on',t.checked);
+    }
+  }
+  if(t.id==='mailSame'){ $('#mailWrap').style.display = t.checked ? 'none' : ''; }
+  if(t.id==='b_type'){
+    const on=t.value==='Other';
+    $('#b_type_other_wrap').style.display = on ? '' : 'none';
+    if(!on){ $('#b_type_other').value=''; clearErr($('#b_type_other')); }
+  }
+  if(t.closest('#cats')) $('#catsErr').classList.remove('on');
+  if(t.id==='rc_ack') $('#rcAckErr').classList.remove('on');
+  if(t.id==='agreeTerms'||t.id==='esign') $('#checkerr').classList.remove('on');
+});
+
+/* prefill the resale certificate from what's already typed */
+$('#app').addEventListener('input', e=>{
+  const t=e.target;
+  if(t.id==='b_legal' && !$('#rc_name').dataset.touched) $('#rc_name').value=t.value;
+  if(t.id==='p_tax'   && !$('#rc_permit').dataset.touched) $('#rc_permit').value=t.value;
+  if(t.id==='b_phone' && !$('#rc_phone').dataset.touched) $('#rc_phone').value=t.value;
+  if(['rc_name','rc_permit','rc_phone'].includes(t.id)) t.dataset.touched='1';
+  clearErr(t);
+});
+
+/* ===========================================================
+   Validation
+   =========================================================== */
+const RX={
+  email:[/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/,'Enter a valid email address'],
+  phone:[/^\D*(\d\D*){10,}$/,'Enter a 10-digit phone number'],
+  zip:[/^\d{5}(-\d{4})?$/,'Enter a 5-digit ZIP code'],
+  ein:[/^\d{2}-?\d{7}$/,'EIN is 9 digits, like 12-3456789'],
+  taxid:[/^[13]\d{10}$/,'Texas tax ID is 11 digits starting with 1 or 3']
+};
+function setErr(el,msg){el.classList.add('bad');
+  const b=el.closest('.f')?.querySelector('.err'); if(b){b.textContent=msg;b.classList.add('on');}}
+function clearErr(el){el.classList.remove('bad');
+  el.closest('.f')?.querySelector('.err')?.classList.remove('on');}
+function checkField(el){
+  if(el.offsetParent===null) return true;
+  const v=(el.value||'').trim();
+  if(el.dataset.req!==undefined && !v){ setErr(el,'This field is required'); return false; }
+  const t=el.dataset.type;
+  if(t && v && !RX[t][0].test(v)){ setErr(el,RX[t][1]); return false; }
+  clearErr(el); return true;
+}
+function needFile(key,label,bad,ref){
+  const box=$('[data-up="'+key+'"]');
+  if(!box || box.offsetParent===null) return ref;
+  if(!FILES.has(key)){ upErr(box,'Attach this document'); bad.push(label); return ref||box; }
+  return ref;
+}
+function requireVal(el,label,bad,ref){
+  if(!el || el.offsetParent===null) return ref;
+  if(!el.value.trim()){ setErr(el,'This field is required'); bad.push(label); return ref||el; }
+  return ref;
+}
+
+function validate(){
+  const bad=[]; let first=null;
+
+  $$('input,select,textarea').forEach(el=>{
+    if(el.type==='checkbox'||el.type==='radio'||el.type==='file') return;
+    if(!checkField(el) && !first) first=el;
+  });
+
+  if($('#b_type').value==='Other') first=requireVal($('#b_type_other'),'Describe the entity type',bad,first);
+  if(!$('#mailSame').checked){
+    ['m_addr','m_city','m_state','m_zip'].forEach(id=>
+      first=requireVal($('#'+id),'Mailing address',bad,first));
+  }
+
+  // owners
+  $$('.blk',ownersList).forEach(b=>{
+    const label=b.querySelector('[data-title]').textContent;
+    first = needFile(b.dataset.key+'_photo_id', label+': photo ID', bad, first);
+  });
+  const pct = $$('[data-f=pct]',ownersList).reduce((a,el)=>a+(+el.value||0),0);
+  if(pct>100){ bad.push('Ownership percentages add up to more than 100%'); }
+
+  // documents
+  first = needFile('doc_tax','Sales and Use Tax Permit document',bad,first);
+
+  if($('#hasTobacco').checked){
+    first=requireVal($('#p_tob'),'Tobacco permit number',bad,first);
+    first=requireVal($('#p_tob_exp'),'Tobacco permit expiration',bad,first);
+    first=needFile('doc_tobacco','Tobacco permit document',bad,first);
+  }
+  // how you'll buy
+  if(!$$('#cats input:checked').length){
+    $('#catsErr').textContent='Pick at least one category'; $('#catsErr').classList.add('on');
+    bad.push('Pick at least one product category'); if(!first) first=$('#cats input');
+  }
+
+  // resale certificate
+  if(!$('#rc_permit').value.trim()) $('#rc_permit').value=$('#p_tax').value.trim();
+  if(!$('#rc_ack').checked){
+    $('#rcAckErr').textContent='Check this to continue'; $('#rcAckErr').classList.add('on');
+    bad.push('Acknowledge the resale certificate'); if(!first) first=$('#rc_ack');
+  }
+
+  // signature
+  if(!hasInk){
+    $('#sigerr').textContent='Draw your signature above'; $('#sigerr').classList.add('on');
+    bad.push('Signature is missing'); if(!first) first=$('#pad');
+  } else $('#sigerr').classList.remove('on');
+
+  if(!$('#agreeTerms').checked || !$('#esign').checked){
+    $('#checkerr').textContent='Check both boxes to continue'; $('#checkerr').classList.add('on');
+    bad.push('Agree to the terms and to signing electronically'); if(!first) first=$('#agreeTerms');
+  } else $('#checkerr').classList.remove('on');
+
+  const a=$('#alert');
+  if(bad.length || $$('.bad').length){
+    a.innerHTML='<strong>A few things need fixing</strong>'+
+      (bad.length?'<ul>'+[...new Set(bad)].map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>'
+                 :'<br>Some required fields are empty or formatted incorrectly. They are marked in red.');
+    a.classList.add('on');
+    if(first) first.scrollIntoView({behavior:'smooth',block:'center'});
+    return false;
+  }
+  a.classList.remove('on'); return true;
+}
+
+/* ===========================================================
+   Signature pad
+   =========================================================== */
+const pad=$('#pad'), ctx=pad.getContext('2d');
+let drawing=false, hasInk=false;
+function sizePad(){
+  const r=pad.getBoundingClientRect(), d=window.devicePixelRatio||1;
+  const prev=hasInk?pad.toDataURL():null;
+  pad.width=r.width*d; pad.height=r.height*d; ctx.setTransform(d,0,0,d,0,0);
+  ctx.lineWidth=2.2; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#1E2B3A';
+  if(prev){const im=new Image(); im.onload=()=>ctx.drawImage(im,0,0,r.width,r.height); im.src=prev;}
+}
+const pt=e=>{const r=pad.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];};
+pad.addEventListener('pointerdown',e=>{drawing=true;pad.setPointerCapture(e.pointerId);
+  const[x,y]=pt(e);ctx.beginPath();ctx.moveTo(x,y);hasInk=true;
+  $('#sighint').style.display='none';$('#sigerr').classList.remove('on');});
+pad.addEventListener('pointermove',e=>{if(!drawing)return;const[x,y]=pt(e);ctx.lineTo(x,y);ctx.stroke();});
+['pointerup','pointercancel','pointerleave'].forEach(v=>pad.addEventListener(v,()=>drawing=false));
+$('#clearsig').addEventListener('click',()=>{ctx.clearRect(0,0,pad.width,pad.height);
+  hasInk=false;$('#sighint').style.display='';});
+window.addEventListener('resize',sizePad);
+
+/* ===========================================================
+   Collect + submit
+   =========================================================== */
+function collect(){
+  const v=id=>($('#'+id)?.value||'').trim();
+  const ck=id=>!!$('#'+id)?.checked;
+
+  const owners=$$('.blk',ownersList).map(b=>{
+    const g=f=>(b.querySelector('[data-f='+f+']')?.value||'').trim();
+    return { name:g('name'), title:g('title'), ownershipPercent:+g('pct')||0,
+      phone:g('phone'), email:g('email'), homeAddress:g('addr'),
+      driversLicense:g('dl'), photoIdFile:b.dataset.key+'_photo_id' };
+  });
+
+  const out = {
+    submittedAt:new Date().toISOString(),
+    business:{
+      legalName:v('b_legal'),
+      entityType: v('b_type')==='Other' ? 'Other: '+v('b_type_other') : v('b_type'),
+      dbaName:v('b_dba'), ein:v('b_ein'), dateStarted:v('b_started'),
+      locations:+v('b_locations')||1, phone:v('b_phone'), email:v('b_email'),
+      primaryContact:v('b_contact'),
+      storePhysicalAddress:{street:v('b_addr'),city:v('b_city'),state:v('b_state'),zip:v('b_zip')},
+      mailingAddress: ck('mailSame') ? 'same'
+        : {street:v('m_addr'),city:v('m_city'),state:v('m_state'),zip:v('m_zip')}
+    },
+    owners,
+    permits:{
+      salesTaxPermit:{number:v('p_tax'), file:'doc_tax'},
+      tobacco: ck('hasTobacco')
+        ? {number:v('p_tob'), expiration:v('p_tob_exp'), file:'doc_tobacco'} : null
+    },
+    purchasing:{
+      estimatedWeeklyPurchases:v('volume'), requestedStartDate:v('startDate'),
+      categories:$$('#cats input:checked').map(x=>x.value)
+    },
+    resaleCertificate:{
+      form:'Texas 01-339 (blanket resale certificate)',
+      purchaserName:v('rc_name'), texasPermitNumber:v('rc_permit'), purchaserPhone:v('rc_phone'),
+      purchaserAddress:{street:v('b_addr'),city:v('b_city'),state:v('b_state'),zip:v('b_zip')},
+      itemsToBePurchased:v('rc_items'), purchaserBusinessActivity:v('rc_activity'),
+      sellerName:CONFIG.seller.name, sellerAddress:CONFIG.seller.address,
+      acknowledged:ck('rc_ack')
+    },
+    signature:{
+      typedName:v('s_name'), title:v('s_title'),
+      signedDate:new Date().toISOString().slice(0,10),
+      image:pad.toDataURL('image/png'),
+      agreedToTerms:ck('agreeTerms'),
+      esignConsent:ck('esign'),
+      // Server must add: client IP and a server-clock timestamp.
+      userAgent:navigator.userAgent,
+      timezone:Intl.DateTimeFormat().resolvedOptions().timeZone
+    }
+  };
+  return out;
+}
+
+$('#app').addEventListener('submit', async e=>{
+  e.preventDefault();
+  if(!validate()) return;
+  const payload=collect(), btn=$('#submitBtn');
+  btn.disabled=true; btn.textContent='Submitting\u2026';
+  try{
+    if(CONFIG.endpoint){
+      const fd=new FormData();
+      fd.append('application', JSON.stringify(payload));
+      FILES.forEach((file,key)=>fd.append(key,file,file.name));
+      const r=await fetch(CONFIG.endpoint,{method:'POST',body:fd});
+      if(!r.ok) throw new Error('Server returned '+r.status);
+    } else {
+      console.log('Demo mode \u2014 no endpoint set.');
+      console.log('Application:',payload);
+      console.log('Files:',[...FILES].map(([k,f])=>({field:k,name:f.name,size:f.size,type:f.type})));
+      await new Promise(r=>setTimeout(r,500));
+    }
+    $('#done').classList.add('on'); btn.style.display='none';
+    $('#done').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(err){
+    btn.disabled=false; btn.textContent='Submit application';
+    const a=$('#alert');
+    a.innerHTML='<strong>That did not go through.</strong> '+esc(err.message)+
+      ' \u2014 your answers are still here. Try again, or call the Warehouse at 844-777-GHRA.';
+    a.classList.add('on'); a.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+});
+
+/* boot */
+addOwner(); sizePad();
+</script>
+</body>
+</html>

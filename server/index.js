@@ -33,6 +33,8 @@ const {
 const { buildReferenceCustomFields } = require('./dropboxSignMapping')
 const { logDsEvent, dsCall } = require('./ds/logDsEvent')
 const { logApplicationAction } = require('./audit/logApplicationAction')
+const { sendEmail, logEmail, resolveEmailConfig } = require('./email/emailService')
+const { ssnEncrypt: smtpEncrypt, ssnDecrypt: smtpDecrypt } = require('./email/smtpCrypto')
 
 // ── SSN encryption (AES-256-GCM) ────────────────────────────────────────────
 
@@ -72,6 +74,77 @@ function ssnDecrypt(ct) {
 function ssnMask(ssn) {
   const d = (ssn || '').replace(/\D/g, '')
   return d.length >= 4 ? `***-**-${d.slice(-4)}` : '***-**-****'
+}
+
+// Encrypt plaintext DL numbers before writing to DB; preserve existing dlEncrypted for masked/unchanged values
+function processOwnerDlsForSave(formData) {
+  if (!formData?.owners?.length) return formData
+  const key = getSsnKey()
+  return {
+    ...formData,
+    owners: formData.owners.map(owner => {
+      const { dlNumber, dlEncrypted, ...rest } = owner
+      const val = (dlNumber || '').trim()
+      if (val && !/^\*/.test(val)) {
+        if (key) return { ...rest, dlEncrypted: ssnEncrypt(val) }
+        return dlEncrypted ? { ...rest, dlEncrypted } : rest
+      }
+      return dlEncrypted ? { ...rest, dlEncrypted } : rest
+    })
+  }
+}
+
+function maskOwnerDls(formData) {
+  if (!formData?.owners?.length) return formData
+  return {
+    ...formData,
+    owners: formData.owners.map(({ dlNumber, dlEncrypted, ...rest }) => ({
+      ...rest,
+      dlNumber: dlEncrypted ? '***-masked' : '',
+    }))
+  }
+}
+
+// Fuels application: encrypt both SSN and DL for each principal officer before writing to DB
+function processFuelsOwnersForSave(formData) {
+  if (!formData?.principals?.length) return formData
+  const key = getSsnKey()
+  return {
+    ...formData,
+    principals: formData.principals.map(p => {
+      const { ssn, ssnEncrypted, dlNumber, dlEncrypted, ...rest } = p
+      // SSN
+      const ssnVal = (ssn || '').trim()
+      let newSsnEncrypted = ssnEncrypted
+      if (ssnVal && !/^\*/.test(ssnVal)) {
+        const digits = ssnVal.replace(/\D/g, '')
+        newSsnEncrypted = (digits.length >= 9 && key) ? ssnEncrypt(ssnVal) : ssnEncrypted
+      }
+      // DL
+      const dlVal = (dlNumber || '').trim()
+      let newDlEncrypted = dlEncrypted
+      if (dlVal && !/^\*/.test(dlVal)) {
+        newDlEncrypted = key ? ssnEncrypt(dlVal) : dlEncrypted
+      }
+      return {
+        ...rest,
+        ...(newSsnEncrypted ? { ssnEncrypted: newSsnEncrypted } : {}),
+        ...(newDlEncrypted  ? { dlEncrypted:  newDlEncrypted  } : {}),
+      }
+    })
+  }
+}
+
+function maskFuelsOwners(formData) {
+  if (!formData?.principals?.length) return formData
+  return {
+    ...formData,
+    principals: formData.principals.map(({ ssn, ssnEncrypted, dlNumber, dlEncrypted, ...rest }) => ({
+      ...rest,
+      ssn:      ssnEncrypted ? '***-**-****' : '',
+      dlNumber: dlEncrypted  ? '***-masked'  : '',
+    }))
+  }
 }
 
 // Encrypt plaintext owner SSNs before writing to DB; preserve existing ssnEncrypted for masked/unchanged values
@@ -476,23 +549,11 @@ async function sendReferencesRequest(formData, db = null, performedBy = null, ap
   }
 }
 
-// nodemailer is optional — email notifications silently skipped if not installed or configured
-let nodemailer
-try { nodemailer = require('nodemailer') } catch {}
+// ── Email helpers ────────────────────────────────────────────────────────────
 
-function createTransporter() {
-  if (!nodemailer || !process.env.EMAIL_HOST) return null
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-  })
-}
-
-async function sendStatusEmail(toEmail, storeName, newStatus, notes) {
-  const transporter = createTransporter()
-  if (!transporter) return
+// sendStatusEmail: called after a rejection. Non-fatal — logs failure but never
+// blocks the status update. Approval email is sent from the DS signing flow.
+async function sendStatusEmail(toEmail, storeName, newStatus, notes, db) {
   const approved = newStatus === 'approved'
   const subject = approved
     ? 'Your GHRA Membership Application Has Been Approved'
@@ -501,14 +562,10 @@ async function sendStatusEmail(toEmail, storeName, newStatus, notes) {
     ? `<p>Congratulations! Your GHRA membership application for <strong>${storeName}</strong> has been approved.</p><p>We look forward to welcoming you as a member.</p>`
     : `<p>Your GHRA membership application for <strong>${storeName}</strong> has been reviewed and requires revision.</p>${notes ? `<p><strong>Reviewer comments:</strong> ${notes}</p>` : ''}<p>Please log in to your account to edit and resubmit your application.</p>`
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
-      to: toEmail,
-      subject,
-      html
-    })
+    await sendEmail({ to: toEmail, subject, html }, db, { template: 'status_update', sentBy: 'system' })
   } catch (err) {
-    console.error('Email send failed:', err.message)
+    console.error('[email] sendStatusEmail failed:', err.message)
+    await logEmail({ to: toEmail, subject, success: false, errorMessage: err.message, template: 'status_update' }, db)
   }
 }
 
@@ -784,6 +841,13 @@ async function ensureSchema() {
         ALTER TABLE Applications ADD ArchivedAt DATETIME NULL
     `)
     await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ManagerNotificationsSent'
+      )
+        ALTER TABLE Applications ADD ManagerNotificationsSent BIT NOT NULL DEFAULT 0
+    `)
+    await db.request().query(`
       IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'DsEventLog' AND type = 'U')
         CREATE TABLE DsEventLog (
           Id                  INT IDENTITY(1,1) PRIMARY KEY,
@@ -815,6 +879,97 @@ async function ensureSchema() {
           NewStatus       NVARCHAR(20) NULL,
           IpAddress       NVARCHAR(45) NULL,
           CreatedAt       DATETIME NOT NULL DEFAULT GETDATE()
+        )
+    `)
+
+    // AppSettings: stores SMTP config (and future app-level settings) in the DB.
+    // Each row is a key/value pair. Sensitive values (e.g. SMTP password) are AES-256-GCM encrypted.
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'AppSettings' AND type = 'U')
+        CREATE TABLE AppSettings (
+          Id           INT IDENTITY(1,1) PRIMARY KEY,
+          SettingKey   NVARCHAR(100) NOT NULL UNIQUE,
+          SettingValue NVARCHAR(MAX) NULL,
+          UpdatedBy    NVARCHAR(255) NULL,
+          UpdatedAt    DATETIME NULL
+        )
+    `)
+
+    // EmailLog: audit trail for every email attempt.
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'EmailLog' AND type = 'U')
+        CREATE TABLE EmailLog (
+          Id           INT IDENTITY(1,1) PRIMARY KEY,
+          Recipient    NVARCHAR(255) NOT NULL,
+          Template     NVARCHAR(100) NULL,
+          Subject      NVARCHAR(500) NULL,
+          Success      BIT NOT NULL DEFAULT 0,
+          ErrorMessage NVARCHAR(MAX) NULL,
+          SentBy       NVARCHAR(255) NULL,
+          SentAt       DATETIME NOT NULL DEFAULT GETDATE()
+        )
+    `)
+
+    // Managers: named contacts per type, notified on GHRA# assignment.
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'Managers' AND type = 'U')
+        CREATE TABLE Managers (
+          Id          INT IDENTITY(1,1) PRIMARY KEY,
+          ManagerType NVARCHAR(30) NOT NULL,
+          FirstName   NVARCHAR(100) NOT NULL,
+          LastName    NVARCHAR(100) NOT NULL,
+          Email       NVARCHAR(255) NOT NULL,
+          IsActive    BIT NOT NULL DEFAULT 1,
+          CreatedBy   NVARCHAR(255) NULL,
+          CreatedAt   DATETIME NOT NULL DEFAULT GETDATE()
+        )
+    `)
+
+    // UserRoles: M:M additional roles for employee accounts (ghra_admin, fuels_admin, warehouse_admin).
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'UserRoles' AND type = 'U')
+        CREATE TABLE UserRoles (
+          Id         INT IDENTITY(1,1) PRIMARY KEY,
+          UserId     INT NOT NULL,
+          Role       NVARCHAR(50) NOT NULL,
+          AssignedBy NVARCHAR(255) NULL,
+          AssignedAt DATETIME NOT NULL DEFAULT GETDATE(),
+          CONSTRAINT UQ_UserRoles UNIQUE (UserId, Role)
+        )
+    `)
+
+    // WarehouseApplications: standalone warehouse membership applications (Phase 4).
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'WarehouseApplications' AND type = 'U')
+        CREATE TABLE WarehouseApplications (
+          Id          INT IDENTITY(1,1) PRIMARY KEY,
+          UserEmail   NVARCHAR(255) NOT NULL,
+          Status      NVARCHAR(20) NOT NULL DEFAULT 'draft',
+          FormData    NVARCHAR(MAX) NULL,
+          ReviewedBy  NVARCHAR(255) NULL,
+          ReviewedAt  DATETIME NULL,
+          Notes       NVARCHAR(MAX) NULL,
+          SubmittedAt DATETIME NULL,
+          CreatedAt   DATETIME NOT NULL DEFAULT GETDATE(),
+          UpdatedAt   DATETIME NULL
+        )
+    `)
+
+    // FuelsApplications: GHRA Fuels credit application package (Phase 5).
+    // FormData holds all fields; owner SSNs stored as ssnEncrypted, DL numbers as dlEncrypted.
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'FuelsApplications' AND type = 'U')
+        CREATE TABLE FuelsApplications (
+          Id          INT IDENTITY(1,1) PRIMARY KEY,
+          UserEmail   NVARCHAR(255) NOT NULL,
+          Status      NVARCHAR(20) NOT NULL DEFAULT 'draft',
+          FormData    NVARCHAR(MAX) NULL,
+          ReviewedBy  NVARCHAR(255) NULL,
+          ReviewedAt  DATETIME NULL,
+          Notes       NVARCHAR(MAX) NULL,
+          SubmittedAt DATETIME NULL,
+          CreatedAt   DATETIME NOT NULL DEFAULT GETDATE(),
+          UpdatedAt   DATETIME NULL
         )
     `)
   } catch (err) {
@@ -905,12 +1060,27 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     const mustChangePassword = user.MustChangePassword === true || user.MustChangePassword === 1
     const firstName = user.FirstName || ''
     const lastName  = user.LastName  || ''
+
+    // Load additional roles for employees; admin always gets all roles
+    let roles = []
+    if (user.Role === 'employee') {
+      const ADMIN_EMAIL_LC = 'admin@ghraonline.com'
+      if (user.Email.toLowerCase() === ADMIN_EMAIL_LC) {
+        roles = ['ghra_admin', 'fuels_admin', 'warehouse_admin']
+      } else {
+        const rolesResult = await db.request()
+          .input('userId', sql.Int, user.Id)
+          .query('SELECT Role FROM UserRoles WHERE UserId = @userId')
+        roles = rolesResult.recordset.map(r => r.Role)
+      }
+    }
+
     const token = jwt.sign(
-      { email: user.Email, role: user.Role, mustChangePassword, firstName, lastName },
+      { email: user.Email, role: user.Role, mustChangePassword, firstName, lastName, roles },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     )
-    res.json({ email: user.Email, role: user.Role, token, mustChangePassword, firstName, lastName })
+    res.json({ email: user.Email, role: user.Role, token, mustChangePassword, firstName, lastName, roles })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1724,7 +1894,7 @@ app.patch('/api/applications/:id/status', authMiddleware, async (req, res) => {
               SET Status = @status, Notes = @notes, ReviewedBy = @reviewedBy, ReviewedAt = GETDATE(), CommentsHistory = @history
               WHERE Id = @id`)
 
-    sendStatusEmail(UserEmail, StoreName, status, notes).catch(() => {})
+    sendStatusEmail(UserEmail, StoreName, status, notes, db).catch(() => {})
 
     try {
       await logApplicationAction(db, {
@@ -2081,6 +2251,46 @@ app.patch('/api/applications/:id/ghra-number', authMiddleware, async (req, res) 
         details: { old: prevGhraNumber, new: ghraNumber || null }, ipAddress: req.ip,
       })
     } catch {}
+    // Fire manager notifications on first assignment only
+    if (ghraNumber && !prevGhraNumber) {
+      try {
+        const appRow = (await db.request().input('id', sql.Int, appId)
+          .query('SELECT FormData, StoreName, ManagerNotificationsSent FROM Applications WHERE Id = @id')).recordset[0]
+        if (appRow && !appRow.ManagerNotificationsSent) {
+          const { sendManagerNotifications } = require('./email/managerNotification')
+          sendManagerNotifications(db, {
+            appId, formData: JSON.parse(appRow.FormData || '{}'),
+            ghraNumber: ghraNumber.trim(), storeName: appRow.StoreName,
+            triggerEmail: req.user.email,
+          }).catch(err => console.error('[managerNotification]', err.message))
+        }
+      } catch (err) {
+        console.error('[managerNotification] setup error:', err.message)
+      }
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/applications/:id/resend-manager-notifications  — re-send manager notifications (employee only)
+app.post('/api/applications/:id/resend-manager-notifications', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid application ID' })
+  try {
+    const db  = await getPool()
+    const row = (await db.request().input('id', sql.Int, appId)
+      .query('SELECT FormData, StoreName, GhraNumber FROM Applications WHERE Id = @id')).recordset[0]
+    if (!row) return res.status(404).json({ error: 'Application not found' })
+    if (!row.GhraNumber) return res.status(400).json({ error: 'No GHRA number assigned yet' })
+    const { sendManagerNotifications } = require('./email/managerNotification')
+    const result = await sendManagerNotifications(db, {
+      appId, formData: JSON.parse(row.FormData || '{}'),
+      ghraNumber: row.GhraNumber, storeName: row.StoreName,
+      triggerEmail: req.user.email,
+    })
+    res.json({ success: true, sent: result.sent })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2882,6 +3092,512 @@ app.get('/api/documents/:applicationId/:filename', authMiddleware, async (req, r
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// ── Settings (email) ─────────────────────────────────────────────────────────
+
+const SMTP_KEYS = ['email.host', 'email.port', 'email.user', 'email.from', 'email.fromName', 'email.tls']
+
+// GET /api/settings/email — returns config with password masked
+app.get('/api/settings/email', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db   = await getPool()
+    const rows = await db.request().query("SELECT SettingKey, SettingValue FROM AppSettings WHERE SettingKey LIKE 'email.%'")
+    const cfg  = {}
+    for (const r of rows.recordset) cfg[r.SettingKey] = r.SettingValue
+    res.json({
+      host:         cfg['email.host']      || '',
+      port:         cfg['email.port']      || '',
+      user:         cfg['email.user']      || '',
+      from:         cfg['email.from']      || '',
+      fromName:     cfg['email.fromName']  || '',
+      tls:          cfg['email.tls']       === 'true',
+      passwordSet:  !!(cfg['email.passwordEncrypted']),
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// PUT /api/settings/email — upserts all fields; only writes password when a new value is sent
+app.put('/api/settings/email', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { host, port, user, from, fromName, tls, password } = req.body
+  if (!host || !user) return res.status(400).json({ error: 'host and user are required' })
+  try {
+    const db = await getPool()
+    const upsert = async (key, val) => {
+      if (val === undefined || val === null) return
+      await db.request()
+        .input('k', sql.NVarChar(100), key)
+        .input('v', sql.NVarChar(sql.MAX), String(val))
+        .input('by', sql.NVarChar(255), req.user.email)
+        .query(`MERGE AppSettings AS t USING (VALUES (@k,@v,@by,GETDATE())) AS s(SettingKey,SettingValue,UpdatedBy,UpdatedAt)
+                ON t.SettingKey = s.SettingKey
+                WHEN MATCHED THEN UPDATE SET SettingValue=s.SettingValue, UpdatedBy=s.UpdatedBy, UpdatedAt=s.UpdatedAt
+                WHEN NOT MATCHED THEN INSERT (SettingKey,SettingValue,UpdatedBy,UpdatedAt) VALUES (s.SettingKey,s.SettingValue,s.UpdatedBy,s.UpdatedAt);`)
+    }
+    await upsert('email.host',     host)
+    await upsert('email.port',     port || '587')
+    await upsert('email.user',     user)
+    await upsert('email.from',     from || user)
+    await upsert('email.fromName', fromName || 'GHRA Membership')
+    await upsert('email.tls',      tls ? 'true' : 'false')
+    if (password && password.trim()) {
+      const encrypted = smtpEncrypt(password.trim())
+      await upsert('email.passwordEncrypted', encrypted)
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// POST /api/settings/email/test — send a test email using current config
+app.post('/api/settings/email/test', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { to } = req.body
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(to)) return res.status(400).json({ error: 'Valid recipient email required' })
+  try {
+    const db = await getPool()
+    const result = await sendEmail({
+      to,
+      subject: 'GHRA Email Configuration Test',
+      html: `<p>This is a test email sent from the GHRA Membership system.</p><p>If you received this, your email settings are working correctly.</p><p><small>Sent by ${req.user.email}</small></p>`,
+    }, db, { template: 'test', sentBy: req.user.email })
+    if (!result.sent) return res.status(400).json({ error: 'Email is not configured. Set up SMTP settings first.' })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Managers ─────────────────────────────────────────────────────────────────
+
+// GET /api/managers
+app.get('/api/managers', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db   = await getPool()
+    const rows = await db.request().query("SELECT Id, ManagerType, (FirstName + ' ' + LastName) AS Name, Email, IsActive, CreatedBy, CreatedAt FROM Managers ORDER BY ManagerType, LastName, FirstName")
+    res.json(rows.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/managers
+app.post('/api/managers', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const { type: managerType, name, email } = req.body
+  const validTypes = ['store_reset', 'fuels', 'food_service']
+  if (!validTypes.includes(managerType)) return res.status(400).json({ error: 'type must be store_reset, fuels, or food_service' })
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' })
+  if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return res.status(400).json({ error: 'Valid email required' })
+  const parts = name.trim().split(' ')
+  const firstName = parts[0]
+  const lastName  = parts.slice(1).join(' ') || parts[0]
+  try {
+    const db  = await getPool()
+    const dup = await db.request()
+      .input('type',  sql.NVarChar(30),  managerType)
+      .input('email', sql.NVarChar(255), email.trim().toLowerCase())
+      .query("SELECT Id FROM Managers WHERE ManagerType=@type AND Email=@email AND IsActive=1")
+    if (dup.recordset.length) return res.status(409).json({ error: 'An active manager with this email already exists for this type', warn: true })
+    const r = await db.request()
+      .input('type',      sql.NVarChar(30),  managerType)
+      .input('first',     sql.NVarChar(100), firstName)
+      .input('last',      sql.NVarChar(100), lastName)
+      .input('email',     sql.NVarChar(255), email.trim().toLowerCase())
+      .input('createdBy', sql.NVarChar(255), req.user.email)
+      .query(`INSERT INTO Managers (ManagerType,FirstName,LastName,Email,IsActive,CreatedBy,CreatedAt)
+              OUTPUT INSERTED.Id, INSERTED.ManagerType, (INSERTED.FirstName + ' ' + INSERTED.LastName) AS Name,
+                     INSERTED.Email, INSERTED.IsActive, INSERTED.CreatedBy, INSERTED.CreatedAt
+              VALUES (@type,@first,@last,@email,1,@createdBy,GETDATE())`)
+    res.status(201).json(r.recordset[0])
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PUT /api/managers/:id
+app.put('/api/managers/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const id = parseInt(req.params.id, 10)
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' })
+  const { name, email } = req.body
+  if (!name?.trim()) return res.status(400).json({ error: 'Name required' })
+  if (!email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return res.status(400).json({ error: 'Valid email required' })
+  const parts2 = name.trim().split(' ')
+  const firstName2 = parts2[0]
+  const lastName2  = parts2.slice(1).join(' ') || parts2[0]
+  try {
+    const db = await getPool()
+    const r  = await db.request()
+      .input('id',    sql.Int,           id)
+      .input('first', sql.NVarChar(100), firstName2)
+      .input('last',  sql.NVarChar(100), lastName2)
+      .input('email', sql.NVarChar(255), email.trim().toLowerCase())
+      .query('UPDATE Managers SET FirstName=@first, LastName=@last, Email=@email WHERE Id=@id')
+    if (r.rowsAffected[0] === 0) return res.status(404).json({ error: 'Manager not found' })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/managers/:id  — soft deactivate
+app.delete('/api/managers/:id', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const id = parseInt(req.params.id, 10)
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r  = await db.request().input('id', sql.Int, id)
+      .query('UPDATE Managers SET IsActive=0 WHERE Id=@id')
+    if (r.rowsAffected[0] === 0) return res.status(404).json({ error: 'Manager not found' })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Employee roles (Phase 2) ─────────────────────────────────────────────────
+
+const VALID_ROLES = ['ghra_admin', 'fuels_admin', 'warehouse_admin']
+const ADMIN_EMAIL = 'admin@ghraonline.com'
+
+// GET /api/employees/:id/roles
+app.get('/api/employees/:id/roles', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const userId = parseInt(req.params.id, 10)
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id', sql.Int, userId)
+      .query('SELECT Role, AssignedBy, AssignedAt FROM UserRoles WHERE UserId = @id')
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/employees/:id/roles  — assign a role
+app.post('/api/employees/:id/roles', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  if (!req.user.roles?.includes('ghra_admin') && req.user.email?.toLowerCase() !== ADMIN_EMAIL)
+    return res.status(403).json({ error: 'Only admins can manage roles' })
+  const userId = parseInt(req.params.id, 10)
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid id' })
+  const { role } = req.body
+  if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` })
+  try {
+    const db = await getPool()
+    const user = await db.request().input('id', sql.Int, userId).query('SELECT Email FROM Users WHERE Id = @id AND Role = \'employee\'')
+    if (!user.recordset.length) return res.status(404).json({ error: 'Employee not found' })
+    if (user.recordset[0].Email.toLowerCase() === ADMIN_EMAIL)
+      return res.status(400).json({ error: 'Admin always has all roles' })
+    await db.request()
+      .input('userId', sql.Int, userId)
+      .input('role',   sql.NVarChar(50), role)
+      .input('by',     sql.NVarChar(255), req.user.email)
+      .query('IF NOT EXISTS (SELECT 1 FROM UserRoles WHERE UserId=@userId AND Role=@role) INSERT INTO UserRoles (UserId,Role,AssignedBy) VALUES (@userId,@role,@by)')
+    res.status(201).json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// DELETE /api/employees/:id/roles/:role  — remove a role
+app.delete('/api/employees/:id/roles/:role', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  if (!req.user.roles?.includes('ghra_admin') && req.user.email?.toLowerCase() !== ADMIN_EMAIL)
+    return res.status(403).json({ error: 'Only admins can manage roles' })
+  const userId = parseInt(req.params.id, 10)
+  if (isNaN(userId)) return res.status(400).json({ error: 'Invalid id' })
+  const { role } = req.params
+  if (!VALID_ROLES.includes(role)) return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` })
+  try {
+    const db = await getPool()
+    await db.request()
+      .input('userId', sql.Int, userId)
+      .input('role',   sql.NVarChar(50), role)
+      .query('DELETE FROM UserRoles WHERE UserId=@userId AND Role=@role')
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Warehouse applications (Phase 4) ─────────────────────────────────────────
+
+// POST /api/warehouse/draft  — create or update draft
+app.post('/api/warehouse/draft', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const { id, formData } = req.body
+    const processed = processOwnerDlsForSave(formData || {})
+    const json = JSON.stringify(processed)
+    if (id) {
+      const appId = parseInt(id, 10)
+      const own = await db.request()
+        .input('id', sql.Int, appId)
+        .input('email', sql.NVarChar, req.user.email)
+        .input('role', sql.NVarChar, req.user.role)
+        .query("SELECT Id FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+      if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+      await db.request()
+        .input('id', sql.Int, appId)
+        .input('fd', sql.NVarChar(sql.MAX), json)
+        .query("UPDATE WarehouseApplications SET FormData=@fd, UpdatedAt=GETDATE() WHERE Id=@id AND Status='draft'")
+      res.json({ id: appId })
+    } else {
+      const r = await db.request()
+        .input('email', sql.NVarChar, req.user.email)
+        .input('fd',    sql.NVarChar(sql.MAX), json)
+        .query("INSERT INTO WarehouseApplications (UserEmail,Status,FormData,CreatedAt) OUTPUT INSERTED.Id VALUES (@email,'draft',@fd,GETDATE())")
+      res.json({ id: r.recordset[0].Id })
+    }
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/warehouse/submit  — submit a draft
+app.post('/api/warehouse/submit', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const { id, formData } = req.body
+    const appId = parseInt(id, 10)
+    if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+    const processed = processOwnerDlsForSave(formData || {})
+    const json = JSON.stringify(processed)
+    const own = await db.request()
+      .input('id', sql.Int, appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .query("SELECT Id FROM WarehouseApplications WHERE Id=@id AND UserEmail=@email AND Status='draft'")
+    if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden or already submitted' })
+    await db.request()
+      .input('id', sql.Int, appId)
+      .input('fd', sql.NVarChar(sql.MAX), json)
+      .query("UPDATE WarehouseApplications SET FormData=@fd, Status='submitted', SubmittedAt=GETDATE(), UpdatedAt=GETDATE() WHERE Id=@id")
+    res.json({ id: appId })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/warehouse/my  — member's own applications
+app.get('/api/warehouse/my', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('email', sql.NVarChar, req.user.email)
+      .query('SELECT Id, Status, CreatedAt, SubmittedAt, UpdatedAt FROM WarehouseApplications WHERE UserEmail=@email ORDER BY CreatedAt DESC')
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/warehouse/all  — employee: all applications
+app.get('/api/warehouse/all', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .query('SELECT Id, UserEmail, Status, ReviewedBy, ReviewedAt, CreatedAt, SubmittedAt FROM WarehouseApplications ORDER BY CreatedAt DESC')
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/warehouse/:id  — get full application
+app.get('/api/warehouse/:id', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .input('role',  sql.NVarChar, req.user.role)
+      .query("SELECT * FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+    if (!r.recordset.length) return res.status(404).json({ error: 'Not found' })
+    const app2 = r.recordset[0]
+    let formData = {}
+    try { formData = JSON.parse(app2.FormData || '{}') } catch { formData = {} }
+    formData = maskOwnerDls(formData)
+    res.json({ ...app2, formData })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PATCH /api/warehouse/:id/status  — employee: approve or reject
+app.patch('/api/warehouse/:id/status', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  const { status, notes } = req.body
+  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',         sql.Int,          appId)
+      .input('status',     sql.NVarChar(20),  status)
+      .input('notes',      sql.NVarChar(sql.MAX), notes || null)
+      .input('reviewedBy', sql.NVarChar(255), req.user.email)
+      .query("UPDATE WarehouseApplications SET Status=@status, Notes=@notes, ReviewedBy=@reviewedBy, ReviewedAt=GETDATE(), UpdatedAt=GETDATE() WHERE Id=@id AND Status='submitted'")
+    if (r.rowsAffected[0] === 0) return res.status(409).json({ error: 'Application not found or not in submitted state' })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/warehouse/upload  — file upload for warehouse applications
+app.post('/api/warehouse/upload', authMiddleware, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const { applicationId, docId } = req.body
+  const appId = parseInt(applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  try {
+    const db = await getPool()
+    const own = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .input('role',  sql.NVarChar, req.user.role)
+      .query("SELECT Id FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+    if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+
+    const safeDocId = path.basename(docId || 'doc')
+    const ext  = path.extname(req.file.originalname).toLowerCase()
+    const dir  = path.join(__dirname, 'UploadedDocuments', 'wh_' + appId)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const dest = path.join(dir, safeDocId + ext)
+    fs.renameSync(req.file.path, dest)
+    res.json({ url: `/uploads/wh_${appId}/${safeDocId}${ext}`, filename: safeDocId + ext })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// ── Fuels applications (Phase 5) ─────────────────────────────────────────────
+
+// POST /api/fuels/draft  — create or update draft
+app.post('/api/fuels/draft', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const { id, formData } = req.body
+    let processed = processFuelsOwnersForSave(formData || {})
+    processed = processOwnerSsnsForSave(processed)
+    const json = JSON.stringify(processed)
+    if (id) {
+      const appId = parseInt(id, 10)
+      const own = await db.request()
+        .input('id',    sql.Int,     appId)
+        .input('email', sql.NVarChar, req.user.email)
+        .input('role',  sql.NVarChar, req.user.role)
+        .query("SELECT Id FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+      if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+      await db.request()
+        .input('id', sql.Int, appId)
+        .input('fd', sql.NVarChar(sql.MAX), json)
+        .query("UPDATE FuelsApplications SET FormData=@fd, UpdatedAt=GETDATE() WHERE Id=@id AND Status='draft'")
+      res.json({ id: appId })
+    } else {
+      const r = await db.request()
+        .input('email', sql.NVarChar, req.user.email)
+        .input('fd',    sql.NVarChar(sql.MAX), json)
+        .query("INSERT INTO FuelsApplications (UserEmail,Status,FormData,CreatedAt) OUTPUT INSERTED.Id VALUES (@email,'draft',@fd,GETDATE())")
+      res.json({ id: r.recordset[0].Id })
+    }
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/fuels/submit  — submit a draft
+app.post('/api/fuels/submit', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const { id, formData } = req.body
+    const appId = parseInt(id, 10)
+    if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+    let processed = processFuelsOwnersForSave(formData || {})
+    processed = processOwnerSsnsForSave(processed)
+    const json = JSON.stringify(processed)
+    const own = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .query("SELECT Id FROM FuelsApplications WHERE Id=@id AND UserEmail=@email AND Status='draft'")
+    if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden or already submitted' })
+    await db.request()
+      .input('id', sql.Int, appId)
+      .input('fd', sql.NVarChar(sql.MAX), json)
+      .query("UPDATE FuelsApplications SET FormData=@fd, Status='submitted', SubmittedAt=GETDATE(), UpdatedAt=GETDATE() WHERE Id=@id")
+    res.json({ id: appId })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/fuels/my  — member's own applications
+app.get('/api/fuels/my', authMiddleware, async (req, res) => {
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('email', sql.NVarChar, req.user.email)
+      .query('SELECT Id, Status, CreatedAt, SubmittedAt, UpdatedAt FROM FuelsApplications WHERE UserEmail=@email ORDER BY CreatedAt DESC')
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/fuels/all  — employee: all applications
+app.get('/api/fuels/all', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .query('SELECT Id, UserEmail, Status, ReviewedBy, ReviewedAt, CreatedAt, SubmittedAt FROM FuelsApplications ORDER BY CreatedAt DESC')
+    res.json(r.recordset)
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// GET /api/fuels/:id  — get full application
+app.get('/api/fuels/:id', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .input('role',  sql.NVarChar, req.user.role)
+      .query("SELECT * FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+    if (!r.recordset.length) return res.status(404).json({ error: 'Not found' })
+    const row = r.recordset[0]
+    let formData = {}
+    try { formData = JSON.parse(row.FormData || '{}') } catch { formData = {} }
+    formData = maskFuelsOwners(formData)
+    res.json({ ...row, formData })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// PATCH /api/fuels/:id/status  — employee: approve or reject
+app.patch('/api/fuels/:id/status', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  const { status, notes } = req.body
+  if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be approved or rejected' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',         sql.Int,          appId)
+      .input('status',     sql.NVarChar(20),  status)
+      .input('notes',      sql.NVarChar(sql.MAX), notes || null)
+      .input('reviewedBy', sql.NVarChar(255), req.user.email)
+      .query("UPDATE FuelsApplications SET Status=@status, Notes=@notes, ReviewedBy=@reviewedBy, ReviewedAt=GETDATE(), UpdatedAt=GETDATE() WHERE Id=@id AND Status='submitted'")
+    if (r.rowsAffected[0] === 0) return res.status(409).json({ error: 'Application not found or not in submitted state' })
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// POST /api/fuels/upload  — file upload for fuels applications
+app.post('/api/fuels/upload', authMiddleware, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+  const { applicationId, docId } = req.body
+  const appId = parseInt(applicationId, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  try {
+    const db = await getPool()
+    const own = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .input('role',  sql.NVarChar, req.user.role)
+      .query("SELECT Id FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+    if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+    const safeDocId = path.basename(docId || 'doc')
+    const ext  = path.extname(req.file.originalname).toLowerCase()
+    const dir  = path.join(__dirname, 'UploadedDocuments', 'fuels_' + appId)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const dest = path.join(dir, safeDocId + ext)
+    fs.renameSync(req.file.path, dest)
+    res.json({ url: `/uploads/fuels_${appId}/${safeDocId}${ext}`, filename: safeDocId + ext })
+  } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
 // ── Dropbox Sign test ────────────────────────────────────────────────────────

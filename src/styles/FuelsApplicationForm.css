@@ -1,0 +1,124 @@
+/* ── Page shell ──────────────────────────────────────────────────────────── */
+.fuels-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  background: var(--ghra-mist);
+  min-height: 100vh;
+}
+
+.fuels-header {
+  background: var(--ghra-white);
+  padding: 20px 24px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(27,42,91,.1);
+  text-align: center;
+}
+
+.fuels-header h1 {
+  color: var(--ghra-navy);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.fuels-header p {
+  color: var(--ghra-muted);
+  font-size: 13px;
+}
+
+/* ── Card shell ──────────────────────────────────────────────────────────── */
+.fuels-card {
+  background: var(--ghra-white);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(27,42,91,.1);
+  overflow: hidden;
+}
+
+.fuels-section-body {
+  padding: 32px 40px;
+}
+
+.fuels-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ghra-navy);
+  margin: 0 0 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ghra-navy);
+}
+
+/* ── Principal card ──────────────────────────────────────────────────────── */
+.fuels-principal-card {
+  background: #f8f9fb;
+  border: 1px solid var(--ghra-line);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.fuels-principal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.fuels-principal-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ghra-navy);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+}
+
+/* ── Nav footer ──────────────────────────────────────────────────────────── */
+.fuels-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  border-top: 1px solid var(--ghra-line);
+  gap: 12px;
+}
+
+.fuels-btn {
+  padding: 10px 22px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.fuels-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.fuels-btn-primary   { background: var(--ghra-navy); color: #fff; }
+.fuels-btn-secondary { background: var(--ghra-white); color: var(--ghra-slate); border: 1px solid var(--ghra-line); }
+.fuels-btn-danger    { background: var(--ghra-red);   color: #fff; }
+
+/* ── Upload status ───────────────────────────────────────────────────────── */
+.fuels-upload-status { font-size: 12px; margin-top: 4px; color: var(--ghra-muted); }
+.fuels-upload-status.ok    { color: #27ae60; }
+.fuels-upload-status.error { color: var(--ghra-red); }
+
+/* ── Inline error ────────────────────────────────────────────────────────── */
+.fuels-error-msg {
+  color: var(--ghra-red);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* ── Row layout ──────────────────────────────────────────────────────────── */
+.fuels-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 20px;
+}
+
+@media (max-width: 600px) {
+  .fuels-section-body { padding: 24px 20px; }
+  .fuels-nav          { padding: 16px 20px; }
+}

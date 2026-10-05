@@ -720,6 +720,10 @@ export const generateApplicationPDF = (application) => {
               <span class="info-label">Account Setup for Delivery</span>
               <span class="info-value">${data.warehouseDelivery ? 'Yes' : 'No'}</span>
             </div>
+            <div class="info-item">
+              <span class="info-label">Interested in Store Reset Visit?</span>
+              <span class="info-value">${data.storeResetInterest ? 'Yes' : 'No'}</span>
+            </div>
           </div>
           ${data.warehouseDelivery && data.authorizedCardHolders && data.authorizedCardHolders.length > 0 ? `
             <div class="info-item">

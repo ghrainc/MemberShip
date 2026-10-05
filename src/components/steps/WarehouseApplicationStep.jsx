@@ -29,6 +29,18 @@ function WarehouseApplicationStep({
             Would you like to set up your account for delivery?
           </label>
         </div>
+
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              name="storeResetInterest"
+              checked={formData.storeResetInterest || false}
+              onChange={handleInputChange}
+            />
+            I am interested in a store reset visit from GHRA.
+          </label>
+        </div>
       </div>
 
       {formData.warehouseDelivery && (

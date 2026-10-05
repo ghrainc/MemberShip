@@ -5,15 +5,27 @@ import { generateApplicationPDF } from '../utils/pdfExport'
 import '../styles/Dashboard.css'
 
 function Dashboard() {
-  const { currentUser, getUserApplications, logout } = useContext(AuthContext)
+  const { currentUser, getUserApplications, getMyWarehouseApplications, getMyFuelsApplications, logout } = useContext(AuthContext)
   const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [warehouseApps, setWarehouseApps]         = useState([])
+  const [warehouseLoading, setWarehouseLoading]   = useState(true)
+  const [fuelsApps, setFuelsApps]                 = useState([])
+  const [fuelsLoading, setFuelsLoading]           = useState(true)
 
   useEffect(() => {
     getUserApplications().then(data => {
       setApplications(data || [])
       setLoading(false)
+    })
+    getMyWarehouseApplications().then(data => {
+      setWarehouseApps(data || [])
+      setWarehouseLoading(false)
+    })
+    getMyFuelsApplications().then(data => {
+      setFuelsApps(data || [])
+      setFuelsLoading(false)
     })
   }, [])
 
@@ -179,6 +191,166 @@ function Dashboard() {
               ))}
             </div>
           )}
+
+          {/* ── Warehouse Applications section ── */}
+          <div style={{ borderTop: '2px solid var(--ghra-line)', margin: '32px 0 0 0', paddingTop: 32 }}>
+            <div className="content-header">
+              <div className="section-title">
+                <h2>Warehouse Account Applications</h2>
+                <p className="section-subtitle">
+                  {warehouseLoading
+                    ? 'Loading...'
+                    : warehouseApps.length === 0
+                      ? 'No warehouse applications yet'
+                      : `${warehouseApps.length} application${warehouseApps.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <button
+                className="new-app-button"
+                onClick={() => navigate('/warehouse-application/new')}
+              >
+                <span>+</span> New Warehouse Application
+              </button>
+            </div>
+
+            {warehouseLoading ? (
+              <div className="empty-state"><p>Loading...</p></div>
+            ) : warehouseApps.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">🏭</div>
+                <h3>No Warehouse Applications</h3>
+                <p>Apply for a GHRA warehouse account to access wholesale pricing.</p>
+                <button className="empty-button" onClick={() => navigate('/warehouse-application/new')}>
+                  Start Warehouse Application
+                </button>
+              </div>
+            ) : (
+              <div className="applications-grid">
+                {warehouseApps.map(app => (
+                  <div key={app.Id} className="application-card">
+                    <div className="card-header">
+                      <div className="card-title-section">
+                        <h3>Warehouse Application</h3>
+                        {getStatusBadge(app.Status)}
+                      </div>
+                      <span className="app-id">ID: {app.Id}</span>
+                    </div>
+                    <div className="card-body">
+                      <div className="app-info">
+                        <div className="info-item">
+                          <span className="info-label">Created</span>
+                          <span className="info-value">{formatDate(app.CreatedAt)}</span>
+                        </div>
+                        {app.SubmittedAt && (
+                          <div className="info-item">
+                            <span className="info-label">Submitted</span>
+                            <span className="info-value">{formatDate(app.SubmittedAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="card-actions">
+                      {app.Status === 'draft' ? (
+                        <button
+                          className="action-button view-button"
+                          onClick={() => navigate(`/warehouse-application/${app.Id}`)}
+                        >
+                          Continue
+                        </button>
+                      ) : (
+                        <button
+                          className="action-button view-button"
+                          onClick={() => navigate(`/warehouse-application/${app.Id}`)}
+                        >
+                          View
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Fuels Applications section ── */}
+          <div style={{ borderTop: '2px solid var(--ghra-line)', margin: '32px 0 0 0', paddingTop: 32 }}>
+            <div className="content-header">
+              <div className="section-title">
+                <h2>GHRA Fuels Credit Applications</h2>
+                <p className="section-subtitle">
+                  {fuelsLoading
+                    ? 'Loading...'
+                    : fuelsApps.length === 0
+                      ? 'No fuels applications yet'
+                      : `${fuelsApps.length} application${fuelsApps.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+              <button
+                className="new-app-button"
+                onClick={() => navigate('/fuels-application/new')}
+              >
+                <span>+</span> New Fuels Credit Application
+              </button>
+            </div>
+
+            {fuelsLoading ? (
+              <div className="empty-state"><p>Loading...</p></div>
+            ) : fuelsApps.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">&#9981;</div>
+                <h3>No Fuels Applications</h3>
+                <p>Apply for a GHRA Fuels credit account.</p>
+                <button className="empty-button" onClick={() => navigate('/fuels-application/new')}>
+                  Start Fuels Application
+                </button>
+              </div>
+            ) : (
+              <div className="applications-grid">
+                {fuelsApps.map(app => (
+                  <div key={app.Id} className="application-card">
+                    <div className="card-header">
+                      <div className="card-title-section">
+                        <h3>Fuels Credit Application</h3>
+                        {getStatusBadge(app.Status)}
+                      </div>
+                      <span className="app-id">ID: {app.Id}</span>
+                    </div>
+                    <div className="card-body">
+                      <div className="app-info">
+                        <div className="info-item">
+                          <span className="info-label">Created</span>
+                          <span className="info-value">{formatDate(app.CreatedAt)}</span>
+                        </div>
+                        {app.SubmittedAt && (
+                          <div className="info-item">
+                            <span className="info-label">Submitted</span>
+                            <span className="info-value">{formatDate(app.SubmittedAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="card-actions">
+                      {app.Status === 'draft' ? (
+                        <button
+                          className="action-button view-button"
+                          onClick={() => navigate(`/fuels-application/${app.Id}`)}
+                        >
+                          Continue
+                        </button>
+                      ) : (
+                        <button
+                          className="action-button view-button"
+                          onClick={() => navigate(`/fuels-application/${app.Id}`)}
+                        >
+                          View
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 

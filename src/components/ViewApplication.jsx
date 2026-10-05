@@ -96,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog, resendManagerNotifications } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -129,6 +129,9 @@ function ViewApplication() {
 
   const [unarchiving, setUnarchiving] = useState(false)
   const [unarchiveError, setUnarchiveError] = useState(null)
+
+  const [notifyLoading, setNotifyLoading] = useState(false)
+  const [notifyMsg, setNotifyMsg]         = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -216,6 +219,20 @@ function ViewApplication() {
       setEditGhraError('')
     } else {
       setEditGhraError(result.error || 'Failed to save')
+    }
+  }
+
+  const handleResendNotifications = async () => {
+    setNotifyLoading(true)
+    setNotifyMsg(null)
+    const result = await resendManagerNotifications(application.Id)
+    setNotifyLoading(false)
+    if (result.success) {
+      const n = result.sent
+      setNotifyMsg({ ok: true, text: n === 0 ? 'No managers configured for this application type.' : `${n} notification${n !== 1 ? 's' : ''} sent.` })
+      setApplication(prev => ({ ...prev, ManagerNotificationsSent: 1 }))
+    } else {
+      setNotifyMsg({ ok: false, text: result.error })
     }
   }
 
@@ -555,6 +572,7 @@ function ViewApplication() {
             <Section title="Warehouse Information">
               <InfoRow>
                 <InfoField label="Would you like to set up your account for delivery?" value={data.warehouseDelivery ? 'Yes' : 'No'} />
+                <InfoField label="Interested in a store reset visit from GHRA?" value={data.storeResetInterest ? 'Yes' : 'No'} />
               </InfoRow>
             </Section>
             {data.warehouseDelivery && (data.authorizedCardHolders || []).map((holder, idx) => (
@@ -800,6 +818,29 @@ function ViewApplication() {
                 )}
               </span>
             )}
+          </div>
+        )}
+        {isEmployee && application.GhraNumber && (
+          <div className="ghra-number-header-row" style={{ fontSize: 13 }}>
+            <span className="ghra-number-header-label">Notifications:</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: application.ManagerNotificationsSent ? '#27ae60' : '#e67e22', fontSize: 12 }}>
+                {application.ManagerNotificationsSent ? '✓ Manager notifications sent' : 'Not yet sent'}
+              </span>
+              <button
+                type="button"
+                disabled={notifyLoading}
+                onClick={handleResendNotifications}
+                style={{ background: 'none', border: '1px solid #6c757d', color: '#6c757d', padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}
+              >
+                {notifyLoading ? '…' : application.ManagerNotificationsSent ? 'Resend' : 'Send Now'}
+              </button>
+              {notifyMsg && (
+                <span style={{ fontSize: 11, color: notifyMsg.ok ? '#27ae60' : '#e74c3c' }}>
+                  {notifyMsg.text}
+                </span>
+              )}
+            </span>
           </div>
         )}
       </div>

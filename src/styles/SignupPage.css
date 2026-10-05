@@ -1,0 +1,99 @@
+/* SignupPage.css — standalone signup page, matches AuthForm.css conventions */
+
+.signup-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: var(--ghra-navy);
+  padding: 20px;
+}
+
+.signup-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 420px;
+  padding: 40px;
+}
+
+.signup-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.signup-logo {
+  max-width: 100px;
+  height: auto;
+  margin-bottom: 16px;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.signup-title {
+  color: var(--ghra-navy);
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.signup-subtitle {
+  color: var(--ghra-muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.signup-footer {
+  text-align: center;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ghra-line);
+}
+
+.signup-footer p {
+  color: var(--ghra-muted);
+  font-size: 14px;
+  margin: 0;
+}
+
+.signup-footer a {
+  color: var(--ghra-navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.signup-footer a:hover {
+  color: var(--ghra-red);
+  text-decoration: underline;
+}
+
+.signup-back-link {
+  display: block;
+  text-align: center;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ghra-muted);
+  text-decoration: none;
+}
+
+.signup-back-link:hover {
+  color: var(--ghra-navy);
+}
+
+@media (max-width: 480px) {
+  .signup-card {
+    padding: 30px 20px;
+  }
+
+  .signup-title {
+    font-size: 20px;
+  }
+}

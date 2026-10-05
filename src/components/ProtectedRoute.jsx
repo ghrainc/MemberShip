@@ -1,6 +1,7 @@
 import { useContext } from 'react'
 import { Navigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
+import LandingPage from './LandingPage'
 
 function roleDashboard(user) {
   return user?.role === 'employee' ? '/employee' : '/dashboard'
@@ -26,9 +27,11 @@ export function ChangePasswordRoute({ children }) {
 }
 
 // Smart redirect for '/'
+// - Unauthenticated users see the public LandingPage.
+// - Authenticated users are forwarded to their role dashboard.
 export function RootRedirect() {
   const { isAuthenticated, currentUser } = useContext(AuthContext)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <LandingPage />
   if (currentUser?.mustChangePassword) return <Navigate to="/change-password" replace />
   return <Navigate to={roleDashboard(currentUser)} replace />
 }

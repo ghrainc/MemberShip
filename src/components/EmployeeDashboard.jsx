@@ -1,10 +1,12 @@
-import { useState, useContext, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useContext, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import PasswordStrengthChecklist from './PasswordStrengthChecklist'
 import ResendSignatureModal from './ResendSignatureModal'
 import BoardSignersModal from './BoardSignersModal'
+import EmailSettings from './settings/EmailSettings'
+import ManagerSettings from './settings/ManagerSettings'
 import { isEmployeePasswordValid } from '../utils/passwordValidation'
 import '../styles/EmployeeDashboard.css'
 
@@ -98,7 +100,10 @@ function EmployeeDashboard() {
     getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName,
     updateGhraNumber, downloadApplicationPackage, generateAch, getAchBatches, downloadAchBatch,
     archiveApplications, unarchiveApplications,
-    sessionWarning, dismissSessionWarning
+    sessionWarning, dismissSessionWarning,
+    getEmployeeRoles, assignEmployeeRole, removeEmployeeRole,
+    getAllWarehouseApplications, updateWarehouseStatus,
+    getAllFuelsApplications, updateFuelsStatus
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -192,6 +197,30 @@ function EmployeeDashboard() {
   const [editNameLoading, setEditNameLoading] = useState(false)
   const [editNameError, setEditNameError] = useState('')
 
+  // Employee role management (Employee Accounts tab)
+  const [employeeRoles, setEmployeeRoles] = useState({})
+  const [managingRolesFor, setManagingRolesFor] = useState(null)
+  const [roleActionLoading, setRoleActionLoading] = useState({})
+  const [rolesError, setRolesError] = useState('')
+
+  // Warehouse Applications tab
+  const [warehouseApps, setWarehouseApps] = useState([])
+  const [warehouseAppsLoading, setWarehouseAppsLoading] = useState(false)
+  const [warehouseReviewId, setWarehouseReviewId] = useState(null)
+  const [warehouseStatus, setWarehouseStatus] = useState('')
+  const [warehouseNotes, setWarehouseNotes] = useState('')
+  const [warehouseActionLoading, setWarehouseActionLoading] = useState(false)
+  const [warehouseActionMsg, setWarehouseActionMsg] = useState('')
+
+  // Fuels Applications tab
+  const [fuelsApps, setFuelsApps] = useState([])
+  const [fuelsAppsLoading, setFuelsAppsLoading] = useState(false)
+  const [fuelsReviewId, setFuelsReviewId] = useState(null)
+  const [fuelsStatus, setFuelsStatus] = useState('')
+  const [fuelsNotes, setFuelsNotes] = useState('')
+  const [fuelsActionLoading, setFuelsActionLoading] = useState(false)
+  const [fuelsActionMsg, setFuelsActionMsg] = useState('')
+
   // Create employee (in Employee Accounts tab)
   const [newEmployeeFirstName, setNewEmployeeFirstName] = useState('')
   const [newEmployeeLastName, setNewEmployeeLastName] = useState('')
@@ -226,7 +255,29 @@ function EmployeeDashboard() {
     setEmployeesLoading(true)
     const data = await getEmployees()
     setEmployees(data || [])
+    if (data && data.length > 0) {
+      const rolesMap = {}
+      await Promise.all(data.map(async emp => {
+        const roles = await getEmployeeRoles(emp.Id)
+        rolesMap[emp.Id] = Array.isArray(roles) ? roles.map(r => r.Role) : []
+      }))
+      setEmployeeRoles(rolesMap)
+    }
     setEmployeesLoading(false)
+  }
+
+  const loadWarehouseApps = async () => {
+    setWarehouseAppsLoading(true)
+    const data = await getAllWarehouseApplications()
+    setWarehouseApps(data || [])
+    setWarehouseAppsLoading(false)
+  }
+
+  const loadFuelsApps = async () => {
+    setFuelsAppsLoading(true)
+    const data = await getAllFuelsApplications()
+    setFuelsApps(data || [])
+    setFuelsAppsLoading(false)
   }
 
   const loadAchBatches = async () => {
@@ -240,6 +291,8 @@ function EmployeeDashboard() {
     if (activeTab === 'members')    loadMembers()
     if (activeTab === 'employees')  loadEmployees()
     if (activeTab === 'achHistory') loadAchBatches()
+    if (activeTab === 'warehouse')  loadWarehouseApps()
+    if (activeTab === 'fuels')      loadFuelsApps()
   }, [activeTab])
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -751,6 +804,26 @@ function EmployeeDashboard() {
         >
           ACH History
         </button>
+        <button
+          className={`tab-button${activeTab === 'warehouse' ? ' tab-button--active' : ''}`}
+          onClick={() => setActiveTab('warehouse')}
+        >
+          Warehouse Apps
+        </button>
+        <button
+          className={`tab-button${activeTab === 'fuels' ? ' tab-button--active' : ''}`}
+          onClick={() => setActiveTab('fuels')}
+        >
+          Fuels Apps
+        </button>
+        {currentUser?.email?.toLowerCase() === 'admin@ghraonline.com' && (
+          <button
+            className={`tab-button${activeTab === 'settings' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </button>
+        )}
       </nav>
 
       <main className="employee-dashboard-main">
@@ -1285,8 +1358,12 @@ function EmployeeDashboard() {
                     const isSelf = emp.Email.toLowerCase() === currentUser?.email?.toLowerCase()
                     const isEditing = editingEmployeeId === emp.Id
                     const displayName = [emp.FirstName, emp.LastName].filter(Boolean).join(' ')
+                    const canManageRoles = currentUser?.roles?.includes('ghra_admin') || currentUser?.email?.toLowerCase() === 'admin@ghraonline.com'
+                    const ROLE_LABELS = { ghra_admin: 'Admin', fuels_admin: 'Fuels', warehouse_admin: 'Warehouse' }
+                    const ROLE_COLORS = { ghra_admin: { background: '#1B2A5B', color: '#fff' }, fuels_admin: { background: '#27ae60', color: '#fff' }, warehouse_admin: { background: '#e67e22', color: '#fff' } }
                     return (
-                      <tr key={emp.Id}>
+                      <React.Fragment key={emp.Id}>
+                      <tr>
                         <td>
                           {isEditing ? (
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1318,6 +1395,23 @@ function EmployeeDashboard() {
                               {displayName || <span style={{ color: '#aaa', fontStyle: 'italic' }}>No name set</span>}
                               {isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#ffc107', color: '#333', borderRadius: 3, padding: '1px 5px' }}>protected</span>}
                               {isSelf && !isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#cce5ff', color: '#004085', borderRadius: 3, padding: '1px 5px' }}>you</span>}
+                              {isAdmin ? (
+                                <span style={{ marginLeft: 6, fontSize: 11, background: '#1B2A5B', color: '#fff', borderRadius: 3, padding: '1px 5px' }}>All Roles</span>
+                              ) : (
+                                (employeeRoles[emp.Id] || []).map(role => (
+                                  <span key={role} style={{ marginLeft: 4, fontSize: 11, borderRadius: 3, padding: '1px 5px', ...ROLE_COLORS[role] }}>
+                                    {ROLE_LABELS[role] || role}
+                                  </span>
+                                ))
+                              )}
+                              {canManageRoles && !isAdmin && !isEditing && (
+                                <button
+                                  onClick={() => setManagingRolesFor(managingRolesFor === emp.Id ? null : emp.Id)}
+                                  style={{ marginLeft: 8, fontSize: 11, padding: '1px 7px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
+                                >
+                                  Manage Roles
+                                </button>
+                              )}
                             </span>
                           )}
                         </td>
@@ -1349,6 +1443,58 @@ function EmployeeDashboard() {
                           )}
                         </td>
                       </tr>
+                      {managingRolesFor === emp.Id && (
+                        <tr>
+                          <td colSpan={4} style={{ background: '#f8f9fa', padding: '10px 16px', borderBottom: '1px solid #dee2e6' }}>
+                            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: '#343a40' }}>Roles:</span>
+                              {[
+                                { key: 'ghra_admin', label: 'Admin' },
+                                { key: 'fuels_admin', label: 'Fuels' },
+                                { key: 'warehouse_admin', label: 'Warehouse' }
+                              ].map(({ key, label }) => {
+                                const hasRole = (employeeRoles[emp.Id] || []).includes(key)
+                                const isLoading = !!roleActionLoading[key]
+                                return (
+                                  <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontSize: 13 }}>{label}</span>
+                                    <button
+                                      disabled={isLoading}
+                                      onClick={async () => {
+                                        setRolesError('')
+                                        setRoleActionLoading(prev => ({ ...prev, [key]: true }))
+                                        const result = hasRole
+                                          ? await removeEmployeeRole(emp.Id, key)
+                                          : await assignEmployeeRole(emp.Id, key)
+                                        if (result?.error) {
+                                          setRolesError(result.error)
+                                        } else {
+                                          const updated = await getEmployeeRoles(emp.Id)
+                                          setEmployeeRoles(prev => ({ ...prev, [emp.Id]: Array.isArray(updated) ? updated.map(r => r.Role) : [] }))
+                                        }
+                                        setRoleActionLoading(prev => ({ ...prev, [key]: false }))
+                                      }}
+                                      style={{
+                                        fontSize: 11, padding: '1px 8px', border: 'none', borderRadius: 3, cursor: isLoading ? 'wait' : 'pointer',
+                                        background: hasRole ? '#c0392b' : '#27ae60', color: '#fff'
+                                      }}
+                                    >
+                                      {isLoading ? '...' : hasRole ? 'Remove' : 'Add'}
+                                    </button>
+                                  </span>
+                                )
+                              })}
+                              {rolesError && (
+                                <span style={{ fontSize: 12, color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: 3, padding: '2px 8px' }}>
+                                  {rolesError}
+                                  <button onClick={() => setRolesError('')} style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#721c24', fontWeight: 600 }}>✕</button>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     )
                   })}
                 </tbody>
@@ -1399,6 +1545,338 @@ function EmployeeDashboard() {
               </button>
             </div>
           </form>
+          </>}
+
+          {/* ── Warehouse Applications tab ────────────────────────────────── */}
+          {activeTab === 'warehouse' && <>
+          <div className="content-header">
+            <h2>Warehouse Applications</h2>
+            <div className="content-header-right">
+              <p className="application-count">
+                {warehouseAppsLoading ? 'Loading...' : `${warehouseApps.length} application${warehouseApps.length !== 1 ? 's' : ''}`}
+              </p>
+              <button className="refresh-button" onClick={loadWarehouseApps} disabled={warehouseAppsLoading}>
+                {warehouseAppsLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {warehouseAppsLoading ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>Loading...</p>
+          ) : warehouseApps.length === 0 ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>No warehouse applications found.</p>
+          ) : (
+            <div className="table-container">
+              <table className="applications-table">
+                <thead>
+                  <tr>
+                    <th><span className="th-label">ID</span></th>
+                    <th><span className="th-label">Applicant</span></th>
+                    <th><span className="th-label">Status</span></th>
+                    <th><span className="th-label">Submitted</span></th>
+                    <th className="action-column"><span className="th-label">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {warehouseApps.map(app => (
+                    <React.Fragment key={app.Id}>
+                    <tr>
+                      <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{app.Id}</td>
+                      <td className="email-cell">{app.UserEmail}</td>
+                      <td>
+                        <span className={`status-badge status-${app.Status}`}>
+                          {app.Status ? app.Status.charAt(0).toUpperCase() + app.Status.slice(1).replace(/_/g, ' ') : '—'}
+                        </span>
+                      </td>
+                      <td>{app.SubmittedAt ? new Date(app.SubmittedAt).toLocaleDateString() : <span style={{ color: '#aaa' }}>—</span>}</td>
+                      <td className="action-cell">
+                        {app.Status === 'submitted' && (
+                          <button
+                            className="reset-pwd-button"
+                            onClick={() => {
+                              if (warehouseReviewId === app.Id) {
+                                setWarehouseReviewId(null)
+                                setWarehouseStatus('')
+                                setWarehouseNotes('')
+                                setWarehouseActionMsg('')
+                              } else {
+                                setWarehouseReviewId(app.Id)
+                                setWarehouseStatus('')
+                                setWarehouseNotes('')
+                                setWarehouseActionMsg('')
+                              }
+                            }}
+                          >
+                            Review
+                          </button>
+                        )}
+                        {app.ReviewedBy && (
+                          <span style={{ fontSize: 12, color: '#6c757d' }}>
+                            {app.ReviewedBy}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {warehouseReviewId === app.Id && (
+                      <tr>
+                        <td colSpan={5} style={{ background: '#f8f9fa', padding: '12px 16px', borderBottom: '1px solid #dee2e6' }}>
+                          <div style={{ maxWidth: 480 }}>
+                            <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 10px', color: '#343a40' }}>Review Application #{app.Id}</p>
+                            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                                <input
+                                  type="radio"
+                                  name={`wh-status-${app.Id}`}
+                                  value="approved"
+                                  checked={warehouseStatus === 'approved'}
+                                  onChange={() => setWarehouseStatus('approved')}
+                                />
+                                Approve
+                              </label>
+                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                                <input
+                                  type="radio"
+                                  name={`wh-status-${app.Id}`}
+                                  value="rejected"
+                                  checked={warehouseStatus === 'rejected'}
+                                  onChange={() => setWarehouseStatus('rejected')}
+                                />
+                                Reject
+                              </label>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 10 }}>
+                              <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
+                              <textarea
+                                value={warehouseNotes}
+                                onChange={(e) => setWarehouseNotes(e.target.value)}
+                                rows={2}
+                                style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4, resize: 'vertical', boxSizing: 'border-box' }}
+                                placeholder="Add notes..."
+                              />
+                            </div>
+                            {warehouseActionMsg && (
+                              <div style={{ fontSize: 12, marginBottom: 8, padding: '4px 10px', borderRadius: 3, background: warehouseActionMsg.startsWith('Error') ? '#f8d7da' : '#d4edda', color: warehouseActionMsg.startsWith('Error') ? '#721c24' : '#155724', border: `1px solid ${warehouseActionMsg.startsWith('Error') ? '#f5c6cb' : '#c3e6cb'}` }}>
+                                {warehouseActionMsg}
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="modal-submit-button"
+                                disabled={warehouseActionLoading || !warehouseStatus}
+                                onClick={async () => {
+                                  setWarehouseActionLoading(true)
+                                  setWarehouseActionMsg('')
+                                  const result = await updateWarehouseStatus(app.Id, warehouseStatus, warehouseNotes)
+                                  if (result?.error) {
+                                    setWarehouseActionMsg('Error: ' + result.error)
+                                  } else {
+                                    setWarehouseActionMsg('Review submitted.')
+                                    setWarehouseReviewId(null)
+                                    setWarehouseStatus('')
+                                    setWarehouseNotes('')
+                                    await loadWarehouseApps()
+                                  }
+                                  setWarehouseActionLoading(false)
+                                }}
+                                style={{ fontSize: 13, padding: '4px 16px' }}
+                              >
+                                {warehouseActionLoading ? 'Submitting...' : 'Submit Review'}
+                              </button>
+                              <button
+                                className="delete-button"
+                                onClick={() => { setWarehouseReviewId(null); setWarehouseStatus(''); setWarehouseNotes(''); setWarehouseActionMsg('') }}
+                                style={{ fontSize: 13, padding: '4px 12px', background: '#6c757d' }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          </>}
+
+          {/* ── Fuels Applications tab ───────────────────────────────────── */}
+          {activeTab === 'fuels' && <>
+          <div className="content-header">
+            <h2>Fuels Credit Applications</h2>
+            <div className="content-header-right">
+              <p className="application-count">
+                {fuelsAppsLoading ? 'Loading...' : `${fuelsApps.length} application${fuelsApps.length !== 1 ? 's' : ''}`}
+              </p>
+              <button className="refresh-button" onClick={loadFuelsApps} disabled={fuelsAppsLoading}>
+                {fuelsAppsLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+          </div>
+
+          {fuelsAppsLoading ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>Loading...</p>
+          ) : fuelsApps.length === 0 ? (
+            <p style={{ color: '#6c757d', padding: '20px 0' }}>No fuels applications found.</p>
+          ) : (
+            <div className="table-container">
+              <table className="applications-table">
+                <thead>
+                  <tr>
+                    <th><span className="th-label">ID</span></th>
+                    <th><span className="th-label">Applicant</span></th>
+                    <th><span className="th-label">Status</span></th>
+                    <th><span className="th-label">Submitted</span></th>
+                    <th className="action-column"><span className="th-label">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fuelsApps.map(app => (
+                    <React.Fragment key={app.Id}>
+                    <tr>
+                      <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{app.Id}</td>
+                      <td className="email-cell">{app.UserEmail}</td>
+                      <td>
+                        <span className={`status-badge status-${app.Status}`}>
+                          {app.Status ? app.Status.charAt(0).toUpperCase() + app.Status.slice(1).replace(/_/g, ' ') : '—'}
+                        </span>
+                      </td>
+                      <td>{app.SubmittedAt ? new Date(app.SubmittedAt).toLocaleDateString() : <span style={{ color: '#aaa' }}>—</span>}</td>
+                      <td className="action-cell">
+                        <button className="view-button"
+                          onClick={() => navigate(`/employee/fuels/${app.Id}`)}>
+                          View
+                        </button>
+                        {app.Status === 'submitted' && (
+                          <button
+                            className="reset-pwd-button"
+                            onClick={() => {
+                              if (fuelsReviewId === app.Id) {
+                                setFuelsReviewId(null)
+                                setFuelsStatus('')
+                                setFuelsNotes('')
+                                setFuelsActionMsg('')
+                              } else {
+                                setFuelsReviewId(app.Id)
+                                setFuelsStatus('')
+                                setFuelsNotes('')
+                                setFuelsActionMsg('')
+                              }
+                            }}
+                          >
+                            Review
+                          </button>
+                        )}
+                        {app.ReviewedBy && (
+                          <span style={{ fontSize: 12, color: '#6c757d' }}>
+                            {app.ReviewedBy}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    {fuelsReviewId === app.Id && (
+                      <tr>
+                        <td colSpan={5} style={{ background: '#f8f9fa', padding: '12px 16px', borderBottom: '1px solid #dee2e6' }}>
+                          <div style={{ maxWidth: 480 }}>
+                            <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 10px', color: '#343a40' }}>Review Application #{app.Id}</p>
+                            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
+                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                                <input
+                                  type="radio"
+                                  name={`fuels-status-${app.Id}`}
+                                  value="approved"
+                                  checked={fuelsStatus === 'approved'}
+                                  onChange={() => setFuelsStatus('approved')}
+                                />
+                                Approve
+                              </label>
+                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                                <input
+                                  type="radio"
+                                  name={`fuels-status-${app.Id}`}
+                                  value="rejected"
+                                  checked={fuelsStatus === 'rejected'}
+                                  onChange={() => setFuelsStatus('rejected')}
+                                />
+                                Reject
+                              </label>
+                            </div>
+                            <div className="form-group" style={{ marginBottom: 10 }}>
+                              <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
+                              <textarea
+                                value={fuelsNotes}
+                                onChange={(e) => setFuelsNotes(e.target.value)}
+                                rows={2}
+                                style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4, resize: 'vertical', boxSizing: 'border-box' }}
+                                placeholder="Add notes..."
+                              />
+                            </div>
+                            {fuelsActionMsg && (
+                              <div style={{ fontSize: 12, marginBottom: 8, padding: '4px 10px', borderRadius: 3, background: fuelsActionMsg.startsWith('Error') ? '#f8d7da' : '#d4edda', color: fuelsActionMsg.startsWith('Error') ? '#721c24' : '#155724', border: `1px solid ${fuelsActionMsg.startsWith('Error') ? '#f5c6cb' : '#c3e6cb'}` }}>
+                                {fuelsActionMsg}
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                className="modal-submit-button"
+                                disabled={fuelsActionLoading || !fuelsStatus}
+                                onClick={async () => {
+                                  setFuelsActionLoading(true)
+                                  setFuelsActionMsg('')
+                                  const result = await updateFuelsStatus(app.Id, fuelsStatus, fuelsNotes)
+                                  if (result?.error) {
+                                    setFuelsActionMsg('Error: ' + result.error)
+                                  } else {
+                                    setFuelsActionMsg('Review submitted.')
+                                    setFuelsReviewId(null)
+                                    setFuelsStatus('')
+                                    setFuelsNotes('')
+                                    await loadFuelsApps()
+                                  }
+                                  setFuelsActionLoading(false)
+                                }}
+                                style={{ fontSize: 13, padding: '4px 16px' }}
+                              >
+                                {fuelsActionLoading ? 'Submitting...' : 'Submit Review'}
+                              </button>
+                              <button
+                                className="delete-button"
+                                onClick={() => { setFuelsReviewId(null); setFuelsStatus(''); setFuelsNotes(''); setFuelsActionMsg('') }}
+                                style={{ fontSize: 13, padding: '4px 12px', background: '#6c757d' }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          </>}
+
+          {/* ── Settings tab (admin only) ─────────────────────────────────── */}
+          {activeTab === 'settings' && currentUser?.email?.toLowerCase() === 'admin@ghraonline.com' && <>
+          <div className="content-header">
+            <h2>Settings</h2>
+          </div>
+
+          <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div style={{ flex: 1, minWidth: 320 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--ghra-navy)', marginBottom: 16 }}>Email / SMTP</h3>
+              <EmailSettings />
+            </div>
+            <div style={{ flex: 1, minWidth: 320 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--ghra-navy)', marginBottom: 16 }}>Notification Managers</h3>
+              <ManagerSettings />
+            </div>
+          </div>
           </>}
 
           {/* ── ACH History tab ───────────────────────────────────────────── */}

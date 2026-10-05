@@ -1,0 +1,355 @@
+/* LandingPage.css — public marketing page */
+
+/* ── Layout Shell ─────────────────────────────────────────── */
+.lp-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--ghra-white);
+  color: var(--ghra-slate);
+  font-family: inherit;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.lp-header {
+  background: var(--ghra-navy);
+  padding: 0 40px;
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.lp-header-logo {
+  height: 44px;
+  width: auto;
+  display: block;
+}
+
+.lp-header-signin {
+  background: transparent;
+  color: var(--ghra-white);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  display: inline-block;
+}
+
+.lp-header-signin:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--ghra-white);
+  color: var(--ghra-white);
+}
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.lp-hero {
+  background: linear-gradient(135deg, var(--ghra-navy) 0%, #243570 55%, #2a3d80 100%);
+  color: var(--ghra-white);
+  padding: 96px 40px 80px;
+  text-align: center;
+}
+
+.lp-hero-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.lp-hero-eyebrow {
+  display: inline-block;
+  background: rgba(200, 16, 46, 0.18);
+  color: #f8a0b0;
+  border: 1px solid rgba(200, 16, 46, 0.4);
+  border-radius: 20px;
+  padding: 4px 16px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.lp-hero-title {
+  font-size: clamp(32px, 5vw, 52px);
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 0 0 20px;
+  color: var(--ghra-white);
+}
+
+.lp-hero-title span {
+  color: #f59aaa;
+}
+
+.lp-hero-tagline {
+  font-size: 18px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 0 0 40px;
+}
+
+.lp-hero-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lp-btn-primary {
+  background: var(--ghra-red);
+  color: var(--ghra-white);
+  border: none;
+  border-radius: 6px;
+  padding: 14px 32px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.1s;
+}
+
+.lp-btn-primary:hover {
+  background: #a50d25;
+  box-shadow: 0 4px 16px rgba(200, 16, 46, 0.4);
+  transform: translateY(-1px);
+  color: var(--ghra-white);
+}
+
+.lp-btn-outline {
+  background: transparent;
+  color: var(--ghra-white);
+  border: 2px solid rgba(255, 255, 255, 0.65);
+  border-radius: 6px;
+  padding: 13px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.lp-btn-outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--ghra-white);
+  color: var(--ghra-white);
+}
+
+/* ── Features Section ─────────────────────────────────────── */
+.lp-features {
+  background: var(--ghra-mist);
+  padding: 72px 40px;
+}
+
+.lp-section-header {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.lp-section-header h2 {
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 700;
+  color: var(--ghra-navy);
+  margin: 0 0 10px;
+}
+
+.lp-section-header p {
+  font-size: 16px;
+  color: var(--ghra-muted);
+  margin: 0;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.lp-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.lp-card {
+  background: var(--ghra-white);
+  border: 1px solid var(--ghra-line);
+  border-radius: 12px;
+  padding: 32px 28px;
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.lp-card:hover {
+  box-shadow: 0 6px 24px rgba(27, 42, 91, 0.1);
+  transform: translateY(-2px);
+}
+
+.lp-card-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--ghra-navy), #243570);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 18px;
+}
+
+.lp-card-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: var(--ghra-white);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lp-card h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ghra-navy);
+  margin: 0 0 10px;
+}
+
+.lp-card p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ghra-muted);
+  margin: 0;
+}
+
+/* ── CTA Section ──────────────────────────────────────────── */
+.lp-cta {
+  background: var(--ghra-white);
+  padding: 80px 40px;
+  text-align: center;
+  border-top: 1px solid var(--ghra-line);
+}
+
+.lp-cta-inner {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.lp-cta h2 {
+  font-size: clamp(22px, 3vw, 34px);
+  font-weight: 700;
+  color: var(--ghra-navy);
+  margin: 0 0 14px;
+}
+
+.lp-cta p {
+  font-size: 16px;
+  color: var(--ghra-muted);
+  margin: 0 0 36px;
+  line-height: 1.6;
+}
+
+.lp-cta-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.lp-cta-note {
+  font-size: 14px;
+  color: var(--ghra-muted);
+  margin: 0;
+}
+
+.lp-cta-note a {
+  color: var(--ghra-navy);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lp-cta-note a:hover {
+  color: var(--ghra-red);
+  text-decoration: underline;
+}
+
+/* CTA section primary button (dark background variant) */
+.lp-cta .lp-btn-primary {
+  background: var(--ghra-red);
+}
+
+.lp-cta .lp-btn-secondary {
+  background: transparent;
+  color: var(--ghra-navy);
+  border: 2px solid var(--ghra-line);
+  border-radius: 6px;
+  padding: 13px 32px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.lp-cta .lp-btn-secondary:hover {
+  border-color: var(--ghra-navy);
+  background: var(--ghra-mist);
+  color: var(--ghra-navy);
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.lp-footer {
+  background: var(--ghra-navy);
+  padding: 28px 40px;
+  text-align: center;
+}
+
+.lp-footer p {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .lp-header {
+    padding: 0 20px;
+  }
+
+  .lp-hero {
+    padding: 64px 20px 56px;
+  }
+
+  .lp-features {
+    padding: 56px 20px;
+  }
+
+  .lp-cta {
+    padding: 56px 20px;
+  }
+
+  .lp-footer {
+    padding: 24px 20px;
+  }
+
+  .lp-hero-actions,
+  .lp-cta-actions {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .lp-btn-primary,
+  .lp-btn-outline,
+  .lp-cta .lp-btn-secondary {
+    width: 100%;
+    max-width: 320px;
+    text-align: center;
+  }
+}

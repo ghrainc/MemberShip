@@ -1,0 +1,136 @@
+/* ── Page shell ──────────────────────────────────────────────────────────── */
+.wh-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  background: var(--ghra-mist);
+  min-height: 100vh;
+}
+
+.wh-header {
+  background: var(--ghra-white);
+  padding: 20px 24px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(27,42,91,.1);
+  text-align: center;
+}
+
+.wh-header h1 {
+  color: var(--ghra-navy);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.wh-header p {
+  color: var(--ghra-muted);
+  font-size: 13px;
+}
+
+/* ── Card shell ──────────────────────────────────────────────────────────── */
+.wh-card {
+  background: var(--ghra-white);
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(27,42,91,.1);
+  overflow: hidden;
+}
+
+.wh-section-body {
+  padding: 32px 40px;
+}
+
+.wh-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ghra-navy);
+  margin: 0 0 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--ghra-navy);
+}
+
+/* ── Owner card ──────────────────────────────────────────────────────────── */
+.wh-owner-card {
+  background: #f8f9fb;
+  border: 1px solid var(--ghra-line);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+
+.wh-owner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.wh-owner-label {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ghra-navy);
+  text-transform: uppercase;
+  letter-spacing: .8px;
+}
+
+/* ── Category grid ───────────────────────────────────────────────────────── */
+.wh-categories {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px 16px;
+}
+
+/* ── Nav footer ──────────────────────────────────────────────────────────── */
+.wh-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 40px;
+  border-top: 1px solid var(--ghra-line);
+  gap: 12px;
+}
+
+.wh-btn {
+  padding: 10px 22px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.wh-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.wh-btn-primary   { background: var(--ghra-navy); color: #fff; }
+.wh-btn-secondary { background: var(--ghra-white); color: var(--ghra-slate); border: 1px solid var(--ghra-line); }
+.wh-btn-danger    { background: var(--ghra-red);   color: #fff; }
+.wh-btn-ghost     { background: transparent; color: var(--ghra-slate); border: 1px solid var(--ghra-line); }
+
+/* ── Upload status ───────────────────────────────────────────────────────── */
+.wh-upload-status {
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--ghra-muted);
+}
+.wh-upload-status.ok    { color: #27ae60; }
+.wh-upload-status.error { color: var(--ghra-red); }
+
+/* ── Inline error ────────────────────────────────────────────────────────── */
+.wh-error-msg {
+  color: var(--ghra-red);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+
+/* ── Row layout ──────────────────────────────────────────────────────────── */
+.wh-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 20px;
+}
+
+@media (max-width: 600px) {
+  .wh-section-body { padding: 24px 20px; }
+  .wh-nav          { padding: 16px 20px; }
+}
