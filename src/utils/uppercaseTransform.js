@@ -3,7 +3,9 @@
 // Must stay in sync with ENUM_FIELD_NAMES_SERVER in server/utils/uppercaseFormData.js.
 export const ENUM_OPTIONS = {
   ownershipType:        ['sole-proprietor', 'partnership', 'c-corp', 's-corp', 'llc'],
+  entityType:           ['sole-proprietor', 'partnership', 'llc', 'c-corp', 's-corp', 'other'],
   businessType:         ['with-fuel', 'without-fuel'],
+  fuelsBusinessType:    ['corporation', 'llc', 'partnership', 'sole-proprietorship', 'other-lp-llp'],
   storeCondition:       ['existing', 'remodeled', 'brand-new'],
   businessProperty:     ['owned', 'leased'],
   fuelAvailable:        ['branded', 'unbranded'],

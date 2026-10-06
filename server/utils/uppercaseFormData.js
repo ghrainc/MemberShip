@@ -3,7 +3,7 @@
 // All enum-valued form fields — values are fixed option strings that must never be uppercased.
 // Must stay in sync with ENUM_OPTIONS in src/utils/uppercaseTransform.js.
 const ENUM_FIELD_NAMES_SERVER = new Set([
-  'ownershipType', 'businessType', 'storeCondition', 'businessProperty',
+  'ownershipType', 'entityType', 'businessType', 'fuelsBusinessType', 'storeCondition', 'businessProperty',
   'fuelAvailable',
   'scanPOS', 'posSystem',
   'foodServiceAvailable', 'foodConcept', 'foodServiceBranded', 'bigMardKudosGameday',

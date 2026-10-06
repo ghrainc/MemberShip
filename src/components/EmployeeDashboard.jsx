@@ -38,6 +38,101 @@ function getAuthRepState(app) {
 
 const EMPTY_FILTERS = { storeName: '', submittedDate: '', status: '', email: '', repName: '', achStatus: '' }
 
+const EDIT_ROLES_DEFS = [
+  { key: 'ghra_admin',      label: 'GHRA Admin',      desc: 'Reviews membership applications and manages member accounts' },
+  { key: 'fuels_admin',     label: 'Fuels Admin',      desc: 'Reviews Fuels applications' },
+  { key: 'warehouse_admin', label: 'Warehouse Admin',  desc: 'Reviews Warehouse applications' },
+]
+
+function EditRolesDialog({ emp, currentRoles, currentUserEmail, assignRole, removeRole, onClose, onSuccess }) {
+  const isAdminAccount = emp.Email.toLowerCase() === 'admin@ghraonline.com'
+  const isSelf = emp.Email.toLowerCase() === currentUserEmail?.toLowerCase()
+  const displayName = [emp.FirstName, emp.LastName].filter(Boolean).join(' ') || emp.Email
+
+  const [checked, setChecked] = useState(
+    Object.fromEntries(EDIT_ROLES_DEFS.map(r => [r.key, currentRoles.includes(r.key)]))
+  )
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape' && !saving) onClose() }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [saving, onClose])
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      const toAdd    = EDIT_ROLES_DEFS.map(r => r.key).filter(k => checked[k]  && !currentRoles.includes(k))
+      const toRemove = EDIT_ROLES_DEFS.map(r => r.key).filter(k => !checked[k] &&  currentRoles.includes(k))
+      for (const k of toAdd) {
+        const result = await assignRole(emp.Id, k)
+        if (result?.error) { setError(result.error); return }
+      }
+      for (const k of toRemove) {
+        const result = await removeRole(emp.Id, k)
+        if (result?.error) { setError(result.error); return }
+      }
+      onSuccess()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" onClick={() => !saving && onClose()}>
+      <div className="modal-content" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit Roles — {displayName}</h3>
+          <button className="modal-close" onClick={onClose} disabled={saving}>✕</button>
+        </div>
+        <div className="modal-body">
+          {isAdminAccount ? (
+            <p style={{ color: 'var(--ghra-muted)', fontSize: 13 }}>
+              The Administrator account always has full access. Roles cannot be changed.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {EDIT_ROLES_DEFS.map(r => {
+                const selfGhra = isSelf && r.key === 'ghra_admin'
+                return (
+                  <label
+                    key={r.key}
+                    className={`edit-roles-row${selfGhra ? ' edit-roles-row--disabled' : ''}`}
+                    title={selfGhra ? 'You cannot remove your own GHRA Admin access' : undefined}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!checked[r.key]}
+                      disabled={saving || selfGhra}
+                      onChange={e => setChecked(prev => ({ ...prev, [r.key]: e.target.checked }))}
+                    />
+                    <span className="edit-roles-info">
+                      <span className="edit-roles-label">{r.label}</span>
+                      <span className="edit-roles-desc">{r.desc}</span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+          {error && <div className="modal-error" style={{ marginTop: 12 }}>{error}</div>}
+        </div>
+        <div className="modal-actions">
+          <button className="modal-cancel-button" onClick={onClose} disabled={saving}>Cancel</button>
+          {!isAdminAccount && (
+            <button className="modal-submit-button" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ArchiveConfirmDialog({ action, count, loading, error, onConfirm, onCancel }) {
   const primaryRef = useRef(null)
   const isArchive  = action === 'archive'
@@ -107,6 +202,13 @@ function EmployeeDashboard() {
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
+  // Role helpers — derived from JWT at login time; role changes take effect on next login
+  const isAdminAccount   = currentUser?.email?.toLowerCase() === 'admin@ghraonline.com'
+  const _currentRoles    = currentUser?.roles || []
+  const hasGhraAdmin     = isAdminAccount || _currentRoles.includes('ghra_admin')
+  const hasWarehouseTab  = hasGhraAdmin || _currentRoles.includes('warehouse_admin')
+  const hasFuelsTab      = hasGhraAdmin || _currentRoles.includes('fuels_admin')
+
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -174,8 +276,13 @@ function EmployeeDashboard() {
   const [resetError, setResetError] = useState('')
   const [resetSuccess, setResetSuccess] = useState('')
 
-  // Tab navigation
-  const [activeTab, setActiveTab] = useState('applications')
+  // Tab navigation — default to first accessible tab for this user
+  const [activeTab, setActiveTab] = useState(() => {
+    if (hasGhraAdmin)    return 'applications'
+    if (hasWarehouseTab) return 'warehouse'
+    if (hasFuelsTab)     return 'fuels'
+    return 'applications'
+  })
 
   // Members tab
   const [members, setMembers] = useState([])
@@ -199,9 +306,8 @@ function EmployeeDashboard() {
 
   // Employee role management (Employee Accounts tab)
   const [employeeRoles, setEmployeeRoles] = useState({})
-  const [managingRolesFor, setManagingRolesFor] = useState(null)
-  const [roleActionLoading, setRoleActionLoading] = useState({})
-  const [rolesError, setRolesError] = useState('')
+  const [editRolesDialog, setEditRolesDialog] = useState(null) // null | { emp }
+  const [editRolesToast, setEditRolesToast] = useState('')
 
   // Warehouse Applications tab
   const [warehouseApps, setWarehouseApps] = useState([])
@@ -227,11 +333,13 @@ function EmployeeDashboard() {
   const [newEmployeeEmail, setNewEmployeeEmail] = useState('')
   const [newEmployeePassword, setNewEmployeePassword] = useState('')
   const [newEmployeeConfirm, setNewEmployeeConfirm] = useState('')
+  const [newEmployeeRoles, setNewEmployeeRoles] = useState([])
   const [createEmployeeError, setCreateEmployeeError] = useState('')
   const [createEmployeeSuccess, setCreateEmployeeSuccess] = useState('')
   const [createEmployeeLoading, setCreateEmployeeLoading] = useState(false)
 
   const loadApplications = useCallback(async () => {
+    if (!hasGhraAdmin) { setLoading(false); return }
     setLoadError(false)
     const data = await getAllApplications()
     if (data === null) {
@@ -240,7 +348,7 @@ function EmployeeDashboard() {
       setApplications(data)
     }
     setLoading(false)
-  }, [getAllApplications])
+  }, [getAllApplications, hasGhraAdmin])
 
   useEffect(() => { loadApplications() }, [loadApplications])
 
@@ -644,7 +752,7 @@ function EmployeeDashboard() {
       return
     }
     setCreateEmployeeLoading(true)
-    const result = await createEmployeeAccount(newEmployeeEmail, newEmployeePassword, newEmployeeFirstName.trim(), newEmployeeLastName.trim())
+    const result = await createEmployeeAccount(newEmployeeEmail, newEmployeePassword, newEmployeeFirstName.trim(), newEmployeeLastName.trim(), newEmployeeRoles)
     setCreateEmployeeLoading(false)
     if (result.success) {
       setCreateEmployeeSuccess(`Employee account created for ${result.email}`)
@@ -653,6 +761,7 @@ function EmployeeDashboard() {
       setNewEmployeeEmail('')
       setNewEmployeePassword('')
       setNewEmployeeConfirm('')
+      setNewEmployeeRoles([])
       await loadEmployees()
     } else {
       setCreateEmployeeError(result.error)
@@ -780,43 +889,55 @@ function EmployeeDashboard() {
       </header>
 
       <nav className="tab-nav">
-        <button
-          className={`tab-button${activeTab === 'applications' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('applications')}
-        >
-          All Applications
-        </button>
-        <button
-          className={`tab-button${activeTab === 'members' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('members')}
-        >
-          Members
-        </button>
-        <button
-          className={`tab-button${activeTab === 'employees' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('employees')}
-        >
-          Employee Accounts
-        </button>
-        <button
-          className={`tab-button${activeTab === 'achHistory' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('achHistory')}
-        >
-          ACH History
-        </button>
-        <button
-          className={`tab-button${activeTab === 'warehouse' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('warehouse')}
-        >
-          Warehouse Apps
-        </button>
-        <button
-          className={`tab-button${activeTab === 'fuels' ? ' tab-button--active' : ''}`}
-          onClick={() => setActiveTab('fuels')}
-        >
-          Fuels Apps
-        </button>
-        {currentUser?.email?.toLowerCase() === 'admin@ghraonline.com' && (
+        {hasGhraAdmin && (
+          <button
+            className={`tab-button${activeTab === 'applications' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('applications')}
+          >
+            All Applications
+          </button>
+        )}
+        {hasGhraAdmin && (
+          <button
+            className={`tab-button${activeTab === 'members' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('members')}
+          >
+            Members
+          </button>
+        )}
+        {hasGhraAdmin && (
+          <button
+            className={`tab-button${activeTab === 'employees' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('employees')}
+          >
+            Employee Accounts
+          </button>
+        )}
+        {hasGhraAdmin && (
+          <button
+            className={`tab-button${activeTab === 'achHistory' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('achHistory')}
+          >
+            ACH History
+          </button>
+        )}
+        {hasWarehouseTab && (
+          <button
+            className={`tab-button${activeTab === 'warehouse' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('warehouse')}
+          >
+            Warehouse Apps
+          </button>
+        )}
+        {hasFuelsTab && (
+          <button
+            className={`tab-button${activeTab === 'fuels' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('fuels')}
+          >
+            Fuels Apps
+          </button>
+        )}
+        {isAdminAccount && (
           <button
             className={`tab-button${activeTab === 'settings' ? ' tab-button--active' : ''}`}
             onClick={() => setActiveTab('settings')}
@@ -1348,6 +1469,7 @@ function EmployeeDashboard() {
                   <tr>
                     <th><span className="th-label">Name</span></th>
                     <th><span className="th-label">Email</span></th>
+                    <th><span className="th-label">Roles</span></th>
                     <th><span className="th-label">Created</span></th>
                     <th className="action-column"><span className="th-label">Actions</span></th>
                   </tr>
@@ -1358,9 +1480,9 @@ function EmployeeDashboard() {
                     const isSelf = emp.Email.toLowerCase() === currentUser?.email?.toLowerCase()
                     const isEditing = editingEmployeeId === emp.Id
                     const displayName = [emp.FirstName, emp.LastName].filter(Boolean).join(' ')
-                    const canManageRoles = currentUser?.roles?.includes('ghra_admin') || currentUser?.email?.toLowerCase() === 'admin@ghraonline.com'
-                    const ROLE_LABELS = { ghra_admin: 'Admin', fuels_admin: 'Fuels', warehouse_admin: 'Warehouse' }
-                    const ROLE_COLORS = { ghra_admin: { background: '#1B2A5B', color: '#fff' }, fuels_admin: { background: '#27ae60', color: '#fff' }, warehouse_admin: { background: '#e67e22', color: '#fff' } }
+                    const isCallerAdmin = currentUser?.email?.toLowerCase() === 'admin@ghraonline.com'
+                    const ROLE_LABELS = { ghra_admin: 'GHRA Admin', fuels_admin: 'Fuels Admin', warehouse_admin: 'Warehouse Admin' }
+                    const heldRoles = employeeRoles[emp.Id] || []
                     return (
                       <React.Fragment key={emp.Id}>
                       <tr>
@@ -1393,31 +1515,24 @@ function EmployeeDashboard() {
                           ) : (
                             <span>
                               {displayName || <span style={{ color: '#aaa', fontStyle: 'italic' }}>No name set</span>}
-                              {isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#ffc107', color: '#333', borderRadius: 3, padding: '1px 5px' }}>protected</span>}
-                              {isSelf && !isAdmin && <span style={{ marginLeft: 6, fontSize: 11, background: '#cce5ff', color: '#004085', borderRadius: 3, padding: '1px 5px' }}>you</span>}
-                              {isAdmin ? (
-                                <span style={{ marginLeft: 6, fontSize: 11, background: '#1B2A5B', color: '#fff', borderRadius: 3, padding: '1px 5px' }}>All Roles</span>
-                              ) : (
-                                (employeeRoles[emp.Id] || []).map(role => (
-                                  <span key={role} style={{ marginLeft: 4, fontSize: 11, borderRadius: 3, padding: '1px 5px', ...ROLE_COLORS[role] }}>
-                                    {ROLE_LABELS[role] || role}
-                                  </span>
-                                ))
-                              )}
-                              {canManageRoles && !isAdmin && !isEditing && (
-                                <button
-                                  onClick={() => setManagingRolesFor(managingRolesFor === emp.Id ? null : emp.Id)}
-                                  style={{ marginLeft: 8, fontSize: 11, padding: '1px 7px', background: '#6c757d', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
-                                >
-                                  Manage Roles
-                                </button>
-                              )}
+                              {isSelf && <span className="emp-you-chip">you</span>}
                             </span>
                           )}
                         </td>
                         <td className="email-cell">{emp.Email}</td>
+                        <td className="emp-roles-cell">
+                          {isAdmin
+                            ? <span className="emp-roles-admin">Administrator (all access)</span>
+                            : heldRoles.length > 0
+                              ? <span>{heldRoles.map(r => ROLE_LABELS[r] || r).join(', ')}</span>
+                              : <span className="emp-roles-none">No roles assigned</span>
+                          }
+                        </td>
                         <td>{formatDate(emp.CreatedAt)}</td>
                         <td className="action-cell">
+                          {isAdmin && (
+                            <span className="emp-lock-icon" title="Protected account">🔒</span>
+                          )}
                           {!isEditing && (
                             <button className="reset-pwd-button" style={{ background: '#6c757d' }} onClick={() => handleEditEmployeeName(emp)}>
                               Edit Name
@@ -1426,6 +1541,15 @@ function EmployeeDashboard() {
                           {!isAdmin && !isEditing && (
                             <button className="reset-pwd-button" onClick={() => openResetModal(emp, 'employee')}>
                               Reset PWD
+                            </button>
+                          )}
+                          {isCallerAdmin && !isAdmin && !isEditing && (
+                            <button
+                              className="reset-pwd-button"
+                              style={{ background: 'var(--ghra-navy)' }}
+                              onClick={() => setEditRolesDialog({ emp })}
+                            >
+                              Edit Roles
                             </button>
                           )}
                           {!isAdmin && !isSelf && !isEditing && (
@@ -1443,57 +1567,6 @@ function EmployeeDashboard() {
                           )}
                         </td>
                       </tr>
-                      {managingRolesFor === emp.Id && (
-                        <tr>
-                          <td colSpan={4} style={{ background: '#f8f9fa', padding: '10px 16px', borderBottom: '1px solid #dee2e6' }}>
-                            <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: 13, fontWeight: 600, color: '#343a40' }}>Roles:</span>
-                              {[
-                                { key: 'ghra_admin', label: 'Admin' },
-                                { key: 'fuels_admin', label: 'Fuels' },
-                                { key: 'warehouse_admin', label: 'Warehouse' }
-                              ].map(({ key, label }) => {
-                                const hasRole = (employeeRoles[emp.Id] || []).includes(key)
-                                const isLoading = !!roleActionLoading[key]
-                                return (
-                                  <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{ fontSize: 13 }}>{label}</span>
-                                    <button
-                                      disabled={isLoading}
-                                      onClick={async () => {
-                                        setRolesError('')
-                                        setRoleActionLoading(prev => ({ ...prev, [key]: true }))
-                                        const result = hasRole
-                                          ? await removeEmployeeRole(emp.Id, key)
-                                          : await assignEmployeeRole(emp.Id, key)
-                                        if (result?.error) {
-                                          setRolesError(result.error)
-                                        } else {
-                                          const updated = await getEmployeeRoles(emp.Id)
-                                          setEmployeeRoles(prev => ({ ...prev, [emp.Id]: Array.isArray(updated) ? updated.map(r => r.Role) : [] }))
-                                        }
-                                        setRoleActionLoading(prev => ({ ...prev, [key]: false }))
-                                      }}
-                                      style={{
-                                        fontSize: 11, padding: '1px 8px', border: 'none', borderRadius: 3, cursor: isLoading ? 'wait' : 'pointer',
-                                        background: hasRole ? '#c0392b' : '#27ae60', color: '#fff'
-                                      }}
-                                    >
-                                      {isLoading ? '...' : hasRole ? 'Remove' : 'Add'}
-                                    </button>
-                                  </span>
-                                )
-                              })}
-                              {rolesError && (
-                                <span style={{ fontSize: 12, color: '#721c24', background: '#f8d7da', border: '1px solid #f5c6cb', borderRadius: 3, padding: '2px 8px' }}>
-                                  {rolesError}
-                                  <button onClick={() => setRolesError('')} style={{ marginLeft: 6, background: 'none', border: 'none', cursor: 'pointer', color: '#721c24', fontWeight: 600 }}>✕</button>
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                       </React.Fragment>
                     )
                   })}
@@ -1534,6 +1607,29 @@ function EmployeeDashboard() {
               <PasswordInput value={newEmployeeConfirm} onChange={(e) => setNewEmployeeConfirm(e.target.value)}
                 className="form-input" placeholder="Repeat password" />
             </div>
+            {(currentUser?.roles?.includes('ghra_admin') || currentUser?.email?.toLowerCase() === 'admin@ghraonline.com') && (
+              <div className="form-group">
+                <label>Roles</label>
+                <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>
+                  {[
+                    { value: 'ghra_admin',      label: 'GHRA Admin' },
+                    { value: 'fuels_admin',      label: 'Fuels Admin' },
+                    { value: 'warehouse_admin',  label: 'Warehouse Admin' },
+                  ].map(r => (
+                    <label key={r.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={newEmployeeRoles.includes(r.value)}
+                        onChange={e => setNewEmployeeRoles(prev =>
+                          e.target.checked ? [...prev, r.value] : prev.filter(x => x !== r.value)
+                        )}
+                      />
+                      {r.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
             <p style={{ fontSize: 12, color: '#7f8c8d', margin: '0 0 8px' }}>
               Employee will be required to change this password on first login.
             </p>
@@ -2097,6 +2193,29 @@ function EmployeeDashboard() {
             </form>
           </div>
         </div>
+      )}
+      {/* ── Edit Roles dialog ─────────────────────────────────────────────── */}
+      {editRolesDialog && (
+        <EditRolesDialog
+          emp={editRolesDialog.emp}
+          currentRoles={employeeRoles[editRolesDialog.emp.Id] || []}
+          currentUserEmail={currentUser?.email}
+          assignRole={assignEmployeeRole}
+          removeRole={removeEmployeeRole}
+          onClose={() => setEditRolesDialog(null)}
+          onSuccess={async () => {
+            const emp = editRolesDialog.emp
+            setEditRolesDialog(null)
+            const updated = await getEmployeeRoles(emp.Id)
+            setEmployeeRoles(prev => ({ ...prev, [emp.Id]: Array.isArray(updated) ? updated.map(r => r.Role) : [] }))
+            const name = [emp.FirstName, emp.LastName].filter(Boolean).join(' ') || emp.Email
+            setEditRolesToast(`Roles updated for ${name}`)
+            setTimeout(() => setEditRolesToast(''), 3000)
+          }}
+        />
+      )}
+      {editRolesToast && (
+        <div className="emp-roles-toast">{editRolesToast}</div>
       )}
     </div>
   )

@@ -52,10 +52,9 @@ function WarehouseReview() {
 
   const load = () => {
     setLoading(true)
-    getWarehouseApplication(id).then(data => {
-      setApp(data)
-      setLoading(false)
-    })
+    getWarehouseApplication(id)
+      .then(data => { setApp(data); setLoading(false) })
+      .catch(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps

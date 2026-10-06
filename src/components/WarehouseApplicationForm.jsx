@@ -596,12 +596,15 @@ function WarehouseApplicationForm() {
     if (err) { setStepError(err); return }
     setStepError(null)
     setSaving(true)
-    const currentId = await ensureDraft(formData)
-    const result = await saveWarehouseDraft(currentId, formData)
-    setSaving(false)
-    if (!result.success) { setStepError(result.error || 'Failed to save'); return }
-    if (!appId && result.id) setAppId(result.id)
-    if (currentStep < STEPS.length) setCurrentStep(s => s + 1)
+    try {
+      const currentId = await ensureDraft(formData)
+      const result = await saveWarehouseDraft(currentId, formData)
+      if (!result.success) { setStepError(result.error || 'Failed to save'); return }
+      if (!appId && result.id) setAppId(result.id)
+      if (currentStep < STEPS.length) setCurrentStep(s => s + 1)
+    } finally {
+      setSaving(false)
+    }
   }, [currentStep, formData, ensureDraft, appId, saveWarehouseDraft])
 
   const handlePrev = useCallback(() => {
@@ -615,12 +618,15 @@ function WarehouseApplicationForm() {
     setStepError(null)
     setSubmitting(true)
     setSubmitError(null)
-    const currentId = appId || (await ensureDraft(formData))
-    const result = await submitWarehouseApplication(currentId, formData)
-    setSubmitting(false)
-    if (!result.success) { setSubmitError(result.error || 'Submission failed'); return }
-    setSubmitted(true)
-    setTimeout(() => navigate('/dashboard'), 2500)
+    try {
+      const currentId = appId || (await ensureDraft(formData))
+      const result = await submitWarehouseApplication(currentId, formData)
+      if (!result.success) { setSubmitError(result.error || 'Submission failed'); return }
+      setSubmitted(true)
+      setTimeout(() => navigate('/dashboard'), 2500)
+    } finally {
+      setSubmitting(false)
+    }
   }, [currentStep, formData, appId, ensureDraft, submitWarehouseApplication, navigate])
 
   // ── Render ────────────────────────────────────────────────────────────────

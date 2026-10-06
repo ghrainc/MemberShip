@@ -15,7 +15,11 @@ const STEPS = [
 ]
 
 const BUSINESS_TYPES = [
-  'Corporation', 'LLC', 'Partnership', 'Sole Proprietorship', 'Other LP/LLP',
+  { value: 'corporation',         label: 'Corporation' },
+  { value: 'llc',                 label: 'LLC' },
+  { value: 'partnership',         label: 'Partnership' },
+  { value: 'sole-proprietorship', label: 'Sole Proprietorship' },
+  { value: 'other-lp-llp',        label: 'Other LP/LLP' },
 ]
 
 const BLANK_PRINCIPAL = {
@@ -201,11 +205,11 @@ function Section1({ fd, set }) {
         <Field label="Business Type">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
             {BUSINESS_TYPES.map(bt => (
-              <label key={bt} className="checkbox-label">
-                <input type="radio" name="businessType" value={bt}
-                  checked={fd.businessType === bt}
-                  onChange={() => set('businessType', bt)} />
-                {bt}
+              <label key={bt.value} className="checkbox-label">
+                <input type="radio" name="businessType" value={bt.value}
+                  checked={fd.businessType === bt.value}
+                  onChange={() => set('businessType', bt.value)} />
+                {bt.label}
               </label>
             ))}
           </div>
@@ -799,12 +803,15 @@ function FuelsApplicationForm() {
   // Save draft — creates on first save (draftId=null), updates thereafter
   const saveDraft = useCallback(async (fd) => {
     setSaving(true)
-    const result = await saveFuelsDraft(draftId, fd)
-    setSaving(false)
-    if (result.success && result.id && !draftId) {
-      setDraftId(result.id)
+    try {
+      const result = await saveFuelsDraft(draftId, fd)
+      if (result.success && result.id && !draftId) {
+        setDraftId(result.id)
+      }
+      return result
+    } finally {
+      setSaving(false)
     }
-    return result
   }, [draftId, saveFuelsDraft])
 
   // File upload: save draft first if no draftId, then upload
@@ -842,10 +849,13 @@ function FuelsApplicationForm() {
     if (err) { setError(err); return }
     setError(null)
     setSubmitting(true)
-    const result = await submitFuelsApplication(draftId, formData)
-    setSubmitting(false)
-    if (!result.success) { setError(result.error || 'Submission failed'); return }
-    navigate('/dashboard')
+    try {
+      const result = await submitFuelsApplication(draftId, formData)
+      if (!result.success) { setError(result.error || 'Submission failed'); return }
+      navigate('/dashboard')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   if (loading) {

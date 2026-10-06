@@ -52,10 +52,9 @@ function FuelsReview() {
 
   const load = () => {
     setLoading(true)
-    getFuelsApplication(id).then(data => {
-      setApp(data)
-      setLoading(false)
-    })
+    getFuelsApplication(id)
+      .then(data => { setApp(data); setLoading(false) })
+      .catch(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect

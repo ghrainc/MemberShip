@@ -2,7 +2,7 @@ import { createContext, useState, useCallback, useEffect, useRef } from 'react'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN =     import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN =  'http://localhost:3001'//   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
@@ -629,17 +629,19 @@ export const AuthProvider = ({ children }) => {
       })
       const data = await res.json()
       if (!res.ok) return data.error || 'Failed to change password'
+      const newToken = data.token || token
+      setToken(newToken)
       setCurrentUser(prev => {
-        if (!prev) return prev
-        const updated = { ...prev, mustChangePassword: false }
-        saveAuthToStorage(token, updated)
+        const updated = { ...(prev || {}), mustChangePassword: false }
+        saveAuthToStorage(newToken, updated)
         return updated
       })
+      armExpiryTimers(newToken)
       return true
     } catch {
       return 'Unable to connect to server'
     }
-  }, [token])
+  }, [token, armExpiryTimers])
 
   const testDropboxSign = useCallback(async (signerEmail, signerName) => {
     try {
@@ -732,17 +734,17 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token])
 
-  const createEmployeeAccount = useCallback(async (email, password, firstName, lastName) => {
+  const createEmployeeAccount = useCallback(async (email, password, firstName, lastName, roles = []) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const res = await fetch(`${API}/employees`, {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ email, password, firstName, lastName })
+        body: JSON.stringify({ email, password, firstName, lastName, roles })
       })
       const data = await res.json()
       if (!res.ok) return { success: false, error: data.error || 'Failed to create employee' }
-      return { success: true, email: data.email }
+      return { success: true, email: data.email, id: data.id }
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }

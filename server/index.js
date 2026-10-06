@@ -1105,7 +1105,14 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
       .input('email', sql.NVarChar, req.user.email)
       .input('passwordHash', sql.NVarChar, passwordHash)
       .query('UPDATE Users SET PasswordHash = @passwordHash, MustChangePassword = 0 WHERE Email = @email')
-    res.json({ success: true })
+    const newToken = jwt.sign(
+      { email: req.user.email, role: req.user.role, mustChangePassword: false,
+        firstName: req.user.firstName || '', lastName: req.user.lastName || '',
+        roles: req.user.roles || [] },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    )
+    res.json({ success: true, token: newToken })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1280,12 +1287,19 @@ app.patch('/api/employees/:id/name', authMiddleware, async (req, res) => {
 // POST /api/employees — create a new employee account
 app.post('/api/employees', authMiddleware, async (req, res) => {
   if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
-  const { email, password, firstName, lastName } = req.body
+  const { email, password, firstName, lastName, roles: requestedRoles } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' })
   if (!firstName?.trim() || !lastName?.trim()) return res.status(400).json({ error: 'First name and last name are required' })
   const empCreateFailures = validateEmployeePassword(password)
   if (empCreateFailures.length > 0)
     return res.status(400).json({ error: `Password must have: ${empCreateFailures.join(', ')}` })
+
+  // Only ghra_admin (or superadmin) may assign roles at creation time
+  const callerIsAdmin = req.user.email?.toLowerCase() === ADMIN_EMAIL || req.user.roles?.includes('ghra_admin')
+  const rolesToAssign = (callerIsAdmin && Array.isArray(requestedRoles))
+    ? requestedRoles.filter(r => VALID_ROLES.includes(r))
+    : []
+
   try {
     const db = await getPool()
     const existing = await db.request()
@@ -1294,14 +1308,24 @@ app.post('/api/employees', authMiddleware, async (req, res) => {
     if (existing.recordset.length > 0)
       return res.status(400).json({ error: 'An account with that email already exists' })
     const passwordHash = await bcrypt.hash(password, 10)
-    await db.request()
+    const insertResult = await db.request()
       .input('email',        sql.NVarChar, email.toLowerCase())
       .input('passwordHash', sql.NVarChar, passwordHash)
       .input('role',         sql.NVarChar, 'employee')
       .input('firstName',    sql.NVarChar, firstName.trim())
       .input('lastName',     sql.NVarChar, lastName.trim())
-      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword, FirstName, LastName) VALUES (@email, @passwordHash, @role, 1, @firstName, @lastName)')
-    res.json({ success: true, email: email.toLowerCase() })
+      .query('INSERT INTO Users (Email, PasswordHash, Role, MustChangePassword, FirstName, LastName) OUTPUT INSERTED.Id VALUES (@email, @passwordHash, @role, 1, @firstName, @lastName)')
+    const newUserId = insertResult.recordset[0].Id
+
+    for (const role of rolesToAssign) {
+      await db.request()
+        .input('userId',     sql.Int,      newUserId)
+        .input('role',       sql.NVarChar, role)
+        .input('assignedBy', sql.NVarChar, req.user.email)
+        .query('INSERT INTO UserRoles (UserId, Role, AssignedBy) VALUES (@userId, @role, @assignedBy)')
+    }
+
+    res.json({ success: true, email: email.toLowerCase(), id: newUserId })
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
@@ -1348,6 +1372,9 @@ app.delete('/api/employees/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'The admin account cannot be deleted' })
     if (targetEmail === req.user.email.toLowerCase())
       return res.status(400).json({ error: 'You cannot delete your own account' })
+    await db.request()
+      .input('id', sql.Int, req.params.id)
+      .query('DELETE FROM UserRoles WHERE UserId = @id')
     await db.request()
       .input('id', sql.Int, req.params.id)
       .query(`DELETE FROM Users WHERE Id = @id AND Role = 'employee'`)
@@ -3258,7 +3285,6 @@ app.delete('/api/managers/:id', authMiddleware, async (req, res) => {
 // ── Employee roles (Phase 2) ─────────────────────────────────────────────────
 
 const VALID_ROLES = ['ghra_admin', 'fuels_admin', 'warehouse_admin']
-const ADMIN_EMAIL = 'admin@ghraonline.com'
 
 // GET /api/employees/:id/roles
 app.get('/api/employees/:id/roles', authMiddleware, async (req, res) => {

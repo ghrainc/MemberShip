@@ -1409,6 +1409,105 @@
   align-items: center;
 }
 
+/* ── Employee roles column ───────────────────────────────────────────────── */
+
+.emp-roles-cell {
+  font-size: 13px;
+  color: var(--ghra-text);
+  min-width: 180px;
+}
+
+.emp-roles-admin {
+  color: var(--ghra-navy);
+  font-weight: 600;
+}
+
+.emp-roles-none {
+  color: var(--ghra-muted);
+  font-style: italic;
+}
+
+.emp-you-chip {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  background: #cce5ff;
+  color: #004085;
+  border-radius: 3px;
+  padding: 1px 5px;
+  vertical-align: middle;
+}
+
+.emp-lock-icon {
+  font-size: 13px;
+  cursor: default;
+  opacity: 0.65;
+  line-height: 1;
+}
+
+/* ── Edit Roles dialog ───────────────────────────────────────────────────── */
+
+.edit-roles-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ghra-line);
+}
+
+.edit-roles-row:last-child {
+  border-bottom: none;
+}
+
+.edit-roles-row--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.edit-roles-row input[type="checkbox"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  cursor: inherit;
+}
+
+.edit-roles-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.edit-roles-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ghra-text);
+}
+
+.edit-roles-desc {
+  font-size: 12px;
+  color: var(--ghra-muted);
+  line-height: 1.4;
+}
+
+/* ── Roles updated toast ─────────────────────────────────────────────────── */
+
+.emp-roles-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ghra-navy);
+  color: #fff;
+  padding: 10px 22px;
+  border-radius: 6px;
+  font-size: 14px;
+  z-index: 9999;
+  box-shadow: 0 4px 14px rgba(27, 42, 91, 0.25);
+  pointer-events: none;
+}
+
 /* ── ACH export ──────────────────────────────────────────────────────────── */
 
 .select-col {
