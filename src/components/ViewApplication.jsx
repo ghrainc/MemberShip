@@ -96,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog, getClientErrorLogs } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -129,6 +129,11 @@ function ViewApplication() {
 
   const [unarchiving, setUnarchiving] = useState(false)
   const [unarchiveError, setUnarchiveError] = useState(null)
+
+  const [clientErrOpen, setClientErrOpen]       = useState(false)
+  const [clientErrEntries, setClientErrEntries] = useState(null)
+  const [clientErrLoading, setClientErrLoading] = useState(false)
+  const [expandedClientErr, setExpandedClientErr] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -196,6 +201,19 @@ function ViewApplication() {
       }
     }
     setAuditOpen(v => !v)
+  }
+
+  const handleClientErrOpen = async () => {
+    if (!clientErrOpen && clientErrEntries === null && !clientErrLoading) {
+      setClientErrLoading(true)
+      try {
+        const result = await getClientErrorLogs({ applicationId: id })
+        setClientErrEntries(result.entries || [])
+      } finally {
+        setClientErrLoading(false)
+      }
+    }
+    setClientErrOpen(v => !v)
   }
 
   const handleSaveGhraNumber = async () => {
@@ -1100,6 +1118,71 @@ function ViewApplication() {
                                   <td colSpan={5}>
                                     <div className="ds-ev-detail">
                                       <pre className="ds-ev-json">{ev.Details}</pre>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isEmployee && (
+        <div className="ds-activity-panel">
+          <button className="ds-activity-toggle" onClick={handleClientErrOpen}>
+            <span>Client Errors</span>
+            <span className="ds-activity-chevron">{clientErrOpen ? '▲' : '▼'}</span>
+          </button>
+          {clientErrOpen && (
+            <div className="ds-activity-body">
+              {clientErrLoading ? (
+                <p className="ds-activity-loading">Loading…</p>
+              ) : !clientErrEntries?.length ? (
+                <p className="ds-activity-empty">No client errors recorded for this application.</p>
+              ) : (
+                <table className="ds-activity-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Type</th>
+                      <th>Step</th>
+                      <th>Message</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientErrEntries.map(ev => (
+                      <tr key={ev.Id}>
+                        <td colSpan={5} style={{ padding: 0 }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <tbody>
+                              <tr className="ds-ev-row">
+                                <td className="ds-ev-time">{new Date(ev.CreatedAt).toLocaleString()}</td>
+                                <td className="ds-ev-op">{ev.ErrorType.replace(/_/g, ' ')}</td>
+                                <td className="ds-ev-dir" style={{ fontSize: 11 }}>{ev.Step != null ? `Step ${ev.Step}` : '—'}</td>
+                                <td className="ds-ev-dir" style={{ fontSize: 12, maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.Message}</td>
+                                <td className="ds-ev-actions">
+                                  {ev.TechnicalDetail && (
+                                    <button className="ds-ev-expand" onClick={() => setExpandedClientErr(expandedClientErr === ev.Id ? null : ev.Id)}>
+                                      {expandedClientErr === ev.Id ? 'Hide' : 'Detail'}
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                              {expandedClientErr === ev.Id && ev.TechnicalDetail && (
+                                <tr className="ds-ev-detail-row">
+                                  <td colSpan={5}>
+                                    <div className="ds-ev-detail">
+                                      <pre className="ds-ev-json">{(() => { try { return JSON.stringify(JSON.parse(ev.TechnicalDetail), null, 2) } catch { return ev.TechnicalDetail } })()}</pre>
+                                      {ev.SessionAgeMinutes != null && <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ghra-muted)' }}>Session age: {ev.SessionAgeMinutes} min</div>}
                                     </div>
                                   </td>
                                 </tr>

@@ -601,6 +601,26 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' }
 })
 
+const clientLogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: false,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ ok: false }),
+})
+
+// Like authMiddleware but never rejects — sets req.user to null if token missing or invalid.
+function optionalAuth(req, _res, next) {
+  const header = req.headers.authorization
+  if (!header) { req.user = null; return next() }
+  try {
+    req.user = jwt.verify(header.replace('Bearer ', ''), process.env.JWT_SECRET)
+  } catch {
+    req.user = null
+  }
+  next()
+}
+
 // Returns an array of unmet requirement strings; empty array means the password is valid.
 function validateEmployeePassword(password) {
   const failures = []
@@ -886,6 +906,23 @@ async function ensureSchema() {
           CreatedAt       DATETIME NOT NULL DEFAULT GETDATE()
         )
     `)
+    await db.request().query(`
+      IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ClientErrorLog' AND type = 'U')
+        CREATE TABLE ClientErrorLog (
+          Id                 INT IDENTITY(1,1) PRIMARY KEY,
+          UserEmail          NVARCHAR(255) NULL,
+          ApplicationId      INT NULL,
+          Step               INT NULL,
+          ErrorType          NVARCHAR(50) NOT NULL,
+          Message            NVARCHAR(1000) NOT NULL,
+          TechnicalDetail    NVARCHAR(MAX) NULL,
+          Url                NVARCHAR(500) NULL,
+          Action             NVARCHAR(100) NULL,
+          UserAgent          NVARCHAR(500) NULL,
+          SessionAgeMinutes  INT NULL,
+          CreatedAt          DATETIME NOT NULL DEFAULT GETDATE()
+        )
+    `)
   } catch (err) {
     console.error('Schema migration failed:', err.message)
   }
@@ -893,20 +930,39 @@ async function ensureSchema() {
 
 // ── Auth middleware ──────────────────────────────────────────────────────────
 
-function authMiddleware(req, res, next) {
+async function authMiddleware(req, res, next) {
   const header = req.headers.authorization
   if (!header) return res.status(401).json({ error: 'No token provided' })
   const token = header.replace('Bearer ', '')
+  let user
   try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET)
-    // M4: enforce forced password change server-side — not just in the UI
-    if (req.user.mustChangePassword && req.path !== '/api/auth/change-password') {
+    user = jwt.verify(token, process.env.JWT_SECRET)
+  } catch {
+    console.error(`[auth] 401 Invalid token path=${req.path} ip=${req.ip}`)
+    return res.status(401).json({ error: 'Invalid token' })
+  }
+  req.user = user
+  // Enforce forced password change, but re-verify against DB in case the token is stale
+  // (member changed password → DB cleared, but old token still has mustChangePassword=true).
+  if (user.mustChangePassword && req.path !== '/api/auth/change-password') {
+    try {
+      const db = await getPool()
+      const result = await db.request()
+        .input('email', sql.NVarChar, user.email)
+        .query('SELECT MustChangePassword FROM Users WHERE Email = @email')
+      const dbFlag = result.recordset[0]?.MustChangePassword
+      if (dbFlag) {
+        console.warn(`[auth] 403 MustChangePassword email=${user.email} path=${req.path}`)
+        return res.status(403).json({ error: 'Password change required' })
+      }
+      // DB says it was already cleared — stale token. Let them through.
+      req.user.mustChangePassword = false
+    } catch (dbErr) {
+      console.error(`[auth] 403 DB check failed email=${user.email} path=${req.path} error=${dbErr.message}`)
       return res.status(403).json({ error: 'Password change required' })
     }
-    next()
-  } catch {
-    res.status(401).json({ error: 'Invalid token' })
   }
+  next()
 }
 
 // Returns true if the authenticated user may access the given application.
@@ -1004,7 +1060,15 @@ app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
       .input('email', sql.NVarChar, req.user.email)
       .input('passwordHash', sql.NVarChar, passwordHash)
       .query('UPDATE Users SET PasswordHash = @passwordHash, MustChangePassword = 0 WHERE Email = @email')
-    res.json({ success: true })
+    // Issue a new token with mustChangePassword cleared so the client's next API
+    // call is not blocked by the stale flag baked into the old token.
+    const newToken = jwt.sign(
+      { email: req.user.email, role: req.user.role, mustChangePassword: false,
+        firstName: req.user.firstName || '', lastName: req.user.lastName || '' },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    )
+    res.json({ success: true, token: newToken })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1299,6 +1363,7 @@ app.post('/api/applications/draft', authMiddleware, async (req, res) => {
       res.json({ applicationId: result.recordset[0].Id })
     }
   } catch (err) {
+    console.error(`[draft-save] FAILED email=${userEmail} applicationId=${applicationId || 'new'} step=${currentStep} status=500 error=${err.message}`)
     res.status(500).json({ error: err.message })
   }
 })
@@ -3269,6 +3334,112 @@ app.get('/api/ds-events', authMiddleware, async (req, res) => {
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `)
     res.json({ events: result.recordset })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Client error log ─────────────────────────────────────────────────────────
+
+const CLIENT_LOG_VALID_TYPES = new Set([
+  'api_failure', 'auth_failure', 'blocked_navigation', 'validation_block',
+  'upload_failure', 'upload_validation', 'js_error', 'render_error',
+])
+
+// POST /api/logs/client — accepts logs from both authenticated and signed-out sessions.
+// Never returns an error to the client; logging must be invisible on failure.
+app.post('/api/logs/client', clientLogLimiter, optionalAuth, async (req, res) => {
+  try {
+    const {
+      errorType, message, technicalDetail, url, action,
+      applicationId, step, sessionAgeMinutes, clientEmail, userAgent,
+    } = req.body || {}
+
+    const safeType = CLIENT_LOG_VALID_TYPES.has(String(errorType)) ? String(errorType) : 'unknown'
+    // Prefer verified token email; fall back to client-supplied email (for expired-token 401 cases).
+    const userEmail = (req.user?.email || clientEmail || '').slice(0, 255) || null
+
+    const db = await getPool()
+    await db.request()
+      .input('userEmail',         sql.NVarChar, userEmail)
+      .input('applicationId',     sql.Int,      applicationId ? (parseInt(applicationId) || null) : null)
+      .input('step',              sql.Int,      step ? (parseInt(step) || null) : null)
+      .input('errorType',         sql.NVarChar, safeType)
+      .input('message',           sql.NVarChar, String(message || '').slice(0, 1000))
+      .input('technicalDetail',   sql.NVarChar, technicalDetail ? String(technicalDetail).slice(0, 10000) : null)
+      .input('url',               sql.NVarChar, url ? String(url).slice(0, 500) : null)
+      .input('action',            sql.NVarChar, action ? String(action).slice(0, 100) : null)
+      .input('userAgent',         sql.NVarChar, userAgent ? String(userAgent).slice(0, 500) : null)
+      .input('sessionAgeMinutes', sql.Int,      sessionAgeMinutes ? (parseInt(sessionAgeMinutes) || null) : null)
+      .query(`
+        INSERT INTO ClientErrorLog
+          (UserEmail, ApplicationId, Step, ErrorType, Message, TechnicalDetail, Url, Action, UserAgent, SessionAgeMinutes)
+        VALUES
+          (@userEmail, @applicationId, @step, @errorType, @message, @technicalDetail, @url, @action, @userAgent, @sessionAgeMinutes)
+      `)
+    res.json({ ok: true })
+  } catch {
+    res.json({ ok: false }) // never surface internal errors — client must not block on this
+  }
+})
+
+// GET /api/logs/client — employee-only; returns filtered entries + last-24h summary.
+app.get('/api/logs/client', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const { email, errorType, from, to, step, applicationId } = req.query
+    const page     = Math.max(1, parseInt(req.query.page) || 1)
+    const pageSize = 100
+    const offset   = (page - 1) * pageSize
+
+    const db    = await getPool()
+    const sqlReq = db.request()
+    const conditions = []
+
+    if (email)         { conditions.push('UserEmail LIKE @email');             sqlReq.input('email',         sql.NVarChar, `%${email}%`) }
+    if (errorType)     { conditions.push('ErrorType = @errorType');            sqlReq.input('errorType',     sql.NVarChar, errorType) }
+    if (step)          { conditions.push('Step = @step');                      sqlReq.input('step',          sql.Int,      parseInt(step) || 0) }
+    if (applicationId) { conditions.push('ApplicationId = @applicationId');   sqlReq.input('applicationId', sql.Int,      parseInt(applicationId) || 0) }
+    if (from) {
+      const d = new Date(from)
+      if (!isNaN(d.getTime())) { conditions.push('CreatedAt >= @from'); sqlReq.input('from', sql.DateTime, d) }
+    }
+    if (to) {
+      const d = new Date(to)
+      if (!isNaN(d.getTime())) { conditions.push('CreatedAt <= @to'); sqlReq.input('to', sql.DateTime, d) }
+    }
+
+    sqlReq.input('offset',   sql.Int, offset)
+    sqlReq.input('pageSize', sql.Int, pageSize)
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+
+    const [entries, typeRows, stepRows] = await Promise.all([
+      sqlReq.query(`
+        SELECT Id, UserEmail, ApplicationId, Step, ErrorType, Message, TechnicalDetail,
+               Url, Action, UserAgent, SessionAgeMinutes, CreatedAt
+        FROM ClientErrorLog ${where}
+        ORDER BY CreatedAt DESC
+        OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
+      `),
+      db.request().query(`
+        SELECT ErrorType, COUNT(*) AS cnt FROM ClientErrorLog
+        WHERE CreatedAt >= DATEADD(hour, -24, GETDATE())
+        GROUP BY ErrorType ORDER BY cnt DESC
+      `),
+      db.request().query(`
+        SELECT Step, COUNT(*) AS cnt FROM ClientErrorLog
+        WHERE CreatedAt >= DATEADD(hour, -24, GETDATE()) AND Step IS NOT NULL
+        GROUP BY Step ORDER BY Step
+      `),
+    ])
+
+    const total24h = typeRows.recordset.reduce((s, r) => s + r.cnt, 0)
+
+    res.json({
+      entries: entries.recordset,
+      summary: { total24h, byType: typeRows.recordset, byStep: stepRows.recordset },
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

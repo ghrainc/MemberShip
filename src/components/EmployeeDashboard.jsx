@@ -6,6 +6,7 @@ import PasswordStrengthChecklist from './PasswordStrengthChecklist'
 import ResendSignatureModal from './ResendSignatureModal'
 import BoardSignersModal from './BoardSignersModal'
 import { isEmployeePasswordValid } from '../utils/passwordValidation'
+import ErrorLogTab from './ErrorLogTab'
 import '../styles/EmployeeDashboard.css'
 
 function getBoardVerifyState(app) {
@@ -98,7 +99,8 @@ function EmployeeDashboard() {
     getEmployees, createEmployeeAccount, resetEmployeePassword, deleteEmployee, updateEmployeeName,
     updateGhraNumber, downloadApplicationPackage, generateAch, getAchBatches, downloadAchBatch,
     archiveApplications, unarchiveApplications,
-    sessionWarning, dismissSessionWarning
+    sessionWarning, dismissSessionWarning,
+    getClientErrorLogs,
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -697,7 +699,7 @@ function EmployeeDashboard() {
     <div className="employee-dashboard-container">
       {sessionWarning && (
         <div className="session-warning-banner" role="alert">
-          <span>Your session will expire in 5 minutes. Please save your work and sign in again to continue.</span>
+          <span>Your session will expire in 15 minutes. Please save your work and sign in again to continue.</span>
           <button type="button" className="session-warning-dismiss" onClick={dismissSessionWarning} aria-label="Dismiss">✕</button>
         </div>
       )}
@@ -750,6 +752,12 @@ function EmployeeDashboard() {
           onClick={() => setActiveTab('achHistory')}
         >
           ACH History
+        </button>
+        <button
+          className={`tab-button${activeTab === 'errorLog' ? ' tab-button--active' : ''}`}
+          onClick={() => setActiveTab('errorLog')}
+        >
+          Error Log
         </button>
       </nav>
 
@@ -1456,6 +1464,11 @@ function EmployeeDashboard() {
             </div>
           )}
           </>}
+
+          {/* ── Error Log tab ─────────────────────────────────────────────── */}
+          {activeTab === 'errorLog' && (
+            <ErrorLogTab getClientErrorLogs={getClientErrorLogs} />
+          )}
 
         </div>
       </main>

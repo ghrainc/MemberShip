@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useContext } from 'react'
 import { AuthContext } from '../context/AuthContext'
+import { logClientError } from '../utils/logClientError'
 import '../styles/MultiFileUploader.css'
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'])
@@ -117,10 +118,13 @@ function MultiFileUploader({
     }
 
     setLocalErrors(errs)
+    if (errs.length) {
+      logClientError({ errorType: 'upload_validation', message: errs[0], action: 'upload_document', applicationId, technicalDetail: { slot: slot.id, errors: errs } })
+    }
     if (!valid.length) return
 
     if (!applicationId) {
-      setLocalErrors(e => [...e, 'Complete a previous step first to save your application before uploading.'])
+      setLocalErrors(e => [...e, "We couldn't save your application. Please sign in again and resume from your dashboard."])
       return
     }
 
@@ -134,6 +138,7 @@ function MultiFileUploader({
         uploaded.push(result)
       } catch (err) {
         uploadErrs.push(`"${file.name}": ${err.message || 'Upload failed'}`)
+        logClientError({ errorType: 'upload_failure', message: err.message || 'Upload failed', action: 'upload_document', applicationId, technicalDetail: { slot: slot.id, fileName: file.name, fileSize: file.size, fileExt: getExt(file.name), error: err.message } })
       }
     }
     if (uploadErrs.length) setLocalErrors(prev => [...prev, ...uploadErrs])

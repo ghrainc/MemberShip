@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import { ghraFuelsApplies } from '../utils/fuelUtils'
 import { normaliseDocuments } from '../utils/documentSlots'
+import { logClientError } from '../utils/logClientError'
+import { ErrorBoundary } from './ErrorBoundary'
 
 const PHONE_FIELDS = new Set(['storePhone', 'faxPhone', 'officePhone', 'storeManagerMobile'])
 const OWNER_PHONE_FIELDS = new Set(['mobilePhone'])
@@ -368,12 +370,14 @@ function formatReviewerName(email) {
 function MembershipForm({ isEmployeeEdit = false }) {
   const { id, step } = useParams()
   const navigate = useNavigate()
-  const { currentUser, saveDraft, saveApplication, getApplicationById, employeeUpdateApplication, uploadDocument, removeDocument } = useContext(AuthContext)
+  const { currentUser, saveDraft, saveApplication, getApplicationById, employeeUpdateApplication, uploadDocument, removeDocument, sessionWarning, dismissSessionWarning, logout } = useContext(AuthContext)
 
   const isNew = id === 'new'
   const currentStep = Math.max(1, Math.min(parseInt(step) || 1, STEPS.length))
 
   const [applicationId, setApplicationId] = useState(isNew ? null : Number(id))
+  // If React state lost the ID (e.g., after a failed first save), recover it from the URL.
+  const effectiveApplicationId = applicationId || (!isNew && Number(id) > 0 ? Number(id) : null)
   const [formData, setFormData] = useState(EMPTY_FORM_DATA)
   const [errors, setErrors] = useState({})
   const [toast, setToast] = useState('')
@@ -436,7 +440,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
 
   const CurrentStepComponent = STEPS[currentStep - 1].component
 
-  const appIdForNav = applicationId || id
+  const appIdForNav = effectiveApplicationId || id
   const baseRoute = isEmployeeEdit
     ? `/employee/application/${appIdForNav}/edit`
     : `/application/${appIdForNav}`
@@ -555,6 +559,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
     if (Object.keys(stepErrors).length > 0) {
       setErrors(stepErrors)
       setToast('Please fill in all required fields before continuing.')
+      logClientError({ errorType: 'validation_block', message: 'Please fill in all required fields before continuing.', action: 'next_step', step: currentStep, applicationId: effectiveApplicationId, technicalDetail: { failedFields: Object.keys(stepErrors) } })
       setTimeout(() => {
         const el = document.querySelector('.input-error, .error-text')
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -565,9 +570,15 @@ function MembershipForm({ isEmployeeEdit = false }) {
     if (currentStep >= STEPS.length) return
 
     if (!isEmployeeEdit) {
-      const savedId = await saveDraft(applicationId, currentStep, formData)
-      const nextAppId = savedId || applicationId
-      if (savedId && !applicationId) setApplicationId(savedId)
+      const result = await saveDraft(effectiveApplicationId, currentStep, formData)
+      if (!result.id && !effectiveApplicationId) {
+        // New application whose first save failed — can't navigate to /null
+        if (result.error) setToast(result.error)
+        logClientError({ errorType: 'blocked_navigation', message: result.error || 'Draft save failed — no application ID', action: 'save_draft', step: currentStep, technicalDetail: { reason: result.error } })
+        return
+      }
+      const nextAppId = result.id || effectiveApplicationId
+      if (result.id && !applicationId) setApplicationId(result.id)
       navigate(`/application/${nextAppId}/step/${currentStep + 1}`, { replace: isNew })
     } else {
       navigate(`/employee/application/${applicationId}/edit/step/${currentStep + 1}`)
@@ -582,7 +593,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
   }
 
   const handleStepClick = (stepId) => {
-    if (!applicationId && !isNew) return
+    if (!effectiveApplicationId && !isNew) return
     navigate(`${baseRoute}/step/${stepId}`)
     window.scrollTo(0, 0)
   }
@@ -604,6 +615,7 @@ function MembershipForm({ isEmployeeEdit = false }) {
     if (firstFailStep !== null) {
       setErrors(firstFailErrors)
       setToast(`Step ${firstFailStep} (${STEPS[firstFailStep - 1].title}) has required fields that must be completed.`)
+      logClientError({ errorType: 'validation_block', message: `Step ${firstFailStep} has required fields that must be completed.`, action: 'submit', step: firstFailStep, applicationId: effectiveApplicationId, technicalDetail: { failedFields: Object.keys(firstFailErrors), failedStep: firstFailStep } })
       if (firstFailStep !== currentStep) {
         scrollAfterNav.current = true
         navigate(`${baseRoute}/step/${firstFailStep}`)
@@ -648,6 +660,15 @@ function MembershipForm({ isEmployeeEdit = false }) {
 
   return (
     <div className="membership-container">
+      {sessionWarning && !isEmployeeEdit && (
+        <div className="session-warning-banner" role="alert">
+          <span>Your session expires in 15 minutes. Your progress is saved — sign in again to continue without interruption.</span>
+          <div className="session-warning-actions">
+            <button type="button" className="session-warning-signin" onClick={logout}>Sign in again</button>
+            <button type="button" className="session-warning-dismiss" onClick={dismissSessionWarning} aria-label="Dismiss">✕</button>
+          </div>
+        </div>
+      )}
       {toast && (
         <div className="validation-toast">
           <span>{toast}</span>
@@ -714,26 +735,28 @@ function MembershipForm({ isEmployeeEdit = false }) {
 
       <form onSubmit={handleSubmit} className="membership-form step-form">
         <div className="step-content">
-          <CurrentStepComponent
-            formData={formData}
-            errors={errors}
-            handleInputChange={handleInputChange}
-            copyStoreToMailing={copyStoreToMailing}
-            handleOwnerChange={handleOwnerChange}
-            addOwner={addOwner}
-            removeOwner={removeOwner}
-            handleCardHolderChange={handleCardHolderChange}
-            addCardHolder={addCardHolder}
-            removeCardHolder={removeCardHolder}
-            handleAchInfoChange={handleAchInfoChange}
-            handleAchToBankMapping={handleAchToBankMapping}
-            handleBankInfoChange={handleBankInfoChange}
-            addBankAccount={addBankAccount}
-            applicationId={applicationId}
-            uploadDocument={uploadDocument}
-            removeDocument={removeDocument}
-            clearError={clearError}
-          />
+          <ErrorBoundary step={currentStep} applicationId={effectiveApplicationId} action="render_step">
+            <CurrentStepComponent
+              formData={formData}
+              errors={errors}
+              handleInputChange={handleInputChange}
+              copyStoreToMailing={copyStoreToMailing}
+              handleOwnerChange={handleOwnerChange}
+              addOwner={addOwner}
+              removeOwner={removeOwner}
+              handleCardHolderChange={handleCardHolderChange}
+              addCardHolder={addCardHolder}
+              removeCardHolder={removeCardHolder}
+              handleAchInfoChange={handleAchInfoChange}
+              handleAchToBankMapping={handleAchToBankMapping}
+              handleBankInfoChange={handleBankInfoChange}
+              addBankAccount={addBankAccount}
+              applicationId={effectiveApplicationId}
+              uploadDocument={uploadDocument}
+              removeDocument={removeDocument}
+              clearError={clearError}
+            />
+          </ErrorBoundary>
         </div>
 
         <div className="form-navigation">

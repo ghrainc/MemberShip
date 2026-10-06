@@ -251,6 +251,56 @@ Actions logged: `submitted`, `approved`, `rejected`, `edited`, `ghra_number_set`
 
 Not logged (too noisy, no diagnostic value): `draft_saved`, `viewed`
 
+### ClientErrorLog
+
+Created by `ensureSchema()` on first boot. Records errors that occur in the member's browser. Employee-only to view. Retention: 90 days (use `server/scripts/pruneClientErrorLog.js`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `Id` | `INT IDENTITY PK` | |
+| `UserEmail` | `NVARCHAR(255) NULL` | Null when signed out; resolved from JWT or client-supplied fallback |
+| `ApplicationId` | `INT NULL` | Which application was open |
+| `Step` | `INT NULL` | Which form step (1–10) |
+| `ErrorType` | `NVARCHAR(50)` | `api_failure`, `auth_failure`, `blocked_navigation`, `validation_block`, `upload_failure`, `upload_validation`, `js_error`, `render_error` |
+| `Message` | `NVARCHAR(1000)` | What the member was shown |
+| `TechnicalDetail` | `NVARCHAR(MAX) NULL` | JSON: status codes, field names, stack traces — sensitive keys redacted |
+| `Url` | `NVARCHAR(500) NULL` | The page URL when the error occurred |
+| `Action` | `NVARCHAR(100) NULL` | What they were doing: `save_draft`, `upload_document`, `submit`, `next_step`, `api_call`, `render_step` |
+| `UserAgent` | `NVARCHAR(500) NULL` | Browser and device string |
+| `SessionAgeMinutes` | `INT NULL` | Minutes since login — identifies session expiry cases |
+| `CreatedAt` | `DATETIME NOT NULL DEFAULT GETDATE()` | |
+
+**What is logged:** 401/403 auth failures (with session age), saveDraft API failures, blocked Next navigation (with field names only, never values), validation blocks on submit, upload validation and upload failures (slot, file size, extension), unhandled JS errors and promise rejections, React render errors in step components.
+
+**What is never logged:** passwords, SSNs, bank account or routing numbers, the JWT itself, full form data values. The `maskObj()` function in `src/utils/logClientError.js` strips any key matching `/password|ssn|social|routing|account|transit|secret|api.?key/i`.
+
+**Logging is always fire-and-forget.** Every call to `logClientError()` is non-awaited. The function wraps all operations in try/catch and the inner `fetch` call uses `.catch(() => {})`. A logging failure is completely invisible to the member.
+
+**Client API routes:**
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `POST` | `/api/logs/client` | optional | Rate-limited (60/min per IP). Accepts logs from signed-in and signed-out sessions. Uses `optionalAuth` middleware — email from JWT if valid, from `clientEmail` body field as fallback. |
+| `GET` | `/api/logs/client` | JWT, employee | Paginated (100/page). Query params: `email`, `errorType`, `step`, `applicationId`, `from` (ISO date), `to` (ISO date), `page`. Returns `{ entries, summary: { total24h, byType, byStep } }`. |
+
+**Pruning:** `node server/scripts/pruneClientErrorLog.js [--dry-run] [--days=N]` — defaults to 90 days.
+
+**Client utility:** `src/utils/logClientError.js` — exports `logClientError({ errorType, message, technicalDetail, url, action, applicationId, step })`. Uses `import.meta.env.VITE_API_BASE_URL` for the API base.
+
+**Error boundary:** `src/components/ErrorBoundary.jsx` — a class component wrapping `<CurrentStepComponent>` in `MembershipForm`. Catches render errors in a step, logs them, and shows a "Try again" + recovery message. The form's `formData` state in the parent is preserved.
+
+**Employee UI:** Error Log tab in `EmployeeDashboard` (after ACH History). Shows last-24h summary chips by type and step, plus a filterable/expandable table. A "Client Errors" collapsed panel also appears on each `ViewApplication` page for per-application errors.
+
+**Manual test checklist:**
+- [ ] **Expired session:** Open form at step 3 with a valid session. Let the JWT expire (or delete `ghra_token` from localStorage). Press Next — the app forces logout with "Your session has expired" message. Check `GET /api/logs/client` — an `auth_failure` row appears with `ErrorType=auth_failure`, `Action=api_call`, `SessionAgeMinutes` set.
+- [ ] **MustChangePassword 403:** Reset a member's password as an employee. Log in as that member. The change-password page appears. Press Next on a step form first (any API call before changing password). Check the log — `auth_failure` row with `Message=Password change required`.
+- [ ] **Failed upload:** Try to upload a .heic or oversized file in step 9. An `upload_validation` row appears with the slot id and the error message.
+- [ ] **Network upload failure:** While uploading, disconnect or kill the server. An `upload_failure` row appears with the file name and error.
+- [ ] **Render error:** Temporarily throw in a step component render. The ErrorBoundary fallback appears ("Something went wrong") and the form navigation buttons still work. A `render_error` row appears with the component stack.
+- [ ] **Broken log endpoint:** Change `API_BASE` in `src/utils/logClientError.js` to `http://localhost:9999`. Start the app. Save a draft, upload a file, submit. All operations complete normally — logging failures are invisible.
+- [ ] **Summary spike:** Generate 10+ errors of mixed types. Open Error Log tab — summary chips show correct counts grouped by type and step.
+- [ ] **Per-app errors:** Open a ViewApplication as employee, expand "Client Errors" — shows only errors for that application ID.
+
 ### Password reset (manual)
 ```bash
 node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('NewPass123', 10).then(h => console.log(h))"
@@ -463,7 +513,7 @@ Every outbound DS SDK call and every inbound webhook event is logged to the `DsE
 
 `src/context/AuthContext.jsx` is the central store. It holds the authenticated user, JWT token, and all API call functions. All API calls attach `Authorization: Bearer <token>` automatically.
 
-Context value keys: `isAuthenticated`, `currentUser`, `error`, `login`, `signup`, `employeeLogin`, `logout`, `saveDraft`, `saveApplication`, `getUserApplications`, `getApplicationById`, `getAllApplications`, `updateApplicationStatus`, `updateBoardSigners`, `employeeUpdateApplication`, `getLastBoardSigners`, `syncSignatureStatuses`, `getSignatureStatus`, `resendSignature`, `sendReferencesRequest`, `getDsEvents`, `getAuditLog`, `changePassword`, `createMember`, `uploadDocument`, `removeDocument`, `openDocument`, `testDropboxSign`, `createMemberAccount`, `resetMemberPassword`, `getMembers`, `deleteMember`, `deleteEmployee`, `getEmployees`, `createEmployeeAccount`, `resetEmployeePassword`, `updateEmployeeName`
+Context value keys: `isAuthenticated`, `currentUser`, `error`, `login`, `signup`, `employeeLogin`, `logout`, `saveDraft`, `saveApplication`, `getUserApplications`, `getApplicationById`, `getAllApplications`, `updateApplicationStatus`, `updateBoardSigners`, `employeeUpdateApplication`, `getLastBoardSigners`, `syncSignatureStatuses`, `getSignatureStatus`, `resendSignature`, `sendReferencesRequest`, `getDsEvents`, `getAuditLog`, `changePassword`, `createMember`, `uploadDocument`, `removeDocument`, `openDocument`, `testDropboxSign`, `createMemberAccount`, `resetMemberPassword`, `getMembers`, `deleteMember`, `deleteEmployee`, `getEmployees`, `createEmployeeAccount`, `resetEmployeePassword`, `updateEmployeeName`, `getClientErrorLogs`
 
 `resolveDocumentUrl(storedUrl)` is exported as a standalone helper; it converts a stored `/uploads/<appId>/<file>` path to the authenticated `/api/documents/<appId>/<file>` endpoint on the correct host.
 

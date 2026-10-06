@@ -1,9 +1,11 @@
 import { createContext, useState, useCallback, useEffect, useRef } from 'react'
+import { logClientError } from '../utils/logClientError'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN =     import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN =  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
+const SESSION_EXPIRED_MSG = 'Your session has expired. Please sign in again — your progress has been saved.'
 
 // Converts a stored document path (/uploads/{appId}/{file}) to the authenticated
 // API endpoint URL (/api/documents/{appId}/{file}) on the correct host.
@@ -57,11 +59,48 @@ export const AuthProvider = ({ children }) => {
 
   const warningTimerRef = useRef(null)
   const logoutTimerRef  = useRef(null)
+  const forceLogoutRef  = useRef(null)
 
   const clearTimers = useCallback(() => {
     if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null }
     if (logoutTimerRef.current)  { clearTimeout(logoutTimerRef.current);  logoutTimerRef.current  = null }
   }, [])
+
+  // Central handler: call this when any API returns 401.
+  const forceLogout = useCallback((msg = SESSION_EXPIRED_MSG) => {
+    setIsAuthenticated(false)
+    setCurrentUser(null)
+    setToken(null)
+    clearAuthFromStorage()
+    clearTimers()
+    setSessionWarning(false)
+    setSessionExpiredMessage(msg)
+  }, [clearTimers])
+
+  // Keep refs current so authFetch can call these without dep-array cycles.
+  useEffect(() => { forceLogoutRef.current = forceLogout }, [forceLogout])
+
+  // Replaces fetch() for all authenticated calls.
+  // 401 → forceLogout (session expired).
+  // 403 "Password change required" → forceLogout with an explanatory message.
+  const authFetch = useCallback((url, options) =>
+    fetch(url, options).then(async res => {
+      if (res.status === 401) {
+        logClientError({ errorType: 'auth_failure', message: SESSION_EXPIRED_MSG, action: 'api_call', technicalDetail: { status: 401, endpoint: url } })
+        forceLogoutRef.current()
+        throw Object.assign(new Error('Session expired'), { status: 401 })
+      }
+      if (res.status === 403) {
+        const body = await res.clone().json().catch(() => ({}))
+        if (body.error === 'Password change required') {
+          logClientError({ errorType: 'auth_failure', message: 'Password change required', action: 'api_call', technicalDetail: { status: 403, endpoint: url } })
+          forceLogoutRef.current('Password change required. Please sign in again.')
+          throw Object.assign(new Error('Password change required'), { status: 403 })
+        }
+      }
+      return res
+    })
+  , []) // stable — only closes over refs, not state
 
   // Called whenever we have a new token — arms the warning + auto-logout timers.
   const armExpiryTimers = useCallback((tok) => {
@@ -71,7 +110,7 @@ export const AuthProvider = ({ children }) => {
     if (!exp) return
     const now    = Math.floor(Date.now() / 1000)
     const ttl    = exp - now          // seconds until expiry
-    const warnIn = (ttl - 300) * 1000 // 5 min before (ms)
+    const warnIn = (ttl - 900) * 1000 // 15 min before (ms)
     const outIn  = ttl * 1000
 
     if (warnIn > 0) {
@@ -85,7 +124,7 @@ export const AuthProvider = ({ children }) => {
         clearAuthFromStorage()
         clearTimers()
         setSessionWarning(false)
-        setSessionExpiredMessage('Your session has expired. Please sign in again.')
+        setSessionExpiredMessage(SESSION_EXPIRED_MSG)
       }, outIn)
     }
   }, [clearTimers])
@@ -102,24 +141,13 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(false)
         setCurrentUser(null)
         setToken(null)
-        setSessionExpiredMessage('Your session has expired. Please sign in again.')
+        setSessionExpiredMessage(SESSION_EXPIRED_MSG)
       } else {
         armExpiryTimers(stored)
       }
     }
     return () => clearTimers()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Central handler: call this when any API returns 401.
-  const forceLogout = useCallback((msg = 'Your session has expired. Please sign in again.') => {
-    setIsAuthenticated(false)
-    setCurrentUser(null)
-    setToken(null)
-    clearAuthFromStorage()
-    clearTimers()
-    setSessionWarning(false)
-    setSessionExpiredMessage(msg)
-  }, [clearTimers])
 
   const dismissSessionWarning = useCallback(() => setSessionWarning(false), [])
   const clearSessionExpiredMessage = useCallback(() => setSessionExpiredMessage(''), [])
@@ -224,25 +252,34 @@ export const AuthProvider = ({ children }) => {
     clearTimers()
   }, [clearTimers])
 
+  // Returns { id: number|null, error: string|null }
+  // error is null on 401 (forceLogout already triggered) so the caller shows no additional message.
   const saveDraft = useCallback(async (applicationId, currentStep, formData) => {
-    if (!token) return null
+    if (!token) return { id: null, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/draft`, {
+      const res = await authFetch(`${API}/applications/draft`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ applicationId, currentStep, formData })
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        logClientError({ errorType: 'api_failure', message: data.error || `Server error ${res.status}`, action: 'save_draft', technicalDetail: { status: res.status } })
+        return { id: null, error: data.error || `Server error ${res.status}` }
+      }
       const data = await res.json()
-      return data.applicationId || null
-    } catch {
-      return null
+      return { id: data.applicationId || null, error: null }
+    } catch (err) {
+      if (err.status === 401) return { id: null, error: null }
+      logClientError({ errorType: 'api_failure', message: 'Unable to connect to server', action: 'save_draft', technicalDetail: { code: err.code, message: err.message } })
+      return { id: null, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const saveApplication = useCallback(async (applicationId, formData) => {
     if (!token) return null
     try {
-      const res = await fetch(`${API}/applications/submit`, {
+      const res = await authFetch(`${API}/applications/submit`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ applicationId, formData })
@@ -252,38 +289,38 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return null
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getUserApplications = useCallback(async () => {
     if (!token) return []
     try {
-      const res = await fetch(`${API}/applications/my`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/applications/my`, { headers: authHeaders(token) })
       return res.ok ? await res.json() : []
     } catch {
       return []
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getApplicationById = useCallback(async (id) => {
     if (!token) return null
     try {
-      const res = await fetch(`${API}/applications/${id}`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/applications/${id}`, { headers: authHeaders(token) })
       return res.ok ? await res.json() : null
     } catch {
       return null
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getAllApplications = useCallback(async () => {
     if (!token) return null
     try {
-      const res = await fetch(`${API}/applications/all`, { headers: authHeaders(token) })
-      if (res.status === 401 || res.status === 403) { forceLogout(); return null }
+      const res = await authFetch(`${API}/applications/all`, { headers: authHeaders(token) })
+      if (res.status === 403) return null
       return res.ok ? await res.json() : null
     } catch {
       return null
     }
-  }, [token, forceLogout])
+  }, [token, authFetch])
 
   // Fetches a document with the auth token and opens it in a new tab as a blob URL.
   const openDocument = useCallback(async (storedUrl) => {
@@ -291,14 +328,14 @@ export const AuthProvider = ({ children }) => {
     const url = resolveDocumentUrl(storedUrl)
     if (!url) return
     try {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await authFetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return
       const blob = await res.blob()
       const blobUrl = URL.createObjectURL(blob)
       window.open(blobUrl, '_blank', 'noopener,noreferrer')
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
     } catch {}
-  }, [token])
+  }, [token, authFetch])
 
   // Returns a blob URL for the given stored doc URL. Caller must revoke when done.
   const fetchDocumentBlobUrl = useCallback(async (storedUrl) => {
@@ -306,18 +343,18 @@ export const AuthProvider = ({ children }) => {
     const url = resolveDocumentUrl(storedUrl)
     if (!url) return null
     try {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await authFetch(url, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return null
       const blob = await res.blob()
       return URL.createObjectURL(blob)
     } catch { return null }
-  }, [token])
+  }, [token, authFetch])
 
   // Downloads all uploaded documents for an application as a ZIP file.
   const downloadAllDocuments = useCallback(async (applicationId, storeName) => {
     if (!token) return
     try {
-      const res = await fetch(`${API}/documents/${applicationId}/download-all`, {
+      const res = await authFetch(`${API}/documents/${applicationId}/download-all`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) return
@@ -331,12 +368,12 @@ export const AuthProvider = ({ children }) => {
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
     } catch {}
-  }, [token])
+  }, [token, authFetch])
 
   const downloadApplicationPackage = useCallback(async (applicationId) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${applicationId}/package`, {
+      const res = await authFetch(`${API}/applications/${applicationId}/package`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) {
@@ -357,12 +394,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const generateAch = useCallback(async (applicationIds) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/ach/generate`, {
+      const res = await authFetch(`${API}/ach/generate`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ applicationIds })
@@ -387,23 +424,23 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getAchBatches = useCallback(async () => {
     if (!token) return []
     try {
-      const res = await fetch(`${API}/ach/batches`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await authFetch(`${API}/ach/batches`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) return []
       return await res.json()
     } catch {
       return []
     }
-  }, [token])
+  }, [token, authFetch])
 
   const downloadAchBatch = useCallback(async (batchId) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/ach/batches/${batchId}/file`, {
+      const res = await authFetch(`${API}/ach/batches/${batchId}/file`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) {
@@ -422,13 +459,13 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   // Downloads the combined PDF for all files in a document slot.
   const downloadCombinedPdf = useCallback(async (applicationId, slotId) => {
     if (!token) return
     try {
-      const res = await fetch(`${API}/documents/${applicationId}/combined/${slotId}`, {
+      const res = await authFetch(`${API}/documents/${applicationId}/combined/${slotId}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (!res.ok) return
@@ -440,19 +477,19 @@ export const AuthProvider = ({ children }) => {
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 5000)
     } catch {}
-  }, [token])
+  }, [token, authFetch])
 
   const removeDocument = useCallback(async (applicationId, docId) => {
     if (!token) return
     try {
-      await fetch(`${API}/documents/${applicationId}/${docId}`, {
+      await authFetch(`${API}/documents/${applicationId}/${docId}`, {
         method: 'DELETE',
         headers: authHeaders(token)
       })
     } catch {
       // best-effort — ignore errors
     }
-  }, [token])
+  }, [token, authFetch])
 
   const uploadDocument = useCallback(async (applicationId, docId, file) => {
     if (!token) throw new Error('Not authenticated')
@@ -460,7 +497,7 @@ export const AuthProvider = ({ children }) => {
     body.append('file', file)
     body.append('applicationId', applicationId)
     body.append('docId', docId)
-    const res = await fetch(`${API}/documents/upload`, {
+    const res = await authFetch(`${API}/documents/upload`, {
       method: 'POST',
       headers: authHeadersMultipart(token),
       body
@@ -468,12 +505,12 @@ export const AuthProvider = ({ children }) => {
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Upload failed')
     return data // { filename, originalName, url }
-  }, [token])
+  }, [token, authFetch])
 
   const updateApplicationStatus = useCallback(async (appId, status, notes = '', boardSigners = null) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${appId}/status`, {
+      const res = await authFetch(`${API}/applications/${appId}/status`, {
         method: 'PATCH',
         headers: authHeaders(token),
         body: JSON.stringify({ status, notes, boardSigners })
@@ -484,12 +521,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const updateGhraNumber = useCallback(async (appId, payload) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${appId}/ghra-number`, {
+      const res = await authFetch(`${API}/applications/${appId}/ghra-number`, {
         method: 'PATCH',
         headers: authHeaders(token),
         body: JSON.stringify(payload)
@@ -500,12 +537,12 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       return { success: false, error: err.message }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const updateBoardSigners = useCallback(async (appId, verification, approved, membershipAdmin) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${appId}/board-signers`, {
+      const res = await authFetch(`${API}/applications/${appId}/board-signers`, {
         method: 'PATCH',
         headers: authHeaders(token),
         body: JSON.stringify({ verification, approved, membershipAdmin })
@@ -516,31 +553,31 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getLastBoardSigners = useCallback(async () => {
     if (!token) return null
     try {
-      const res = await fetch(`${API}/applications/last-board-signers`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/applications/last-board-signers`, { headers: authHeaders(token) })
       if (!res.ok) return null
       return await res.json()
     } catch { return null }
-  }, [token])
+  }, [token, authFetch])
 
   const syncSignatureStatuses = useCallback(async () => {
     if (!token) return
     try {
-      await fetch(`${API}/applications/sync-statuses`, {
+      await authFetch(`${API}/applications/sync-statuses`, {
         method: 'POST',
         headers: authHeaders(token)
       })
     } catch {}
-  }, [token])
+  }, [token, authFetch])
 
   const getSignatureStatus = useCallback(async (appId) => {
     if (!token) return null
     try {
-      const res = await fetch(`${API}/applications/${appId}/signature-status`, {
+      const res = await authFetch(`${API}/applications/${appId}/signature-status`, {
         headers: authHeaders(token)
       })
       if (!res.ok) return null
@@ -548,12 +585,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return null
     }
-  }, [token])
+  }, [token, authFetch])
 
   const resendSignature = useCallback(async (appId, target, email = '') => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${appId}/resend/${target}`, {
+      const res = await authFetch(`${API}/applications/${appId}/resend/${target}`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ email })
@@ -564,12 +601,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const sendReferencesRequest = useCallback(async (appId, reference1Email, reference2Email) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/applications/${appId}/send-references`, {
+      const res = await authFetch(`${API}/applications/${appId}/send-references`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ reference1Email, reference2Email })
@@ -580,35 +617,35 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getDsEvents = useCallback(async (appId) => {
     if (!token) return { events: [] }
     try {
       const params = appId ? `?applicationId=${encodeURIComponent(appId)}` : ''
-      const res = await fetch(`${API}/ds-events${params}`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/ds-events${params}`, { headers: authHeaders(token) })
       if (!res.ok) return { events: [] }
       return await res.json()
     } catch {
       return { events: [] }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getAuditLog = useCallback(async (appId) => {
     if (!token) return { entries: [] }
     try {
-      const res = await fetch(`${API}/applications/${appId}/audit`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/applications/${appId}/audit`, { headers: authHeaders(token) })
       if (!res.ok) return { entries: [] }
       return await res.json()
     } catch {
       return { entries: [] }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const employeeUpdateApplication = useCallback(async (appId, formData) => {
     if (!token) return false
     try {
-      const res = await fetch(`${API}/applications/${appId}`, {
+      const res = await authFetch(`${API}/applications/${appId}`, {
         method: 'PUT',
         headers: authHeaders(token),
         body: JSON.stringify({ formData })
@@ -617,33 +654,35 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return false
     }
-  }, [token])
+  }, [token, authFetch])
 
   const changePassword = useCallback(async (newPassword) => {
     if (!token) return 'Not authenticated'
     try {
-      const res = await fetch(`${API}/auth/change-password`, {
+      const res = await authFetch(`${API}/auth/change-password`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ newPassword })
       })
       const data = await res.json()
       if (!res.ok) return data.error || 'Failed to change password'
+      const newToken = data.token || token
+      setToken(newToken)
       setCurrentUser(prev => {
-        if (!prev) return prev
-        const updated = { ...prev, mustChangePassword: false }
-        saveAuthToStorage(token, updated)
+        const updated = { ...(prev || {}), mustChangePassword: false }
+        saveAuthToStorage(newToken, updated)
         return updated
       })
+      armExpiryTimers(newToken)
       return true
     } catch {
       return 'Unable to connect to server'
     }
-  }, [token])
+  }, [token, authFetch, armExpiryTimers])
 
   const testDropboxSign = useCallback(async (signerEmail, signerName) => {
     try {
-      const res = await fetch(`${API}/test/dropbox-sign`, {
+      const res = await authFetch(`${API}/test/dropbox-sign`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ signerEmail, signerName })
@@ -654,12 +693,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const createMemberAccount = useCallback(async (email, password, firstName = '', lastName = '') => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/members`, {
+      const res = await authFetch(`${API}/employees/members`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ email, password, firstName, lastName })
@@ -670,12 +709,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const resetMemberPassword = useCallback(async (memberId, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/members/${memberId}/reset-password`, {
+      const res = await authFetch(`${API}/employees/members/${memberId}/reset-password`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ password })
@@ -686,20 +725,20 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const getMembers = useCallback(async () => {
     if (!token) return []
     try {
-      const res = await fetch(`${API}/employees/members`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/employees/members`, { headers: authHeaders(token) })
       return res.ok ? await res.json() : []
     } catch { return [] }
-  }, [token])
+  }, [token, authFetch])
 
   const deleteMember = useCallback(async (id) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/members/${id}`, {
+      const res = await authFetch(`${API}/employees/members/${id}`, {
         method: 'DELETE',
         headers: authHeaders(token)
       })
@@ -707,12 +746,12 @@ export const AuthProvider = ({ children }) => {
       if (!res.ok) return { success: false, error: data.error || 'Failed to delete member' }
       return { success: true }
     } catch { return { success: false, error: 'Unable to connect to server' } }
-  }, [token])
+  }, [token, authFetch])
 
   const deleteEmployee = useCallback(async (id) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/${id}`, {
+      const res = await authFetch(`${API}/employees/${id}`, {
         method: 'DELETE',
         headers: authHeaders(token)
       })
@@ -720,22 +759,22 @@ export const AuthProvider = ({ children }) => {
       if (!res.ok) return { success: false, error: data.error || 'Failed to delete employee' }
       return { success: true }
     } catch { return { success: false, error: 'Unable to connect to server' } }
-  }, [token])
+  }, [token, authFetch])
 
   const getEmployees = useCallback(async () => {
     if (!token) return []
     try {
-      const res = await fetch(`${API}/employees`, { headers: authHeaders(token) })
+      const res = await authFetch(`${API}/employees`, { headers: authHeaders(token) })
       return res.ok ? await res.json() : []
     } catch {
       return []
     }
-  }, [token])
+  }, [token, authFetch])
 
   const createEmployeeAccount = useCallback(async (email, password, firstName, lastName) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees`, {
+      const res = await authFetch(`${API}/employees`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ email, password, firstName, lastName })
@@ -746,12 +785,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const resetEmployeePassword = useCallback(async (employeeId, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/${employeeId}/reset-password`, {
+      const res = await authFetch(`${API}/employees/${employeeId}/reset-password`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ password })
@@ -762,12 +801,12 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const updateEmployeeName = useCallback(async (employeeId, firstName, lastName) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/employees/${employeeId}/name`, {
+      const res = await authFetch(`${API}/employees/${employeeId}/name`, {
         method: 'PATCH',
         headers: authHeaders(token),
         body: JSON.stringify({ firstName, lastName })
@@ -781,14 +820,14 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       return { success: false, error: err?.message || 'Network error — could not reach server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const archiveApplications = useCallback(async (applicationIds) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
-      const res = await fetch(`${API}/applications/archive`, {
+      const res = await authFetch(`${API}/applications/archive`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ applicationIds }),
@@ -802,14 +841,14 @@ export const AuthProvider = ({ children }) => {
       if (err.name === 'AbortError') return { success: false, error: 'Request timed out — please try again' }
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   const unarchiveApplications = useCallback(async (applicationIds) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
-      const res = await fetch(`${API}/applications/unarchive`, {
+      const res = await authFetch(`${API}/applications/unarchive`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ applicationIds }),
@@ -823,12 +862,27 @@ export const AuthProvider = ({ children }) => {
       if (err.name === 'AbortError') return { success: false, error: 'Request timed out — please try again' }
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
+
+  const getClientErrorLogs = useCallback(async (params = {}) => {
+    if (!token) return { entries: [], summary: null }
+    try {
+      const qs = new URLSearchParams()
+      for (const [k, v] of Object.entries(params)) {
+        if (v != null && v !== '') qs.set(k, String(v))
+      }
+      const res = await authFetch(`${API}/logs/client?${qs}`, { headers: authHeaders(token) })
+      if (!res.ok) return { entries: [], summary: null }
+      return await res.json()
+    } catch {
+      return { entries: [], summary: null }
+    }
+  }, [token, authFetch])
 
   const createMember = useCallback(async (email, password) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
-      const res = await fetch(`${API}/auth/create-member`, {
+      const res = await authFetch(`${API}/auth/create-member`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ email, password })
@@ -839,7 +893,7 @@ export const AuthProvider = ({ children }) => {
     } catch {
       return { success: false, error: 'Unable to connect to server' }
     }
-  }, [token])
+  }, [token, authFetch])
 
   return (
     <AuthContext.Provider value={{
@@ -894,7 +948,8 @@ export const AuthProvider = ({ children }) => {
       getEmployees,
       createEmployeeAccount,
       resetEmployeePassword,
-      updateEmployeeName
+      updateEmployeeName,
+      getClientErrorLogs
     }}>
       {children}
     </AuthContext.Provider>
