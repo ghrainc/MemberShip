@@ -8,6 +8,7 @@ import BoardSignersModal from './BoardSignersModal'
 import EmailSettings from './settings/EmailSettings'
 import ManagerSettings from './settings/ManagerSettings'
 import { isEmployeePasswordValid } from '../utils/passwordValidation'
+import EmployeeAppGrid from './EmployeeAppGrid'
 import '../styles/EmployeeDashboard.css'
 
 function getBoardVerifyState(app) {
@@ -312,20 +313,10 @@ function EmployeeDashboard() {
   // Warehouse Applications tab
   const [warehouseApps, setWarehouseApps] = useState([])
   const [warehouseAppsLoading, setWarehouseAppsLoading] = useState(false)
-  const [warehouseReviewId, setWarehouseReviewId] = useState(null)
-  const [warehouseStatus, setWarehouseStatus] = useState('')
-  const [warehouseNotes, setWarehouseNotes] = useState('')
-  const [warehouseActionLoading, setWarehouseActionLoading] = useState(false)
-  const [warehouseActionMsg, setWarehouseActionMsg] = useState('')
 
   // Fuels Applications tab
   const [fuelsApps, setFuelsApps] = useState([])
   const [fuelsAppsLoading, setFuelsAppsLoading] = useState(false)
-  const [fuelsReviewId, setFuelsReviewId] = useState(null)
-  const [fuelsStatus, setFuelsStatus] = useState('')
-  const [fuelsNotes, setFuelsNotes] = useState('')
-  const [fuelsActionLoading, setFuelsActionLoading] = useState(false)
-  const [fuelsActionMsg, setFuelsActionMsg] = useState('')
 
   // Create employee (in Employee Accounts tab)
   const [newEmployeeFirstName, setNewEmployeeFirstName] = useState('')
@@ -1644,318 +1635,28 @@ function EmployeeDashboard() {
           </>}
 
           {/* ── Warehouse Applications tab ────────────────────────────────── */}
-          {activeTab === 'warehouse' && <>
-          <div className="content-header">
-            <h2>Warehouse Applications</h2>
-            <div className="content-header-right">
-              <p className="application-count">
-                {warehouseAppsLoading ? 'Loading...' : `${warehouseApps.length} application${warehouseApps.length !== 1 ? 's' : ''}`}
-              </p>
-              <button className="refresh-button" onClick={loadWarehouseApps} disabled={warehouseAppsLoading}>
-                {warehouseAppsLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-
-          {warehouseAppsLoading ? (
-            <p style={{ color: '#6c757d', padding: '20px 0' }}>Loading...</p>
-          ) : warehouseApps.length === 0 ? (
-            <p style={{ color: '#6c757d', padding: '20px 0' }}>No warehouse applications found.</p>
-          ) : (
-            <div className="table-container">
-              <table className="applications-table">
-                <thead>
-                  <tr>
-                    <th><span className="th-label">ID</span></th>
-                    <th><span className="th-label">Applicant</span></th>
-                    <th><span className="th-label">Status</span></th>
-                    <th><span className="th-label">Submitted</span></th>
-                    <th className="action-column"><span className="th-label">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {warehouseApps.map(app => (
-                    <React.Fragment key={app.Id}>
-                    <tr>
-                      <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{app.Id}</td>
-                      <td className="email-cell">{app.UserEmail}</td>
-                      <td>
-                        <span className={`status-badge status-${app.Status}`}>
-                          {app.Status ? app.Status.charAt(0).toUpperCase() + app.Status.slice(1).replace(/_/g, ' ') : '—'}
-                        </span>
-                      </td>
-                      <td>{app.SubmittedAt ? new Date(app.SubmittedAt).toLocaleDateString() : <span style={{ color: '#aaa' }}>—</span>}</td>
-                      <td className="action-cell">
-                        {app.Status === 'submitted' && (
-                          <button
-                            className="reset-pwd-button"
-                            onClick={() => {
-                              if (warehouseReviewId === app.Id) {
-                                setWarehouseReviewId(null)
-                                setWarehouseStatus('')
-                                setWarehouseNotes('')
-                                setWarehouseActionMsg('')
-                              } else {
-                                setWarehouseReviewId(app.Id)
-                                setWarehouseStatus('')
-                                setWarehouseNotes('')
-                                setWarehouseActionMsg('')
-                              }
-                            }}
-                          >
-                            Review
-                          </button>
-                        )}
-                        {app.ReviewedBy && (
-                          <span style={{ fontSize: 12, color: '#6c757d' }}>
-                            {app.ReviewedBy}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                    {warehouseReviewId === app.Id && (
-                      <tr>
-                        <td colSpan={5} style={{ background: '#f8f9fa', padding: '12px 16px', borderBottom: '1px solid #dee2e6' }}>
-                          <div style={{ maxWidth: 480 }}>
-                            <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 10px', color: '#343a40' }}>Review Application #{app.Id}</p>
-                            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
-                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                                <input
-                                  type="radio"
-                                  name={`wh-status-${app.Id}`}
-                                  value="approved"
-                                  checked={warehouseStatus === 'approved'}
-                                  onChange={() => setWarehouseStatus('approved')}
-                                />
-                                Approve
-                              </label>
-                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                                <input
-                                  type="radio"
-                                  name={`wh-status-${app.Id}`}
-                                  value="rejected"
-                                  checked={warehouseStatus === 'rejected'}
-                                  onChange={() => setWarehouseStatus('rejected')}
-                                />
-                                Reject
-                              </label>
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 10 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
-                              <textarea
-                                value={warehouseNotes}
-                                onChange={(e) => setWarehouseNotes(e.target.value)}
-                                rows={2}
-                                style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4, resize: 'vertical', boxSizing: 'border-box' }}
-                                placeholder="Add notes..."
-                              />
-                            </div>
-                            {warehouseActionMsg && (
-                              <div style={{ fontSize: 12, marginBottom: 8, padding: '4px 10px', borderRadius: 3, background: warehouseActionMsg.startsWith('Error') ? '#f8d7da' : '#d4edda', color: warehouseActionMsg.startsWith('Error') ? '#721c24' : '#155724', border: `1px solid ${warehouseActionMsg.startsWith('Error') ? '#f5c6cb' : '#c3e6cb'}` }}>
-                                {warehouseActionMsg}
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button
-                                className="modal-submit-button"
-                                disabled={warehouseActionLoading || !warehouseStatus}
-                                onClick={async () => {
-                                  setWarehouseActionLoading(true)
-                                  setWarehouseActionMsg('')
-                                  const result = await updateWarehouseStatus(app.Id, warehouseStatus, warehouseNotes)
-                                  if (result?.error) {
-                                    setWarehouseActionMsg('Error: ' + result.error)
-                                  } else {
-                                    setWarehouseActionMsg('Review submitted.')
-                                    setWarehouseReviewId(null)
-                                    setWarehouseStatus('')
-                                    setWarehouseNotes('')
-                                    await loadWarehouseApps()
-                                  }
-                                  setWarehouseActionLoading(false)
-                                }}
-                                style={{ fontSize: 13, padding: '4px 16px' }}
-                              >
-                                {warehouseActionLoading ? 'Submitting...' : 'Submit Review'}
-                              </button>
-                              <button
-                                className="delete-button"
-                                onClick={() => { setWarehouseReviewId(null); setWarehouseStatus(''); setWarehouseNotes(''); setWarehouseActionMsg('') }}
-                                style={{ fontSize: 13, padding: '4px 12px', background: '#6c757d' }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {activeTab === 'warehouse' && (
+            <EmployeeAppGrid
+              apps={warehouseApps}
+              loading={warehouseAppsLoading}
+              title="Warehouse Applications"
+              onRefresh={loadWarehouseApps}
+              onView={(id) => navigate(`/employee/warehouse/${id}`)}
+              onReview={(id, status, notes) => updateWarehouseStatus(id, status, notes)}
+            />
           )}
-          </>}
 
           {/* ── Fuels Applications tab ───────────────────────────────────── */}
-          {activeTab === 'fuels' && <>
-          <div className="content-header">
-            <h2>Fuels Credit Applications</h2>
-            <div className="content-header-right">
-              <p className="application-count">
-                {fuelsAppsLoading ? 'Loading...' : `${fuelsApps.length} application${fuelsApps.length !== 1 ? 's' : ''}`}
-              </p>
-              <button className="refresh-button" onClick={loadFuelsApps} disabled={fuelsAppsLoading}>
-                {fuelsAppsLoading ? 'Loading...' : 'Refresh'}
-              </button>
-            </div>
-          </div>
-
-          {fuelsAppsLoading ? (
-            <p style={{ color: '#6c757d', padding: '20px 0' }}>Loading...</p>
-          ) : fuelsApps.length === 0 ? (
-            <p style={{ color: '#6c757d', padding: '20px 0' }}>No fuels applications found.</p>
-          ) : (
-            <div className="table-container">
-              <table className="applications-table">
-                <thead>
-                  <tr>
-                    <th><span className="th-label">ID</span></th>
-                    <th><span className="th-label">Applicant</span></th>
-                    <th><span className="th-label">Status</span></th>
-                    <th><span className="th-label">Submitted</span></th>
-                    <th className="action-column"><span className="th-label">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {fuelsApps.map(app => (
-                    <React.Fragment key={app.Id}>
-                    <tr>
-                      <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{app.Id}</td>
-                      <td className="email-cell">{app.UserEmail}</td>
-                      <td>
-                        <span className={`status-badge status-${app.Status}`}>
-                          {app.Status ? app.Status.charAt(0).toUpperCase() + app.Status.slice(1).replace(/_/g, ' ') : '—'}
-                        </span>
-                      </td>
-                      <td>{app.SubmittedAt ? new Date(app.SubmittedAt).toLocaleDateString() : <span style={{ color: '#aaa' }}>—</span>}</td>
-                      <td className="action-cell">
-                        <button className="view-button"
-                          onClick={() => navigate(`/employee/fuels/${app.Id}`)}>
-                          View
-                        </button>
-                        {app.Status === 'submitted' && (
-                          <button
-                            className="reset-pwd-button"
-                            onClick={() => {
-                              if (fuelsReviewId === app.Id) {
-                                setFuelsReviewId(null)
-                                setFuelsStatus('')
-                                setFuelsNotes('')
-                                setFuelsActionMsg('')
-                              } else {
-                                setFuelsReviewId(app.Id)
-                                setFuelsStatus('')
-                                setFuelsNotes('')
-                                setFuelsActionMsg('')
-                              }
-                            }}
-                          >
-                            Review
-                          </button>
-                        )}
-                        {app.ReviewedBy && (
-                          <span style={{ fontSize: 12, color: '#6c757d' }}>
-                            {app.ReviewedBy}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                    {fuelsReviewId === app.Id && (
-                      <tr>
-                        <td colSpan={5} style={{ background: '#f8f9fa', padding: '12px 16px', borderBottom: '1px solid #dee2e6' }}>
-                          <div style={{ maxWidth: 480 }}>
-                            <p style={{ fontWeight: 600, fontSize: 13, margin: '0 0 10px', color: '#343a40' }}>Review Application #{app.Id}</p>
-                            <div style={{ display: 'flex', gap: 20, marginBottom: 10 }}>
-                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                                <input
-                                  type="radio"
-                                  name={`fuels-status-${app.Id}`}
-                                  value="approved"
-                                  checked={fuelsStatus === 'approved'}
-                                  onChange={() => setFuelsStatus('approved')}
-                                />
-                                Approve
-                              </label>
-                              <label style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-                                <input
-                                  type="radio"
-                                  name={`fuels-status-${app.Id}`}
-                                  value="rejected"
-                                  checked={fuelsStatus === 'rejected'}
-                                  onChange={() => setFuelsStatus('rejected')}
-                                />
-                                Reject
-                              </label>
-                            </div>
-                            <div className="form-group" style={{ marginBottom: 10 }}>
-                              <label style={{ fontSize: 12, fontWeight: 600 }}>Notes (optional)</label>
-                              <textarea
-                                value={fuelsNotes}
-                                onChange={(e) => setFuelsNotes(e.target.value)}
-                                rows={2}
-                                style={{ width: '100%', padding: '6px 8px', fontSize: 13, border: '1px solid #ced4da', borderRadius: 4, resize: 'vertical', boxSizing: 'border-box' }}
-                                placeholder="Add notes..."
-                              />
-                            </div>
-                            {fuelsActionMsg && (
-                              <div style={{ fontSize: 12, marginBottom: 8, padding: '4px 10px', borderRadius: 3, background: fuelsActionMsg.startsWith('Error') ? '#f8d7da' : '#d4edda', color: fuelsActionMsg.startsWith('Error') ? '#721c24' : '#155724', border: `1px solid ${fuelsActionMsg.startsWith('Error') ? '#f5c6cb' : '#c3e6cb'}` }}>
-                                {fuelsActionMsg}
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button
-                                className="modal-submit-button"
-                                disabled={fuelsActionLoading || !fuelsStatus}
-                                onClick={async () => {
-                                  setFuelsActionLoading(true)
-                                  setFuelsActionMsg('')
-                                  const result = await updateFuelsStatus(app.Id, fuelsStatus, fuelsNotes)
-                                  if (result?.error) {
-                                    setFuelsActionMsg('Error: ' + result.error)
-                                  } else {
-                                    setFuelsActionMsg('Review submitted.')
-                                    setFuelsReviewId(null)
-                                    setFuelsStatus('')
-                                    setFuelsNotes('')
-                                    await loadFuelsApps()
-                                  }
-                                  setFuelsActionLoading(false)
-                                }}
-                                style={{ fontSize: 13, padding: '4px 16px' }}
-                              >
-                                {fuelsActionLoading ? 'Submitting...' : 'Submit Review'}
-                              </button>
-                              <button
-                                className="delete-button"
-                                onClick={() => { setFuelsReviewId(null); setFuelsStatus(''); setFuelsNotes(''); setFuelsActionMsg('') }}
-                                style={{ fontSize: 13, padding: '4px 12px', background: '#6c757d' }}
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {activeTab === 'fuels' && (
+            <EmployeeAppGrid
+              apps={fuelsApps}
+              loading={fuelsAppsLoading}
+              title="Fuels Credit Applications"
+              onRefresh={loadFuelsApps}
+              onView={(id) => navigate(`/employee/fuels/${id}`)}
+              onReview={(id, status, notes) => updateFuelsStatus(id, status, notes)}
+            />
           )}
-          </>}
 
           {/* ── Settings tab (admin only) ─────────────────────────────────── */}
           {activeTab === 'settings' && currentUser?.email?.toLowerCase() === 'admin@ghraonline.com' && <>

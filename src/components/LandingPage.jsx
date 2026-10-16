@@ -1,144 +1,100 @@
 import { Link } from 'react-router'
+import { PROGRAMS } from '../utils/programOptions'
 import '../styles/LandingPage.css'
 
 const LOGO_URL =
   'https://cdn.builder.io/api/v1/image/assets%2Fcf932114bdd74274b1b6c6fb8fbf812c%2F6fb047d4702548c2854d59fad5d72761?format=webp&width=800'
 
-const FEATURES = [
-  {
-    title: 'Wholesale Purchasing',
-    description:
-      'Access competitive wholesale pricing on a broad range of grocery and convenience items sourced through the cooperative.',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <path d="M16 10a4 4 0 01-8 0" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Fuels Program',
-    description:
-      'Members with unbranded fuel operations can participate in the GHRA Fuels Program for supply agreements and ACH billing.',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 22V8l9-6 9 6v14" />
-        <path d="M9 22V12h6v10" />
-        <path d="M13 2l7 4" />
-        <polyline points="17 8 17 18 21 18 21 8" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Warehouse Membership',
-    description:
-      'Gain access to warehouse ordering with authorised card holders, scheduled deliveries, and streamlined account management.',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-        <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Member Support',
-    description:
-      'Our dedicated team reviews every application, keeps you informed at each stage, and supports your business long after approval.',
-    icon: (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 00-3-3.87" />
-        <path d="M16 3.13a4 4 0 010 7.75" />
-      </svg>
-    ),
-  },
-]
+const PROGRAM_ICONS = {
+  membership: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  fuels: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 22V8l6-6h6l3 3v3h2v10" />
+      <path d="M3 22h18" />
+      <rect x="7" y="13" width="4" height="5" />
+      <path d="M17 9h2a1 1 0 0 1 1 1v2" />
+    </svg>
+  ),
+  warehouse: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  ),
+}
 
 export default function LandingPage() {
   return (
     <div className="lp-root">
-      {/* Header */}
+
+      {/* ── Header ── */}
       <header className="lp-header">
-        <img src={LOGO_URL} alt="GHRA" className="lp-header-logo" />
+        <div className="lp-header-brand">
+          <img src={LOGO_URL} alt="GHRA" className="lp-header-logo" />
+          <span className="lp-header-org">Greater Houston Retailers Association</span>
+        </div>
         <Link to="/login" className="lp-header-signin">
           Sign In
         </Link>
       </header>
 
-      {/* Hero */}
+      {/* ── Hero ── */}
       <section className="lp-hero">
         <div className="lp-hero-inner">
-          <span className="lp-hero-eyebrow">Greater Houston Retailers Association</span>
-          <h1 className="lp-hero-title">
-            GHRA <span>Membership</span>
-          </h1>
+          <p className="lp-hero-eyebrow">Member Applications</p>
+          <h1 className="lp-hero-title">Apply for a GHRA Program</h1>
           <p className="lp-hero-tagline">
-            Join the cooperative that serves independent Houston-area retailers. Access wholesale
-            purchasing, fuels programs, warehouse services, and more — all under one membership.
+            Choose the program that fits your business. One account covers all three —
+            create an account or sign in to begin.
           </p>
-          <div className="lp-hero-actions">
-            <Link to="/signup" className="lp-btn-primary">
-              Apply for Membership
-            </Link>
-            <Link to="/login" className="lp-btn-outline">
-              Sign In
-            </Link>
-          </div>
         </div>
       </section>
 
-      {/* Features */}
-      <section className="lp-features">
-        <div className="lp-section-header">
-          <h2>What Membership Includes</h2>
-          <p>
-            GHRA members gain access to a suite of cooperative programs designed for independent
-            retailers.
-          </p>
-        </div>
-        <div className="lp-cards">
-          {FEATURES.map((f) => (
-            <div key={f.title} className="lp-card">
-              <div className="lp-card-icon">{f.icon}</div>
-              <h3>{f.title}</h3>
-              <p>{f.description}</p>
-            </div>
+      {/* ── Program cards ── */}
+      <section className="lp-programs" aria-labelledby="lp-programs-heading">
+        <h2 id="lp-programs-heading" className="lp-visually-hidden">Programs</h2>
+        <div className="lp-prog-cards">
+          {PROGRAMS.map((prog) => (
+            <article key={prog.id} className="lp-prog-card">
+              <div className="lp-prog-card-icon" aria-hidden="true">
+                {PROGRAM_ICONS[prog.id]}
+              </div>
+              <div className="lp-prog-card-header">
+                <h3 className="lp-prog-card-label">{prog.label}</h3>
+                <span className="lp-prog-card-tagline">{prog.tagline}</span>
+              </div>
+              <p className="lp-prog-card-desc">{prog.landingDescription}</p>
+              {prog.note && (
+                <p className="lp-prog-card-note">{prog.note}</p>
+              )}
+              <div className="lp-prog-card-footer">
+                <Link to={prog.signupPath} className="lp-btn-prog">
+                  {prog.applyLabel}
+                </Link>
+              </div>
+            </article>
           ))}
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="lp-cta">
-        <div className="lp-cta-inner">
-          <h2>Ready to Join?</h2>
-          <p>
-            Complete our online membership application. A GHRA staff member will review your
-            submission and guide you through the next steps.
-          </p>
-          <div className="lp-cta-actions">
-            <Link to="/signup" className="lp-btn-primary">
-              Apply for Membership
-            </Link>
-            <Link to="/login" className="lp-btn-secondary">
-              Sign In
-            </Link>
-          </div>
-          <p className="lp-cta-note">
-            Already have an account?{' '}
-            <Link to="/login">Sign In</Link>
-          </p>
-        </div>
-      </section>
-
-      {/* Footer */}
+      {/* ── Footer ── */}
       <footer className="lp-footer">
-        <p>
-          &copy; {new Date().getFullYear()} Greater Houston Retailers Association. All rights
-          reserved.
+        <p className="lp-footer-copy">
+          &copy; {new Date().getFullYear()} Greater Houston Retailers Association. All rights reserved.
+        </p>
+        <p className="lp-footer-support">
+          Questions about your application?{' '}
+          Contact GHRA Member Services for assistance.
         </p>
       </footer>
+
     </div>
   )
 }

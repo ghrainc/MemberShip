@@ -1,5 +1,5 @@
 import { useState, useContext, useEffect } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, Link } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import '../styles/LoginPage.css'
@@ -79,11 +79,13 @@ function LoginPage() {
     <div className="login-container design-1">
       <div className="login-wrapper">
         <div className="login-header">
-          <img
-            src="https://cdn.builder.io/api/v1/image/assets%2Fcf932114bdd74274b1b6c6fb8fbf812c%2F6fb047d4702548c2854d59fad5d72761?format=webp&width=800"
-            alt="GHRA Logo"
-            className="login-logo"
-          />
+          <Link to="/" className="login-logo-link" aria-label="GHRA — back to programs">
+            <img
+              src="https://cdn.builder.io/api/v1/image/assets%2Fcf932114bdd74274b1b6c6fb8fbf812c%2F6fb047d4702548c2854d59fad5d72761?format=webp&width=800"
+              alt="GHRA"
+              className="login-logo"
+            />
+          </Link>
           <h1>GHRA Application Portal</h1>
           <p className="login-subtitle">
             {isEmployee ? 'Employee Login' : 'Welcome Back'}
@@ -128,20 +130,29 @@ function LoginPage() {
           </button>
         </form>
 
+        {!isEmployee && (
+          <div className="login-apply-section">
+            <p className="login-apply-text">
+              Don't have an account?{' '}
+              <Link to="/" className="login-apply-link">Apply for a program</Link>
+            </p>
+          </div>
+        )}
+
         <div className="employee-login-section">
           <div className="employee-divider">
             <span>or</span>
           </div>
           {isEmployee ? (
             <button type="button" className="employee-toggle-button" onClick={handleToggleEmployeeMode}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="employee-toggle-icon">
-                <path d="M19 12H5M12 5l-7 7 7 7"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="employee-toggle-icon" aria-hidden="true">
+                <polyline points="15 18 9 12 15 6" />
               </svg>
               Back to Member Login
             </button>
           ) : (
             <button type="button" className="employee-toggle-button" onClick={handleToggleEmployeeMode}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="employee-toggle-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="employee-toggle-icon" aria-hidden="true">
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
               </svg>
               Employee Portal

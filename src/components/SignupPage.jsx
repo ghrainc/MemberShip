@@ -1,5 +1,5 @@
 import { useState, useContext } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import PasswordInput from './PasswordInput'
 import '../styles/AuthForm.css'
@@ -8,9 +8,13 @@ import '../styles/SignupPage.css'
 const LOGO_URL =
   'https://cdn.builder.io/api/v1/image/assets%2Fcf932114bdd74274b1b6c6fb8fbf812c%2F6fb047d4702548c2854d59fad5d72761?format=webp&width=800'
 
+const VALID_SOURCES = new Set(['membership', 'fuels', 'warehouse'])
+
 export default function SignupPage() {
   const { signup } = useContext(AuthContext)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const signupSource = VALID_SOURCES.has(searchParams.get('via')) ? searchParams.get('via') : null
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -37,7 +41,7 @@ export default function SignupPage() {
     }
 
     setLoading(true)
-    const result = await signup(email, password, confirmPassword)
+    const result = await signup(email, password, confirmPassword, signupSource)
     setLoading(false)
 
     if (result === true) {

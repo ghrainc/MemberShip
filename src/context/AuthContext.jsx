@@ -140,7 +140,7 @@ export const AuthProvider = ({ children }) => {
         setError(msg)
         return { success: false, error: msg }
       }
-      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '', roles: data.roles || [] }
+      const user = { email: data.email, role: data.role, mustChangePassword: !!data.mustChangePassword, firstName: data.firstName || '', lastName: data.lastName || '', roles: data.roles || [], signupSource: data.signupSource || null }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -186,7 +186,7 @@ export const AuthProvider = ({ children }) => {
     }
   }, [armExpiryTimers])
 
-  const signup = useCallback(async (email, password, confirmPassword) => {
+  const signup = useCallback(async (email, password, confirmPassword, signupSource = null) => {
     setError('')
     if (!email || !password || !confirmPassword) { setError('All fields are required'); return 'All fields are required' }
     if (password !== confirmPassword) { setError('Passwords do not match'); return 'Passwords do not match' }
@@ -196,11 +196,11 @@ export const AuthProvider = ({ children }) => {
       const res = await fetch(`${API}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password, signupSource })
       })
       const data = await res.json()
       if (!res.ok) { const msg = data.error || 'Signup failed'; setError(msg); return msg }
-      const user = { email: data.email, role: data.role }
+      const user = { email: data.email, role: data.role, signupSource: data.signupSource || null }
       setToken(data.token)
       setIsAuthenticated(true)
       setCurrentUser(user)
@@ -1139,6 +1139,32 @@ export const AuthProvider = ({ children }) => {
     } catch { return { success: false, error: 'Unable to connect to server' } }
   }, [token])
 
+  const deleteWarehouseApplication = useCallback(async (id) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/warehouse/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Delete failed' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
+  const deleteFuelsApplication = useCallback(async (id) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await fetch(`${API}/fuels/${id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token)
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Delete failed' }
+      return { success: true }
+    } catch { return { success: false, error: 'Unable to connect to server' } }
+  }, [token])
+
   const uploadFuelsDocument = useCallback(async (appId, docId, file) => {
     if (!token) return { success: false, error: 'Not authenticated' }
     try {
@@ -1236,6 +1262,8 @@ export const AuthProvider = ({ children }) => {
       getFuelsApplication,
       updateFuelsStatus,
       uploadFuelsDocument,
+      deleteWarehouseApplication,
+      deleteFuelsApplication,
     }}>
       {children}
     </AuthContext.Provider>

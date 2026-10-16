@@ -142,6 +142,37 @@
   font-size: 18px;
 }
 
+/* Section divider (between sections in null/both view) */
+.dash-section-divider {
+  height: 2px;
+  background: var(--ghra-line);
+  margin: 16px 0 32px;
+}
+
+/* Cross-sell line (fuels ↔ warehouse) */
+.dash-cross-sell {
+  margin-top: 20px;
+  font-size: 14px;
+  color: var(--ghra-muted);
+}
+
+.dash-cross-sell a {
+  color: var(--ghra-navy);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dash-cross-sell a:hover {
+  color: var(--ghra-red);
+}
+
+.dash-cross-sell a:focus-visible {
+  outline: 2px solid var(--ghra-navy);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Empty State */
 .empty-state {
   text-align: center;
@@ -354,6 +385,125 @@
 .resubmit-button:hover {
   background: #d35400;
   color: white;
+}
+
+/* Delete draft button — quieter than the primary action */
+.delete-draft-btn {
+  padding: 10px 14px;
+  border: 1px solid #e74c3c;
+  border-radius: 6px;
+  background: white;
+  color: #e74c3c;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  flex: none;
+}
+
+.delete-draft-btn:hover:not(:disabled) {
+  background: #e74c3c;
+  color: white;
+}
+
+.delete-draft-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Delete confirmation dialog */
+.delete-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.delete-confirm-dialog {
+  background: white;
+  border-radius: 8px;
+  padding: 28px 32px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.delete-confirm-dialog h3 {
+  color: var(--ghra-slate);
+  font-size: 17px;
+  margin: 0 0 10px 0;
+  font-weight: 700;
+}
+
+.delete-confirm-dialog p {
+  color: var(--ghra-muted);
+  font-size: 14px;
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.delete-confirm-cancel {
+  padding: 9px 20px;
+  border: 1px solid var(--ghra-line);
+  border-radius: 6px;
+  background: white;
+  color: var(--ghra-slate);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.delete-confirm-cancel:hover {
+  background: var(--ghra-mist);
+}
+
+.delete-confirm-ok {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #e74c3c;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-width: 80px;
+}
+
+.delete-confirm-ok:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+.delete-confirm-ok:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Dashboard toast */
+.dashboard-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ghra-navy);
+  color: white;
+  padding: 12px 28px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 1100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
 /* Footer */

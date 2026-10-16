@@ -589,9 +589,26 @@ const helmet   = require('helmet')
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' }
+  handler: (req, res, _next, options) => {
+    const resetMs = req.rateLimit?.resetTime instanceof Date
+      ? req.rateLimit.resetTime.getTime()
+      : Date.now() + options.windowMs
+    const minsLeft = Math.max(1, Math.ceil((resetMs - Date.now()) / 60000))
+    res.status(options.statusCode).json({
+      error: `Too many failed login attempts. Please try again in ${minsLeft} minute${minsLeft !== 1 ? 's' : ''}.`
+    })
+  }
+})
+
+const clientLogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: false,
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ ok: false }),
 })
 
 // Returns an array of unmet requirement strings; empty array means the password is valid.
@@ -606,6 +623,10 @@ function validateEmployeePassword(password) {
 }
 
 const app = express()
+// Production runs behind IIS (ARR reverse proxy). Without trust proxy, req.ip is always
+// 127.0.0.1, which collapses all users into one rate-limit bucket. '1' trusts exactly one
+// proxy hop and uses X-Forwarded-For as the real client IP.
+app.set('trust proxy', 1)
 // crossOriginResourcePolicy must be 'cross-origin' because this is a JSON API
 // accessed from a different origin (the Vite frontend). All other helmet defaults apply.
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
@@ -668,6 +689,13 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Users') AND name = 'LastName'
       )
         ALTER TABLE Users ADD LastName NVARCHAR(100) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Users') AND name = 'SignupSource'
+      )
+        ALTER TABLE Users ADD SignupSource NVARCHAR(20) NULL
     `)
     await db.request().query(`
       IF NOT EXISTS (
@@ -995,6 +1023,16 @@ function authMiddleware(req, res, next) {
   }
 }
 
+// Like authMiddleware but does not reject unauthenticated requests — sets req.user = null instead.
+// Used for endpoints that accept logs from both signed-in and signed-out sessions.
+function optionalAuth(req, _res, next) {
+  const header = req.headers.authorization
+  if (!header) { req.user = null; return next() }
+  try { req.user = jwt.verify(header.replace('Bearer ', ''), process.env.JWT_SECRET) }
+  catch { req.user = null }
+  next()
+}
+
 // Returns true if the authenticated user may access the given application.
 // Employees may access any; members only their own.
 async function canAccessApplication(db, appId, user) {
@@ -1008,11 +1046,15 @@ async function canAccessApplication(db, appId, user) {
 
 // ── Auth routes ──────────────────────────────────────────────────────────────
 
+const VALID_SIGNUP_SOURCES = new Set(['membership', 'fuels', 'warehouse'])
+
 // POST /api/auth/signup
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, password } = req.body
+  const { email, password, signupSource } = req.body
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' })
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' })
+
+  const source = VALID_SIGNUP_SOURCES.has(signupSource) ? signupSource : null
 
   try {
     const db = await getPool()
@@ -1027,13 +1069,18 @@ app.post('/api/auth/signup', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10)
 
     await db.request()
-      .input('email', sql.NVarChar, email.toLowerCase())
+      .input('email',        sql.NVarChar, email.toLowerCase())
       .input('passwordHash', sql.NVarChar, passwordHash)
-      .input('role', sql.NVarChar, 'member')
-      .query('INSERT INTO Users (Email, PasswordHash, Role) VALUES (@email, @passwordHash, @role)')
+      .input('role',         sql.NVarChar, 'member')
+      .input('signupSource', sql.NVarChar, source)
+      .query('INSERT INTO Users (Email, PasswordHash, Role, SignupSource) VALUES (@email, @passwordHash, @role, @signupSource)')
 
-    const token = jwt.sign({ email: email.toLowerCase(), role: 'member' }, process.env.JWT_SECRET, { expiresIn: '8h' })
-    res.json({ email: email.toLowerCase(), role: 'member', token })
+    const token = jwt.sign(
+      { email: email.toLowerCase(), role: 'member', signupSource: source },
+      process.env.JWT_SECRET,
+      { expiresIn: '8h' }
+    )
+    res.json({ email: email.toLowerCase(), role: 'member', token, signupSource: source })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -1048,7 +1095,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     const db = await getPool()
     const result = await db.request()
       .input('email', sql.NVarChar, email.toLowerCase())
-      .query('SELECT Id, Email, PasswordHash, Role, MustChangePassword, FirstName, LastName FROM Users WHERE Email = @email')
+      .query('SELECT Id, Email, PasswordHash, Role, MustChangePassword, FirstName, LastName, SignupSource FROM Users WHERE Email = @email')
 
     if (!result.recordset.length)
       return res.status(401).json({ error: 'Invalid email or password' })
@@ -1075,12 +1122,13 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       }
     }
 
+    const signupSource = user.SignupSource || null
     const token = jwt.sign(
-      { email: user.Email, role: user.Role, mustChangePassword, firstName, lastName, roles },
+      { email: user.Email, role: user.Role, mustChangePassword, firstName, lastName, roles, signupSource },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     )
-    res.json({ email: user.Email, role: user.Role, token, mustChangePassword, firstName, lastName, roles })
+    res.json({ email: user.Email, role: user.Role, token, mustChangePassword, firstName, lastName, roles, signupSource })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -3360,10 +3408,11 @@ app.post('/api/warehouse/draft', authMiddleware, async (req, res) => {
         .input('role', sql.NVarChar, req.user.role)
         .query("SELECT Id FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
       if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
-      await db.request()
+      const updateResult = await db.request()
         .input('id', sql.Int, appId)
         .input('fd', sql.NVarChar(sql.MAX), json)
         .query("UPDATE WarehouseApplications SET FormData=@fd, UpdatedAt=GETDATE() WHERE Id=@id AND Status='draft'")
+      if (updateResult.rowsAffected[0] === 0) return res.status(409).json({ error: 'This application has been submitted and cannot be modified.' })
       res.json({ id: appId })
     } else {
       const r = await db.request()
@@ -3459,6 +3508,29 @@ app.patch('/api/warehouse/:id/status', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// DELETE /api/warehouse/:id  — member deletes their own draft
+app.delete('/api/warehouse/:id', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .query("SELECT Id, Status FROM WarehouseApplications WHERE Id=@id AND UserEmail=@email")
+    if (!r.recordset.length) return res.status(404).json({ error: 'Not found' })
+    if (r.recordset[0].Status !== 'draft') return res.status(409).json({ error: 'Only draft applications can be deleted.' })
+    await db.request()
+      .input('id', sql.Int, appId)
+      .query("DELETE FROM WarehouseApplications WHERE Id=@id")
+    // Remove uploaded files — path is safe: appId is a validated integer
+    const dir = path.join(__dirname, 'UploadedDocuments', 'wh_' + appId)
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+    console.log(`[warehouse/delete] id=${appId} deleted by ${req.user.email}`)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // POST /api/warehouse/upload  — file upload for warehouse applications
 app.post('/api/warehouse/upload', authMiddleware, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
@@ -3471,17 +3543,23 @@ app.post('/api/warehouse/upload', authMiddleware, upload.single('file'), async (
       .input('id',    sql.Int,     appId)
       .input('email', sql.NVarChar, req.user.email)
       .input('role',  sql.NVarChar, req.user.role)
-      .query("SELECT Id FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+      .query("SELECT Id, Status FROM WarehouseApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
     if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+    if (req.user.role !== 'employee' && own.recordset[0].Status !== 'draft') return res.status(403).json({ error: 'This application has been submitted and cannot be modified.' })
 
     const safeDocId = path.basename(docId || 'doc')
     const ext  = path.extname(req.file.originalname).toLowerCase()
     const dir  = path.join(__dirname, 'UploadedDocuments', 'wh_' + appId)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const dest = path.join(dir, safeDocId + ext)
-    fs.renameSync(req.file.path, dest)
+    fs.writeFileSync(dest, req.file.buffer)
     res.json({ url: `/uploads/wh_${appId}/${safeDocId}${ext}`, filename: safeDocId + ext })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) {
+    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10 MB.'
+              : err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Unexpected file field.'
+              : 'Upload failed. Please try again or contact support if the problem persists.'
+    res.status(500).json({ error: msg })
+  }
 })
 
 // ── Fuels applications (Phase 5) ─────────────────────────────────────────────
@@ -3502,10 +3580,11 @@ app.post('/api/fuels/draft', authMiddleware, async (req, res) => {
         .input('role',  sql.NVarChar, req.user.role)
         .query("SELECT Id FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
       if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
-      await db.request()
+      const updateResult = await db.request()
         .input('id', sql.Int, appId)
         .input('fd', sql.NVarChar(sql.MAX), json)
         .query("UPDATE FuelsApplications SET FormData=@fd, UpdatedAt=GETDATE() WHERE Id=@id AND Status='draft'")
+      if (updateResult.rowsAffected[0] === 0) return res.status(409).json({ error: 'This application has been submitted and cannot be modified.' })
       res.json({ id: appId })
     } else {
       const r = await db.request()
@@ -3602,6 +3681,29 @@ app.patch('/api/fuels/:id/status', authMiddleware, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }) }
 })
 
+// DELETE /api/fuels/:id  — member deletes their own draft
+app.delete('/api/fuels/:id', authMiddleware, async (req, res) => {
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid id' })
+  try {
+    const db = await getPool()
+    const r = await db.request()
+      .input('id',    sql.Int,     appId)
+      .input('email', sql.NVarChar, req.user.email)
+      .query("SELECT Id, Status FROM FuelsApplications WHERE Id=@id AND UserEmail=@email")
+    if (!r.recordset.length) return res.status(404).json({ error: 'Not found' })
+    if (r.recordset[0].Status !== 'draft') return res.status(409).json({ error: 'Only draft applications can be deleted.' })
+    await db.request()
+      .input('id', sql.Int, appId)
+      .query("DELETE FROM FuelsApplications WHERE Id=@id")
+    // Remove uploaded files — path is safe: appId is a validated integer
+    const dir = path.join(__dirname, 'UploadedDocuments', 'fuels_' + appId)
+    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+    console.log(`[fuels/delete] id=${appId} deleted by ${req.user.email}`)
+    res.json({ ok: true })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
 // POST /api/fuels/upload  — file upload for fuels applications
 app.post('/api/fuels/upload', authMiddleware, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
@@ -3614,16 +3716,22 @@ app.post('/api/fuels/upload', authMiddleware, upload.single('file'), async (req,
       .input('id',    sql.Int,     appId)
       .input('email', sql.NVarChar, req.user.email)
       .input('role',  sql.NVarChar, req.user.role)
-      .query("SELECT Id FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
+      .query("SELECT Id, Status FROM FuelsApplications WHERE Id=@id AND (UserEmail=@email OR @role='employee')")
     if (!own.recordset.length) return res.status(403).json({ error: 'Forbidden' })
+    if (req.user.role !== 'employee' && own.recordset[0].Status !== 'draft') return res.status(403).json({ error: 'This application has been submitted and cannot be modified.' })
     const safeDocId = path.basename(docId || 'doc')
     const ext  = path.extname(req.file.originalname).toLowerCase()
     const dir  = path.join(__dirname, 'UploadedDocuments', 'fuels_' + appId)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const dest = path.join(dir, safeDocId + ext)
-    fs.renameSync(req.file.path, dest)
+    fs.writeFileSync(dest, req.file.buffer)
     res.json({ url: `/uploads/fuels_${appId}/${safeDocId}${ext}`, filename: safeDocId + ext })
-  } catch (err) { res.status(500).json({ error: err.message }) }
+  } catch (err) {
+    const msg = err.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10 MB.'
+              : err.code === 'LIMIT_UNEXPECTED_FILE' ? 'Unexpected file field.'
+              : 'Upload failed. Please try again or contact support if the problem persists.'
+    res.status(500).json({ error: msg })
+  }
 })
 
 // ── Dropbox Sign test ────────────────────────────────────────────────────────
@@ -3938,6 +4046,81 @@ app.get('/api/ds-events', authMiddleware, async (req, res) => {
       OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY
     `)
     res.json({ events: result.recordset })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Client error log ─────────────────────────────────────────────────────────
+
+const CLIENT_LOG_VALID_TYPES = new Set([
+  'api_failure', 'auth_failure', 'blocked_navigation', 'validation_block',
+  'upload_failure', 'upload_validation', 'js_error', 'render_error',
+])
+
+// POST /api/logs/client — fire-and-forget from the browser; auth optional
+app.post('/api/logs/client', clientLogLimiter, optionalAuth, async (req, res) => {
+  try {
+    const { errorType, message, technicalDetail, url, action, applicationId, step, sessionAgeMinutes, clientEmail, userAgent } = req.body
+    if (!CLIENT_LOG_VALID_TYPES.has(errorType)) return res.json({ ok: false })
+    const resolvedEmail = req.user?.email || (typeof clientEmail === 'string' ? clientEmail.slice(0, 255) : null) || null
+    const db = await getPool()
+    await db.request()
+      .input('userEmail',          sql.NVarChar(255),        resolvedEmail)
+      .input('applicationId',      sql.Int,                  Number.isInteger(applicationId) ? applicationId : null)
+      .input('step',               sql.Int,                  Number.isInteger(step) ? step : null)
+      .input('errorType',          sql.NVarChar(50),         String(errorType).slice(0, 50))
+      .input('message',            sql.NVarChar(1000),       String(message || '').slice(0, 1000))
+      .input('technicalDetail',    sql.NVarChar(sql.MAX),    technicalDetail ? String(technicalDetail).slice(0, 8000) : null)
+      .input('url',                sql.NVarChar(500),        url ? String(url).slice(0, 500) : null)
+      .input('action',             sql.NVarChar(100),        action ? String(action).slice(0, 100) : null)
+      .input('userAgent',          sql.NVarChar(500),        userAgent ? String(userAgent).slice(0, 500) : null)
+      .input('sessionAgeMinutes',  sql.Int,                  Number.isInteger(sessionAgeMinutes) ? sessionAgeMinutes : null)
+      .query(`INSERT INTO ClientErrorLog
+              (UserEmail, ApplicationId, Step, ErrorType, Message, TechnicalDetail, Url, Action, UserAgent, SessionAgeMinutes)
+              VALUES (@userEmail, @applicationId, @step, @errorType, @message, @technicalDetail, @url, @action, @userAgent, @sessionAgeMinutes)`)
+    res.json({ ok: true })
+  } catch {
+    res.json({ ok: false })
+  }
+})
+
+// GET /api/logs/client — employee only, paginated
+app.get('/api/logs/client', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  try {
+    const db = await getPool()
+    const { email, errorType, step, applicationId, from, to, page = '1' } = req.query
+    const PAGE_SIZE = 100
+    const offset    = (Math.max(1, parseInt(page, 10)) - 1) * PAGE_SIZE
+
+    const clauses = []
+    const request = db.request()
+      .input('pageSize', sql.Int, PAGE_SIZE)
+      .input('offset',   sql.Int, offset)
+    if (email)         { clauses.push('UserEmail = @email');           request.input('email',         sql.NVarChar(255), email) }
+    if (errorType)     { clauses.push('ErrorType = @errorType');       request.input('errorType',     sql.NVarChar(50),  errorType) }
+    if (step)          { clauses.push('Step = @step');                 request.input('step',          sql.Int,           parseInt(step, 10)) }
+    if (applicationId) { clauses.push('ApplicationId = @applicationId'); request.input('applicationId', sql.Int,           parseInt(applicationId, 10)) }
+    if (from)          { clauses.push('CreatedAt >= @from');           request.input('from',          sql.DateTime,      new Date(from)) }
+    if (to)            { clauses.push('CreatedAt < @to');              request.input('to',            sql.DateTime,      new Date(to)) }
+
+    const where = clauses.length ? 'WHERE ' + clauses.join(' AND ') : ''
+
+    const [entries, byType, byStep] = await Promise.all([
+      request.query(`SELECT Id, UserEmail, ApplicationId, Step, ErrorType, Message, TechnicalDetail, Url, Action, UserAgent, SessionAgeMinutes, CreatedAt
+                     FROM ClientErrorLog ${where}
+                     ORDER BY CreatedAt DESC
+                     OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY`),
+      db.request().query(`SELECT ErrorType, COUNT(*) AS Cnt FROM ClientErrorLog WHERE CreatedAt >= DATEADD(HOUR,-24,GETDATE()) GROUP BY ErrorType`),
+      db.request().query(`SELECT Step, COUNT(*) AS Cnt FROM ClientErrorLog WHERE CreatedAt >= DATEADD(HOUR,-24,GETDATE()) AND Step IS NOT NULL GROUP BY Step ORDER BY Step`),
+    ])
+
+    const total24h = byType.recordset.reduce((s, r) => s + r.Cnt, 0)
+    res.json({
+      entries: entries.recordset,
+      summary: { total24h, byType: byType.recordset, byStep: byStep.recordset },
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

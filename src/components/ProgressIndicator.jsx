@@ -44,7 +44,7 @@ function ProgressIndicator({ currentStep, totalSteps, steps, onStepClick }) {
             </div>
             <p className="step-title">
               <span className="step-title-full">{step.title}</span>
-              <span className="step-title-short">{SHORT_LABELS[step.id] || step.title}</span>
+              <span className="step-title-short">{step.shortLabel || SHORT_LABELS[step.id] || step.title}</span>
             </p>
           </div>
         ))}

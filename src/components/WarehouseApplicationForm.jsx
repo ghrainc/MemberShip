@@ -2,19 +2,20 @@ import { useContext, useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { AuthContext } from '../context/AuthContext'
 import SignaturePad from './SignaturePad'
-import '../styles/WarehouseApplicationForm.css'
+import FormShell from './form/FormShell'
+import MultiFileUploader from './MultiFileUploader'
+import StateSelect from './StateSelect'
 import '../styles/MembershipForm.css'
-import '../styles/ProgressIndicator.css'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1, title: 'Business Info' },
-  { id: 2, title: 'Owners' },
-  { id: 3, title: 'Permits' },
-  { id: 4, title: 'Purchasing' },
-  { id: 5, title: 'Resale Cert.' },
-  { id: 6, title: 'Sign' },
+  { id: 1, title: 'Business Info',  shortLabel: 'Business' },
+  { id: 2, title: 'Owners',         shortLabel: 'Owners' },
+  { id: 3, title: 'Permits',        shortLabel: 'Permits' },
+  { id: 4, title: 'Purchasing',     shortLabel: 'Purchasing' },
+  { id: 5, title: 'Resale Cert.',   shortLabel: 'Resale' },
+  { id: 6, title: 'Sign',           shortLabel: 'Sign' },
 ]
 
 const CATEGORIES = [
@@ -34,13 +35,25 @@ const ENTITY_TYPES = [
 
 const BLANK_OWNER = { ownerName: '', ownerTitle: '', ownerPct: '', ownerPhone: '', ownerEmail: '', ownerAddr: '', ownerDl: '', photoIdUrl: '' }
 
+// Uppercase allow-list — only these field names are uppercased when the user types.
+// Never include: emails, phones, IDs (EIN, tax IDs, DL#), dates, numbers, selects.
+const WAREHOUSE_TEXT_UPPERCASE = new Set([
+  'legalName', 'entityTypeOther', 'dbaName',
+  'primaryContact', 'storeAddress', 'storeCity',
+  'mailingAddress', 'mailingCity',
+  'rcName', 'rcItems', 'rcActivity',
+  'signerName', 'signerTitle',
+])
+
+const WAREHOUSE_OWNER_TEXT_UPPERCASE = new Set(['ownerName', 'ownerTitle', 'ownerAddr'])
+
 function blankForm() {
   return {
     // Section 1
     legalName: '', entityType: '', entityTypeOther: '', dbaName: '', ein: '',
     businessStarted: '', numLocations: '', businessPhone: '', businessEmail: '', primaryContact: '',
     storeAddress: '', storeCity: '', storeState: 'TX', storeZip: '',
-    mailSame: true, mailingAddress: '', mailingCity: '', mailingState: '', mailingZip: '',
+    mailSame: true, mailingAddress: '', mailingCity: '', mailingState: 'TX', mailingZip: '',
     // Section 2
     owners: [{ ...BLANK_OWNER }],
     // Section 3
@@ -52,85 +65,87 @@ function blankForm() {
     rcName: '', rcPermit: '', rcPhone: '', rcItems: '', rcActivity: '', rcAck: false,
     // Section 6
     signerName: '', signerTitle: '', signatureData: null, agreeTerms: false, esign: false,
+    // Document slots (MultiFileUploader arrays)
+    documents: { tax_permit: [], tobacco_permit: [] },
   }
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
 
-function validateStep(step, fd) {
+function computeStepErrors(step, fd) {
+  const errs = {}
   const req = (val) => !val || !String(val).trim()
   switch (step) {
-    case 1: {
-      const missing = []
-      if (req(fd.legalName))       missing.push('Legal name')
-      if (req(fd.entityType))      missing.push('Entity type')
-      if (req(fd.dbaName))         missing.push('DBA name')
-      if (req(fd.numLocations))    missing.push('Number of locations')
-      if (req(fd.businessPhone))   missing.push('Business phone')
-      if (req(fd.businessEmail))   missing.push('Business email')
-      if (req(fd.primaryContact))  missing.push('Primary contact')
-      if (req(fd.storeAddress))    missing.push('Store address')
-      if (req(fd.storeCity))       missing.push('City')
-      if (req(fd.storeState))      missing.push('State')
-      if (req(fd.storeZip))        missing.push('ZIP')
+    case 1:
+      if (req(fd.legalName))       errs.legalName       = 'Legal name is required'
+      if (req(fd.entityType))      errs.entityType      = 'Entity type is required'
+      if (req(fd.dbaName))         errs.dbaName         = 'DBA name is required'
+      if (req(fd.numLocations))    errs.numLocations    = 'Number of locations is required'
+      if (req(fd.businessPhone))   errs.businessPhone   = 'Business phone is required'
+      if (req(fd.businessEmail))   errs.businessEmail   = 'Business email is required'
+      if (req(fd.primaryContact))  errs.primaryContact  = 'Primary contact is required'
+      if (req(fd.storeAddress))    errs.storeAddress    = 'Store address is required'
+      if (req(fd.storeCity))       errs.storeCity       = 'City is required'
+      if (req(fd.storeState))      errs.storeState      = 'State is required'
+      if (req(fd.storeZip))        errs.storeZip        = 'ZIP is required'
       if (!fd.mailSame) {
-        if (req(fd.mailingAddress)) missing.push('Mailing address')
-        if (req(fd.mailingCity))    missing.push('Mailing city')
-        if (req(fd.mailingState))   missing.push('Mailing state')
-        if (req(fd.mailingZip))     missing.push('Mailing ZIP')
+        if (req(fd.mailingAddress)) errs.mailingAddress = 'Mailing address is required'
+        if (req(fd.mailingCity))    errs.mailingCity    = 'City is required'
+        if (req(fd.mailingState))   errs.mailingState   = 'State is required'
+        if (req(fd.mailingZip))     errs.mailingZip     = 'ZIP is required'
       }
-      return missing.length ? `Required: ${missing.join(', ')}` : null
-    }
-    case 2: {
-      const bad = fd.owners.findIndex(o => req(o.ownerName) || req(o.ownerTitle))
-      return bad !== -1 ? `Owner ${bad + 1}: name and title are required` : null
-    }
+      break
+    case 2:
+      ;(fd.owners || []).forEach((o, i) => {
+        if (req(o.ownerName))  errs[`owner_${i}_name`]  = 'Name is required'
+      })
+      break
     case 3:
-      return req(fd.salesTaxPermitNo) ? 'Sales tax permit number is required' : null
+      if (req(fd.salesTaxPermitNo)) errs.salesTaxPermitNo = 'Sales tax permit number is required'
+      break
     case 4:
-      if (req(fd.purchaseVolume)) return 'Estimated purchase volume is required'
-      if (!fd.categories || fd.categories.length === 0) return 'Select at least one product category'
-      return null
-    case 5: {
-      const m5 = []
-      if (req(fd.rcName))     m5.push('Business name')
-      if (req(fd.rcPermit))   m5.push('Permit number')
-      if (req(fd.rcPhone))    m5.push('Phone')
-      if (req(fd.rcItems))    m5.push('Items purchased')
-      if (req(fd.rcActivity)) m5.push('Activity description')
-      if (!fd.rcAck)          m5.push('Acknowledgement checkbox')
-      return m5.length ? `Required: ${m5.join(', ')}` : null
-    }
-    case 6: {
-      if (req(fd.signerName))     return 'Signer name is required'
-      if (req(fd.signerTitle))    return 'Signer title is required'
-      if (!fd.signatureData)      return 'Signature is required'
-      if (!fd.agreeTerms)         return 'You must agree to the terms'
-      if (!fd.esign)              return 'You must consent to electronic signature'
-      return null
-    }
-    default: return null
+      if (req(fd.purchaseVolume)) errs.purchaseVolume = 'Estimated purchase volume is required'
+      if (!fd.categories || fd.categories.length === 0) errs.categories = 'Please select at least one product category'
+      break
+    case 5:
+      if (req(fd.rcName))     errs.rcName     = 'Business name is required'
+      if (req(fd.rcPermit))   errs.rcPermit   = 'Permit number is required'
+      if (req(fd.rcPhone))    errs.rcPhone    = 'Phone is required'
+      if (req(fd.rcItems))    errs.rcItems    = 'Items purchased is required'
+      if (req(fd.rcActivity)) errs.rcActivity = 'Activity description is required'
+      if (!fd.rcAck)          errs.rcAck      = 'You must check the acknowledgement'
+      break
+    case 6:
+      if (req(fd.signerName))  errs.signerName  = 'Signer name is required'
+      if (req(fd.signerTitle)) errs.signerTitle = 'Signer title is required'
+      if (!fd.signatureData)   errs.signatureData = 'Signature is required'
+      if (!fd.agreeTerms)      errs.agreeTerms  = 'You must agree to the terms and conditions'
+      if (!fd.esign)           errs.esign       = 'You must consent to electronic signature'
+      break
+    default: break
   }
+  return errs
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Field({ label, required, children, hint }) {
+function Field({ label, required, children, hint, error }) {
   return (
     <div className="form-group">
-      <label className="form-label">
-        {label}{required && <span style={{ color: 'var(--ghra-red)' }}> *</span>}
+      <label>
+        {label}{required && <span className="required-star">*</span>}
       </label>
       {children}
       {hint && <span style={{ fontSize: 11, color: 'var(--ghra-muted)' }}>{hint}</span>}
+      {error && <span className="error-text">{error}</span>}
     </div>
   )
 }
 
-function Input({ value, onChange, ...rest }) {
+function Input({ value, onChange, error, ...rest }) {
   return (
     <input
-      className="form-input"
+      className={`form-input${error ? ' input-error' : ''}`}
       value={value ?? ''}
       onChange={e => onChange(e.target.value)}
       {...rest}
@@ -138,10 +153,10 @@ function Input({ value, onChange, ...rest }) {
   )
 }
 
-function Select({ value, onChange, options, placeholder, ...rest }) {
+function Select({ value, onChange, options, placeholder, error, ...rest }) {
   return (
     <select
-      className="form-select"
+      className={`form-select${error ? ' input-error' : ''}`}
       value={value ?? ''}
       onChange={e => onChange(e.target.value)}
       {...rest}
@@ -156,374 +171,493 @@ function Select({ value, onChange, options, placeholder, ...rest }) {
 
 // ── Step panels ───────────────────────────────────────────────────────────────
 
-function Section1({ fd, set }) {
+function Section1({ fd, set, errors, clearError }) {
   return (
-    <>
-      <p className="wh-section-title">Business Information</p>
-      <div className="wh-row">
-        <Field label="Legal Business Name" required>
-          <Input value={fd.legalName} onChange={v => set('legalName', v)} />
-        </Field>
-        <Field label="DBA Name" required>
-          <Input value={fd.dbaName} onChange={v => set('dbaName', v)} />
-        </Field>
-      </div>
-      <div className="wh-row">
-        <Field label="Entity Type" required>
-          <Select
-            value={fd.entityType}
-            onChange={v => set('entityType', v)}
-            options={ENTITY_TYPES}
-            placeholder="Select..."
-          />
-        </Field>
-        {fd.entityType === 'other' && (
-          <Field label="Specify Entity Type">
-            <Input value={fd.entityTypeOther} onChange={v => set('entityTypeOther', v)} />
+    <fieldset className="form-section">
+      <legend>Business Information</legend>
+
+      <div className="form-section-inner">
+        <span className="inner-legend">Business Details</span>
+        <div className="form-row">
+          <Field label="Legal Business Name" required error={errors.legalName}>
+            <Input
+              value={fd.legalName}
+              error={errors.legalName}
+              onChange={v => { set('legalName', v); clearError('legalName') }}
+            />
           </Field>
-        )}
-        <Field label="EIN">
-          <Input value={fd.ein} onChange={v => set('ein', v)} placeholder="XX-XXXXXXX" />
-        </Field>
-      </div>
-      <div className="wh-row">
-        <Field label="Business Start Date">
-          <Input type="date" value={fd.businessStarted} onChange={v => set('businessStarted', v)} />
-        </Field>
-        <Field label="Number of Locations" required>
-          <Input type="number" min="1" value={fd.numLocations} onChange={v => set('numLocations', v)} />
-        </Field>
-      </div>
-      <div className="wh-row">
-        <Field label="Business Phone" required>
-          <Input type="tel" value={fd.businessPhone} onChange={v => set('businessPhone', v)} />
-        </Field>
-        <Field label="Business Email" required>
-          <Input type="email" value={fd.businessEmail} onChange={v => set('businessEmail', v)} />
-        </Field>
-        <Field label="Primary Contact" required>
-          <Input value={fd.primaryContact} onChange={v => set('primaryContact', v)} />
-        </Field>
+          <Field label="DBA Name" required error={errors.dbaName}>
+            <Input
+              value={fd.dbaName}
+              error={errors.dbaName}
+              onChange={v => { set('dbaName', v); clearError('dbaName') }}
+            />
+          </Field>
+        </div>
+        <div className="form-row">
+          <Field label="Entity Type" required error={errors.entityType}>
+            <Select
+              value={fd.entityType}
+              error={errors.entityType}
+              onChange={v => { set('entityType', v); clearError('entityType') }}
+              options={ENTITY_TYPES}
+              placeholder="Select..."
+            />
+          </Field>
+          {fd.entityType === 'other' && (
+            <Field label="Specify Entity Type">
+              <Input value={fd.entityTypeOther} onChange={v => set('entityTypeOther', v)} />
+            </Field>
+          )}
+          <Field label="EIN">
+            <Input value={fd.ein} onChange={v => set('ein', v)} placeholder="XX-XXXXXXX" />
+          </Field>
+        </div>
+        <div className="form-row">
+          <Field label="Business Start Date">
+            <Input type="date" value={fd.businessStarted} onChange={v => set('businessStarted', v)} />
+          </Field>
+          <Field label="Number of Locations" required error={errors.numLocations}>
+            <Input
+              type="number"
+              min="1"
+              value={fd.numLocations}
+              error={errors.numLocations}
+              onChange={v => { set('numLocations', v); clearError('numLocations') }}
+            />
+          </Field>
+        </div>
+        <div className="form-row">
+          <Field label="Business Phone" required error={errors.businessPhone}>
+            <Input
+              type="tel"
+              value={fd.businessPhone}
+              error={errors.businessPhone}
+              onChange={v => { set('businessPhone', v); clearError('businessPhone') }}
+            />
+          </Field>
+          <Field label="Business Email" required error={errors.businessEmail}>
+            <Input
+              type="email"
+              value={fd.businessEmail}
+              error={errors.businessEmail}
+              onChange={v => { set('businessEmail', v); clearError('businessEmail') }}
+            />
+          </Field>
+          <Field label="Primary Contact" required error={errors.primaryContact}>
+            <Input
+              value={fd.primaryContact}
+              error={errors.primaryContact}
+              onChange={v => { set('primaryContact', v); clearError('primaryContact') }}
+            />
+          </Field>
+        </div>
       </div>
 
-      <p className="wh-section-title" style={{ marginTop: 24 }}>Store Address</p>
-      <Field label="Street Address" required>
-        <Input value={fd.storeAddress} onChange={v => set('storeAddress', v)} />
-      </Field>
-      <div className="wh-row">
-        <Field label="City" required>
-          <Input value={fd.storeCity} onChange={v => set('storeCity', v)} />
-        </Field>
-        <Field label="State" required>
-          <Input value={fd.storeState} onChange={v => set('storeState', v)} maxLength={2} />
-        </Field>
-        <Field label="ZIP" required>
-          <Input value={fd.storeZip} onChange={v => set('storeZip', v)} />
-        </Field>
-      </div>
-
-      <div className="form-group">
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={fd.mailSame}
-            onChange={e => set('mailSame', e.target.checked)}
+      <div className="form-section-inner">
+        <span className="inner-legend">Store Address</span>
+        <Field label="Street Address" required error={errors.storeAddress}>
+          <Input
+            value={fd.storeAddress}
+            error={errors.storeAddress}
+            onChange={v => { set('storeAddress', v); clearError('storeAddress') }}
           />
-          Mailing address same as store address
-        </label>
+        </Field>
+        <div className="form-row">
+          <Field label="City" required error={errors.storeCity}>
+            <Input
+              value={fd.storeCity}
+              error={errors.storeCity}
+              onChange={v => { set('storeCity', v); clearError('storeCity') }}
+            />
+          </Field>
+          <Field label="State" required error={errors.storeState}>
+            <StateSelect
+              className={`form-select${errors.storeState ? ' input-error' : ''}`}
+              value={fd.storeState}
+              onChange={e => { set('storeState', e.target.value); clearError('storeState') }}
+            />
+          </Field>
+          <Field label="ZIP" required error={errors.storeZip}>
+            <Input
+              value={fd.storeZip}
+              error={errors.storeZip}
+              onChange={v => { set('storeZip', v); clearError('storeZip') }}
+            />
+          </Field>
+        </div>
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={fd.mailSame}
+              onChange={e => set('mailSame', e.target.checked)}
+            />
+            Mailing address same as store address
+          </label>
+        </div>
       </div>
 
       {!fd.mailSame && (
-        <>
-          <p className="wh-section-title" style={{ marginTop: 16 }}>Mailing Address</p>
-          <Field label="Street Address" required>
-            <Input value={fd.mailingAddress} onChange={v => set('mailingAddress', v)} />
+        <div className="form-section-inner">
+          <span className="inner-legend">Mailing Address</span>
+          <Field label="Street Address" required error={errors.mailingAddress}>
+            <Input
+              value={fd.mailingAddress}
+              error={errors.mailingAddress}
+              onChange={v => { set('mailingAddress', v); clearError('mailingAddress') }}
+            />
           </Field>
-          <div className="wh-row">
-            <Field label="City" required>
-              <Input value={fd.mailingCity} onChange={v => set('mailingCity', v)} />
+          <div className="form-row">
+            <Field label="City" required error={errors.mailingCity}>
+              <Input
+                value={fd.mailingCity}
+                error={errors.mailingCity}
+                onChange={v => { set('mailingCity', v); clearError('mailingCity') }}
+              />
             </Field>
-            <Field label="State" required>
-              <Input value={fd.mailingState} onChange={v => set('mailingState', v)} maxLength={2} />
+            <Field label="State" required error={errors.mailingState}>
+              <StateSelect
+                className={`form-select${errors.mailingState ? ' input-error' : ''}`}
+                value={fd.mailingState}
+                onChange={e => { set('mailingState', e.target.value); clearError('mailingState') }}
+              />
             </Field>
-            <Field label="ZIP" required>
-              <Input value={fd.mailingZip} onChange={v => set('mailingZip', v)} />
+            <Field label="ZIP" required error={errors.mailingZip}>
+              <Input
+                value={fd.mailingZip}
+                error={errors.mailingZip}
+                onChange={v => { set('mailingZip', v); clearError('mailingZip') }}
+              />
             </Field>
           </div>
-        </>
+        </div>
       )}
-    </>
+    </fieldset>
   )
 }
 
-function Section2({ fd, setOwner, addOwner, removeOwner, appId, uploadWarehouseDocument }) {
-  const [uploadStatus, setUploadStatus] = useState({})
-
-  const handlePhotoUpload = async (idx, file) => {
-    if (!file) return
-    if (!appId) { setUploadStatus(s => ({ ...s, [`owner_${idx}`]: { state: 'error', msg: 'Save draft first to enable uploads' } })); return }
-    setUploadStatus(s => ({ ...s, [`owner_${idx}`]: { state: 'uploading' } }))
-    const result = await uploadWarehouseDocument(appId, `owner_${idx}_photo`, file)
-    if (result.success) {
-      setOwner(idx, 'photoIdUrl', result.url)
-      setUploadStatus(s => ({ ...s, [`owner_${idx}`]: { state: 'ok', msg: `Uploaded: ${result.filename}` } }))
-    } else {
-      setUploadStatus(s => ({ ...s, [`owner_${idx}`]: { state: 'error', msg: result.error || 'Upload failed' } }))
-    }
-  }
+function Section2({ fd, setOwner, addOwner, removeOwner, uploadDocument, handleDocFilesChange, applicationId, openDocument, downloadCombinedPdf, errors, clearError }) {
 
   return (
-    <>
-      <p className="wh-section-title">Owners / Officers</p>
+    <fieldset className="form-section">
+      <legend>Owners / Officers</legend>
       {fd.owners.map((owner, idx) => (
-        <div key={idx} className="wh-owner-card">
-          <div className="wh-owner-header">
-            <span className="wh-owner-label">Owner {idx + 1}</span>
+        <div key={idx} className="form-section-inner">
+          <div className="inner-section-header">
+            <span className="inner-legend">Owner {idx + 1}</span>
             {fd.owners.length > 1 && (
-              <button type="button" className="wh-btn wh-btn-danger" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => removeOwner(idx)}>
+              <button type="button" className="remove-button" onClick={() => removeOwner(idx)}>
                 Remove
               </button>
             )}
           </div>
-          <div className="wh-row">
-            <Field label="Full Name" required>
-              <Input value={owner.ownerName} onChange={v => setOwner(idx, 'ownerName', v)} />
+          <div className="form-row">
+            <Field label="Full Name" required error={errors[`owner_${idx}_name`]}>
+              <input
+                className={`form-input${errors[`owner_${idx}_name`] ? ' input-error' : ''}`}
+                value={owner.ownerName}
+                onChange={e => { setOwner(idx, 'ownerName', e.target.value); clearError(`owner_${idx}_name`) }}
+              />
             </Field>
-            <Field label="Title" required>
-              <Input value={owner.ownerTitle} onChange={v => setOwner(idx, 'ownerTitle', v)} />
+            <Field label="Title" error={errors[`owner_${idx}_title`]}>
+              <input
+                className={`form-input${errors[`owner_${idx}_title`] ? ' input-error' : ''}`}
+                value={owner.ownerTitle}
+                onChange={e => { setOwner(idx, 'ownerTitle', e.target.value); clearError(`owner_${idx}_title`) }}
+              />
             </Field>
             <Field label="Ownership %">
-              <Input type="number" min="0" max="100" value={owner.ownerPct} onChange={v => setOwner(idx, 'ownerPct', v)} />
+              <input
+                className="form-input"
+                type="number"
+                min="0"
+                max="100"
+                value={owner.ownerPct}
+                onChange={e => setOwner(idx, 'ownerPct', e.target.value)}
+              />
             </Field>
           </div>
-          <div className="wh-row">
+          <div className="form-row">
             <Field label="Phone">
-              <Input type="tel" value={owner.ownerPhone} onChange={v => setOwner(idx, 'ownerPhone', v)} />
+              <input
+                className="form-input"
+                type="tel"
+                value={owner.ownerPhone}
+                onChange={e => setOwner(idx, 'ownerPhone', e.target.value)}
+              />
             </Field>
             <Field label="Email">
-              <Input type="email" value={owner.ownerEmail} onChange={v => setOwner(idx, 'ownerEmail', v)} />
+              <input
+                className="form-input"
+                type="email"
+                value={owner.ownerEmail}
+                onChange={e => setOwner(idx, 'ownerEmail', e.target.value)}
+              />
             </Field>
           </div>
           <Field label="Address">
-            <Input value={owner.ownerAddr} onChange={v => setOwner(idx, 'ownerAddr', v)} />
+            <input
+              className="form-input"
+              value={owner.ownerAddr}
+              onChange={e => setOwner(idx, 'ownerAddr', e.target.value)}
+            />
           </Field>
           <Field label="Driver License #">
-            <Input value={owner.ownerDl} onChange={v => setOwner(idx, 'ownerDl', v)} />
+            <input
+              className="form-input"
+              value={owner.ownerDl}
+              onChange={e => setOwner(idx, 'ownerDl', e.target.value)}
+            />
           </Field>
-          <Field label="Photo ID Upload">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => handlePhotoUpload(idx, e.target.files[0])} />
-            {uploadStatus[`owner_${idx}`] && (
-              <div className={`wh-upload-status ${uploadStatus[`owner_${idx}`].state}`}>
-                {uploadStatus[`owner_${idx}`].state === 'uploading' ? 'Uploading...' : uploadStatus[`owner_${idx}`].msg}
-              </div>
-            )}
-          </Field>
+          <MultiFileUploader
+            slot={{ id: `owner_${idx}_photo`, title: 'Photo ID', required: false, description: "Upload a photo ID for this owner." }}
+            files={(fd.documents?.[`owner_${idx}_photo`]) || []}
+            applicationId={applicationId}
+            onFilesChange={handleDocFilesChange}
+            uploadDocument={uploadDocument}
+            removeDocument={() => {}}
+            openDocument={openDocument}
+            downloadCombinedPdf={downloadCombinedPdf}
+          />
         </div>
       ))}
-      <button type="button" className="wh-btn wh-btn-secondary" onClick={addOwner}>
+      <button type="button" className="add-button" onClick={addOwner}>
         + Add Owner
       </button>
-    </>
+    </fieldset>
   )
 }
 
-function Section3({ fd, set, appId, uploadWarehouseDocument }) {
-  const [taxStatus,   setTaxStatus]   = useState(null)
-  const [tobacStatus, setTobacStatus] = useState(null)
-
-  const handleTaxUpload = async (file) => {
-    if (!file) return
-    if (!appId) { setTaxStatus({ state: 'error', msg: 'Save draft first to enable uploads' }); return }
-    setTaxStatus({ state: 'uploading' })
-    const r = await uploadWarehouseDocument(appId, 'tax_permit', file)
-    if (r.success) { set('salesTaxPermitUrl', r.url); setTaxStatus({ state: 'ok', msg: `Uploaded: ${r.filename}` }) }
-    else setTaxStatus({ state: 'error', msg: r.error || 'Upload failed' })
-  }
-
-  const handleTobacUpload = async (file) => {
-    if (!file) return
-    if (!appId) { setTobacStatus({ state: 'error', msg: 'Save draft first to enable uploads' }); return }
-    setTobacStatus({ state: 'uploading' })
-    const r = await uploadWarehouseDocument(appId, 'tobacco_permit', file)
-    if (r.success) { set('tobaccoPermitUrl', r.url); setTobacStatus({ state: 'ok', msg: `Uploaded: ${r.filename}` }) }
-    else setTobacStatus({ state: 'error', msg: r.error || 'Upload failed' })
-  }
+function Section3({ fd, set, uploadDocument, handleDocFilesChange, applicationId, openDocument, downloadCombinedPdf, errors, clearError }) {
 
   return (
-    <>
-      <p className="wh-section-title">Permits</p>
-      <div className="wh-row">
-        <Field label="Sales Tax Permit No." required>
-          <Input value={fd.salesTaxPermitNo} onChange={v => set('salesTaxPermitNo', v)} />
-        </Field>
-      </div>
-      <Field label="Sales Tax Permit (upload)">
-        <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => handleTaxUpload(e.target.files[0])} />
-        {taxStatus && (
-          <div className={`wh-upload-status ${taxStatus.state}`}>
-            {taxStatus.state === 'uploading' ? 'Uploading...' : taxStatus.msg}
-          </div>
-        )}
-      </Field>
+    <fieldset className="form-section">
+      <legend>Permits</legend>
 
-      <div className="form-group" style={{ marginTop: 8 }}>
-        <label className="checkbox-label">
-          <input type="checkbox" checked={fd.hasTobacco} onChange={e => set('hasTobacco', e.target.checked)} />
-          We sell tobacco products (tobacco permit required)
-        </label>
-      </div>
-
-      {fd.hasTobacco && (
-        <>
-          <div className="wh-row">
-            <Field label="Tobacco Permit No.">
-              <Input value={fd.tobaccoPermitNo} onChange={v => set('tobaccoPermitNo', v)} />
-            </Field>
-            <Field label="Expiry Date">
-              <Input type="date" value={fd.tobaccoPermitExpiry} onChange={v => set('tobaccoPermitExpiry', v)} />
-            </Field>
-          </div>
-          <Field label="Tobacco Permit (upload)">
-            <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => handleTobacUpload(e.target.files[0])} />
-            {tobacStatus && (
-              <div className={`wh-upload-status ${tobacStatus.state}`}>
-                {tobacStatus.state === 'uploading' ? 'Uploading...' : tobacStatus.msg}
-              </div>
-            )}
+      <div className="form-section-inner">
+        <span className="inner-legend">Sales Tax Permit</span>
+        <div className="form-row">
+          <Field label="Sales Tax Permit No." required error={errors.salesTaxPermitNo}>
+            <input
+              className={`form-input${errors.salesTaxPermitNo ? ' input-error' : ''}`}
+              value={fd.salesTaxPermitNo}
+              onChange={e => { set('salesTaxPermitNo', e.target.value); clearError('salesTaxPermitNo') }}
+            />
           </Field>
-        </>
-      )}
-    </>
+        </div>
+        <MultiFileUploader
+          slot={{ id: 'tax_permit', title: 'Sales Tax Permit', required: false, description: 'Upload a copy of your sales tax permit.' }}
+          files={(fd.documents?.tax_permit) || []}
+          applicationId={applicationId}
+          onFilesChange={handleDocFilesChange}
+          uploadDocument={uploadDocument}
+          removeDocument={() => {}}
+          openDocument={openDocument}
+          downloadCombinedPdf={downloadCombinedPdf}
+        />
+
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input type="checkbox" checked={fd.hasTobacco} onChange={e => set('hasTobacco', e.target.checked)} />
+            We sell tobacco products (tobacco permit required)
+          </label>
+        </div>
+
+        {fd.hasTobacco && (
+          <>
+            <div className="form-row">
+              <Field label="Tobacco Permit No.">
+                <input className="form-input" value={fd.tobaccoPermitNo} onChange={e => set('tobaccoPermitNo', e.target.value)} />
+              </Field>
+              <Field label="Expiry Date">
+                <input className="form-input" type="date" value={fd.tobaccoPermitExpiry} onChange={e => set('tobaccoPermitExpiry', e.target.value)} />
+              </Field>
+            </div>
+            <MultiFileUploader
+              slot={{ id: 'tobacco_permit', title: 'Tobacco Permit', required: false, description: 'Upload a copy of your tobacco permit.' }}
+              files={(fd.documents?.tobacco_permit) || []}
+              applicationId={applicationId}
+              onFilesChange={handleDocFilesChange}
+              uploadDocument={uploadDocument}
+              removeDocument={() => {}}
+              openDocument={openDocument}
+              downloadCombinedPdf={downloadCombinedPdf}
+            />
+          </>
+        )}
+      </div>
+    </fieldset>
   )
 }
 
-function Section4({ fd, set }) {
+function Section4({ fd, set, errors, clearError }) {
   const toggleCat = useCallback((cat) => {
     const cats = fd.categories || []
     set('categories', cats.includes(cat) ? cats.filter(c => c !== cat) : [...cats, cat])
-  }, [fd.categories, set])
+    clearError('categories')
+  }, [fd.categories, set, clearError])
 
   return (
-    <>
-      <p className="wh-section-title">Purchasing Information</p>
-      <div className="wh-row">
-        <Field label="Estimated Monthly Purchase Volume ($)" required>
-          <Input type="number" min="0" value={fd.purchaseVolume} onChange={v => set('purchaseVolume', v)} />
-        </Field>
-        <Field label="Desired Start Date">
-          <Input type="date" value={fd.startDate} onChange={v => set('startDate', v)} />
-        </Field>
-      </div>
-      <Field label="Product Categories" required hint="Select all that apply">
-        <div className="wh-categories">
-          {CATEGORIES.map(cat => (
-            <label key={cat} className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={(fd.categories || []).includes(cat)}
-                onChange={() => toggleCat(cat)}
-              />
-              {cat}
-            </label>
-          ))}
+    <fieldset className="form-section">
+      <legend>Purchasing Information</legend>
+
+      <div className="form-section-inner">
+        <span className="inner-legend">Purchase Details</span>
+        <div className="form-row">
+          <Field label="Estimated Monthly Purchase Volume ($)" required error={errors.purchaseVolume}>
+            <input
+              className={`form-input${errors.purchaseVolume ? ' input-error' : ''}`}
+              type="number"
+              min="0"
+              value={fd.purchaseVolume}
+              onChange={e => { set('purchaseVolume', e.target.value); clearError('purchaseVolume') }}
+            />
+          </Field>
+          <Field label="Desired Start Date">
+            <input className="form-input" type="date" value={fd.startDate} onChange={e => set('startDate', e.target.value)} />
+          </Field>
         </div>
-      </Field>
-    </>
-  )
-}
-
-function Section5({ fd, set }) {
-  return (
-    <>
-      <p className="wh-section-title">Resale Certificate</p>
-      <p style={{ fontSize: 13, color: 'var(--ghra-muted)', marginBottom: 16 }}>
-        This certificate is required by the Texas Comptroller for tax-exempt wholesale purchases.
-      </p>
-      <div className="wh-row">
-        <Field label="Business Name" required>
-          <Input value={fd.rcName} onChange={v => set('rcName', v)} />
-        </Field>
-        <Field label="Texas Sales Tax Permit No." required>
-          <Input value={fd.rcPermit} onChange={v => set('rcPermit', v)} />
-        </Field>
-        <Field label="Phone" required>
-          <Input type="tel" value={fd.rcPhone} onChange={v => set('rcPhone', v)} />
-        </Field>
-      </div>
-      <Field label="Items to be Purchased for Resale" required>
-        <Input value={fd.rcItems} onChange={v => set('rcItems', v)} placeholder="e.g. Tobacco, beverages, general merchandise" />
-      </Field>
-      <Field label="Type of Business / Activity" required>
-        <Input value={fd.rcActivity} onChange={v => set('rcActivity', v)} placeholder="e.g. Convenience store retail sales" />
-      </Field>
-      <div className="form-group">
-        <label className="checkbox-label">
-          <input type="checkbox" checked={fd.rcAck} onChange={e => set('rcAck', e.target.checked)} />
-          I/We certify that all purchases made under this certificate are for resale in the normal course of business.
-        </label>
-      </div>
-    </>
-  )
-}
-
-function Section6({ fd, set }) {
-  return (
-    <>
-      <p className="wh-section-title">Authorization &amp; Electronic Signature</p>
-      <div className="wh-row">
-        <Field label="Signer Name" required>
-          <Input value={fd.signerName} onChange={v => set('signerName', v)} />
-        </Field>
-        <Field label="Title" required>
-          <Input value={fd.signerTitle} onChange={v => set('signerTitle', v)} />
-        </Field>
-      </div>
-      <Field label="Signature" required hint="Draw your signature below">
-        <SignaturePad
-          value={fd.signatureData}
-          onChange={v => set('signatureData', v)}
-        />
-      </Field>
-      <div className="form-group">
-        <label className="checkbox-label">
-          <input type="checkbox" checked={fd.agreeTerms} onChange={e => set('agreeTerms', e.target.checked)} />
-          I agree to the GHRA warehouse membership terms and conditions.
-        </label>
-      </div>
-      <div className="form-group">
-        <label className="checkbox-label">
-          <input type="checkbox" checked={fd.esign} onChange={e => set('esign', e.target.checked)} />
-          I consent to the use of an electronic signature for this application.
-        </label>
-      </div>
-    </>
-  )
-}
-
-// ── Step indicator (inlined, mirrors ProgressIndicator) ───────────────────────
-
-function StepBar({ currentStep }) {
-  return (
-    <div className="progress-container">
-      <div className="step-summary">Step {currentStep} of {STEPS.length} — {STEPS[currentStep - 1]?.title}</div>
-      <div className="progress-bar">
-        <div className="progress-fill" style={{ width: `${(currentStep / STEPS.length) * 100}%` }} />
-      </div>
-      <div className="steps-indicator">
-        {STEPS.map(s => (
-          <div
-            key={s.id}
-            className={`step-indicator ${s.id === currentStep ? 'active' : ''} ${s.id < currentStep ? 'completed' : ''}`}
-          >
-            <div className="step-circle">{s.id < currentStep ? '✓' : s.id}</div>
-            <p className="step-title">
-              <span className="step-title-full">{s.title}</span>
-              <span className="step-title-short">{s.title}</span>
-            </p>
+        <Field label="Product Categories" required hint="Select all that apply">
+          <div className="gf-categories">
+            {CATEGORIES.map(cat => (
+              <label key={cat} className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={(fd.categories || []).includes(cat)}
+                  onChange={() => toggleCat(cat)}
+                />
+                {cat}
+              </label>
+            ))}
           </div>
-        ))}
+        </Field>
+        {errors.categories && <span className="error-text">{errors.categories}</span>}
       </div>
-    </div>
+    </fieldset>
+  )
+}
+
+function Section5({ fd, set, errors, clearError }) {
+  return (
+    <fieldset className="form-section">
+      <legend>Resale Certificate</legend>
+
+      <div className="form-section-inner">
+        <span className="inner-legend">Resale Certificate</span>
+        <p style={{ fontSize: 13, color: 'var(--ghra-muted)', margin: '0 0 16px 0' }}>
+          This certificate is required by the Texas Comptroller for tax-exempt wholesale purchases.
+        </p>
+        <div className="form-row">
+          <Field label="Business Name" required error={errors.rcName}>
+            <input
+              className={`form-input${errors.rcName ? ' input-error' : ''}`}
+              value={fd.rcName}
+              onChange={e => { set('rcName', e.target.value); clearError('rcName') }}
+            />
+          </Field>
+          <Field label="Texas Sales Tax Permit No." required error={errors.rcPermit}>
+            <input
+              className={`form-input${errors.rcPermit ? ' input-error' : ''}`}
+              value={fd.rcPermit}
+              onChange={e => { set('rcPermit', e.target.value); clearError('rcPermit') }}
+            />
+          </Field>
+          <Field label="Phone" required error={errors.rcPhone}>
+            <input
+              className={`form-input${errors.rcPhone ? ' input-error' : ''}`}
+              type="tel"
+              value={fd.rcPhone}
+              onChange={e => { set('rcPhone', e.target.value); clearError('rcPhone') }}
+            />
+          </Field>
+        </div>
+        <Field label="Items to be Purchased for Resale" required error={errors.rcItems}>
+          <input
+            className={`form-input${errors.rcItems ? ' input-error' : ''}`}
+            value={fd.rcItems}
+            onChange={e => { set('rcItems', e.target.value); clearError('rcItems') }}
+            placeholder="e.g. Tobacco, beverages, general merchandise"
+          />
+        </Field>
+        <Field label="Type of Business / Activity" required error={errors.rcActivity}>
+          <input
+            className={`form-input${errors.rcActivity ? ' input-error' : ''}`}
+            value={fd.rcActivity}
+            onChange={e => { set('rcActivity', e.target.value); clearError('rcActivity') }}
+            placeholder="e.g. Convenience store retail sales"
+          />
+        </Field>
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={fd.rcAck}
+              onChange={e => { set('rcAck', e.target.checked); clearError('rcAck') }}
+            />
+            I/We certify that all purchases made under this certificate are for resale in the normal course of business.
+          </label>
+          {errors.rcAck && <span className="error-text">{errors.rcAck}</span>}
+        </div>
+      </div>
+    </fieldset>
+  )
+}
+
+function Section6({ fd, set, errors, clearError }) {
+  return (
+    <fieldset className="form-section">
+      <legend>Authorization &amp; Electronic Signature</legend>
+
+      <div className="form-section-inner">
+        <span className="inner-legend">Authorization</span>
+        <div className="form-row">
+          <Field label="Signer Name" required error={errors.signerName}>
+            <input
+              className={`form-input${errors.signerName ? ' input-error' : ''}`}
+              value={fd.signerName}
+              onChange={e => { set('signerName', e.target.value); clearError('signerName') }}
+            />
+          </Field>
+          <Field label="Title" required error={errors.signerTitle}>
+            <input
+              className={`form-input${errors.signerTitle ? ' input-error' : ''}`}
+              value={fd.signerTitle}
+              onChange={e => { set('signerTitle', e.target.value); clearError('signerTitle') }}
+            />
+          </Field>
+        </div>
+        <Field label="Signature" required hint="Draw your signature below">
+          <SignaturePad
+            value={fd.signatureData}
+            onChange={v => { set('signatureData', v); if (v) clearError('signatureData') }}
+          />
+        </Field>
+        {errors.signatureData && <span className="error-text">{errors.signatureData}</span>}
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={fd.agreeTerms}
+              onChange={e => { set('agreeTerms', e.target.checked); clearError('agreeTerms') }}
+            />
+            I agree to the GHRA warehouse membership terms and conditions.
+          </label>
+          {errors.agreeTerms && <span className="error-text">{errors.agreeTerms}</span>}
+        </div>
+        <div className="form-group">
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={fd.esign}
+              onChange={e => { set('esign', e.target.checked); clearError('esign') }}
+            />
+            I consent to the use of an electronic signature for this application.
+          </label>
+          {errors.esign && <span className="error-text">{errors.esign}</span>}
+        </div>
+      </div>
+    </fieldset>
   )
 }
 
@@ -538,37 +672,78 @@ function WarehouseApplicationForm() {
     getWarehouseApplication,
     uploadWarehouseDocument,
     currentUser,
+    openDocument,
+    downloadCombinedPdf,
   } = useContext(AuthContext)
 
   const isNew = !routeId || routeId === 'new'
 
-  const [formData,    setFormData]    = useState(blankForm)
-  const [appId,       setAppId]       = useState(isNew ? null : routeId)
-  const [currentStep, setCurrentStep] = useState(1)
-  const [loading,     setLoading]     = useState(!isNew)
-  const [saving,      setSaving]      = useState(false)
-  const [submitting,  setSubmitting]  = useState(false)
-  const [stepError,   setStepError]   = useState(null)
-  const [submitError, setSubmitError] = useState(null)
-  const [submitted,   setSubmitted]   = useState(false)
+  const [formData,     setFormData]     = useState(blankForm)
+  const [appId,        setAppId]        = useState(isNew ? null : routeId)
+  const [currentStep,  setCurrentStep]  = useState(1)
+  const [loading,      setLoading]      = useState(!isNew)
+  const [saving,       setSaving]       = useState(false)
+  const [submitting,   setSubmitting]   = useState(false)
+  const [errors,       setErrors]       = useState({})
+  const [toast,        setToast]        = useState('')
+  const [saveError,    setSaveError]    = useState(null)
+  const [submitted,    setSubmitted]    = useState(false)
+  const [readOnly,     setReadOnly]     = useState(false)
+  const [appStatus,    setAppStatus]    = useState('')
+  const [appSubmittedAt, setAppSubmittedAt] = useState(null)
+  const [appNotes,     setAppNotes]     = useState('')
 
-  // Load existing draft
   useEffect(() => {
     if (isNew) return
     setLoading(true)
     getWarehouseApplication(routeId).then(data => {
-      if (data?.formData) setFormData(fd => ({ ...blankForm(), ...data.formData }))
+      if (data?.formData) {
+        const loaded = { ...blankForm(), ...data.formData }
+        // Backfill documents from legacy single-URL fields
+        const docs = { ...(loaded.documents || {}) }
+        if (loaded.salesTaxPermitUrl && !(docs.tax_permit || []).length) {
+          docs.tax_permit = [{ url: loaded.salesTaxPermitUrl, filename: 'tax_permit', originalName: 'tax_permit' }]
+        }
+        if (loaded.tobaccoPermitUrl && !(docs.tobacco_permit || []).length) {
+          docs.tobacco_permit = [{ url: loaded.tobaccoPermitUrl, filename: 'tobacco_permit', originalName: 'tobacco_permit' }]
+        }
+        ;(loaded.owners || []).forEach((o, i) => {
+          if (o.photoIdUrl && !(docs[`owner_${i}_photo`] || []).length) {
+            docs[`owner_${i}_photo`] = [{ url: o.photoIdUrl, filename: `owner_${i}_photo`, originalName: `owner_${i}_photo` }]
+          }
+        })
+        loaded.documents = docs
+        setFormData(loaded)
+      }
+      if (data) {
+        setReadOnly(data.Status !== 'draft')
+        setAppStatus(data.Status || '')
+        setAppSubmittedAt(data.SubmittedAt || null)
+        setAppNotes(data.Notes || '')
+      }
       setLoading(false)
     })
   }, [routeId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(''), 6000)
+    return () => clearTimeout(t)
+  }, [toast])
+
   const set = useCallback((key, value) => {
-    setFormData(fd => ({ ...fd, [key]: value }))
+    const v = typeof value === 'string' && WAREHOUSE_TEXT_UPPERCASE.has(key) ? value.toUpperCase() : value
+    setFormData(fd => ({ ...fd, [key]: v }))
+  }, [])
+
+  const clearError = useCallback((key) => {
+    setErrors(prev => prev[key] ? { ...prev, [key]: '' } : prev)
   }, [])
 
   const setOwner = useCallback((idx, key, value) => {
+    const v = typeof value === 'string' && WAREHOUSE_OWNER_TEXT_UPPERCASE.has(key) ? value.toUpperCase() : value
     setFormData(fd => {
-      const owners = fd.owners.map((o, i) => i === idx ? { ...o, [key]: value } : o)
+      const owners = fd.owners.map((o, i) => i === idx ? { ...o, [key]: v } : o)
       return { ...fd, owners }
     })
   }, [])
@@ -581,7 +756,32 @@ function WarehouseApplicationForm() {
     setFormData(fd => ({ ...fd, owners: fd.owners.filter((_, i) => i !== idx) }))
   }, [])
 
-  // Ensure draft exists before file uploads (returns current appId or newly created one)
+  const handleStepClick = useCallback((stepId) => {
+    setCurrentStep(stepId)
+    window.scrollTo(0, 0)
+  }, [])
+
+  const uploadDocumentFn = useCallback(async (currentAppId, slotId, file) => {
+    const result = await uploadWarehouseDocument(currentAppId, slotId, file)
+    if (!result.success) throw new Error(result.error || 'Upload failed')
+    return { url: result.url, filename: result.filename, originalName: file.name }
+  }, [uploadWarehouseDocument])
+
+  const handleDocFilesChange = useCallback((slotId, newFiles) => {
+    setFormData(prev => {
+      const docs = { ...(prev.documents || {}), [slotId]: newFiles }
+      const updates = { documents: docs }
+      if (slotId === 'tax_permit') updates.salesTaxPermitUrl = newFiles[0]?.url || ''
+      if (slotId === 'tobacco_permit') updates.tobaccoPermitUrl = newFiles[0]?.url || ''
+      const ownerMatch = slotId.match(/^owner_(\d+)_photo$/)
+      if (ownerMatch) {
+        const idx = parseInt(ownerMatch[1], 10)
+        updates.owners = prev.owners.map((o, i) => i === idx ? { ...o, photoIdUrl: newFiles[0]?.url || '' } : o)
+      }
+      return { ...prev, ...updates }
+    })
+  }, [])
+
   const ensureDraft = useCallback(async (fd) => {
     if (appId) return appId
     const result = await saveWarehouseDraft(null, fd)
@@ -589,17 +789,24 @@ function WarehouseApplicationForm() {
     return null
   }, [appId, saveWarehouseDraft])
 
-  // ── Navigation ────────────────────────────────────────────────────────────
-
   const handleSave = useCallback(async () => {
-    const err = validateStep(currentStep, formData)
-    if (err) { setStepError(err); return }
-    setStepError(null)
+    const stepErrors = computeStepErrors(currentStep, formData)
+    if (Object.keys(stepErrors).length > 0) {
+      setErrors(stepErrors)
+      setToast('Please fill in all required fields before continuing.')
+      setTimeout(() => {
+        const el = document.querySelector('.input-error, .error-text')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+      return
+    }
+    setErrors({})
+    setSaveError(null)
     setSaving(true)
     try {
       const currentId = await ensureDraft(formData)
       const result = await saveWarehouseDraft(currentId, formData)
-      if (!result.success) { setStepError(result.error || 'Failed to save'); return }
+      if (!result.success) { setSaveError(result.error || 'Failed to save'); return }
       if (!appId && result.id) setAppId(result.id)
       if (currentStep < STEPS.length) setCurrentStep(s => s + 1)
     } finally {
@@ -608,20 +815,29 @@ function WarehouseApplicationForm() {
   }, [currentStep, formData, ensureDraft, appId, saveWarehouseDraft])
 
   const handlePrev = useCallback(() => {
-    setStepError(null)
+    setErrors({})
+    setSaveError(null)
     setCurrentStep(s => s - 1)
   }, [])
 
   const handleSubmit = useCallback(async () => {
-    const err = validateStep(currentStep, formData)
-    if (err) { setStepError(err); return }
-    setStepError(null)
+    const stepErrors = computeStepErrors(currentStep, formData)
+    if (Object.keys(stepErrors).length > 0) {
+      setErrors(stepErrors)
+      setToast('Please fill in all required fields before continuing.')
+      setTimeout(() => {
+        const el = document.querySelector('.input-error, .error-text')
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 50)
+      return
+    }
+    setErrors({})
+    setSaveError(null)
     setSubmitting(true)
-    setSubmitError(null)
     try {
       const currentId = appId || (await ensureDraft(formData))
       const result = await submitWarehouseApplication(currentId, formData)
-      if (!result.success) { setSubmitError(result.error || 'Submission failed'); return }
+      if (!result.success) { setSaveError(result.error || 'Submission failed'); return }
       setSubmitted(true)
       setTimeout(() => navigate('/dashboard'), 2500)
     } finally {
@@ -629,37 +845,116 @@ function WarehouseApplicationForm() {
     }
   }, [currentStep, formData, appId, ensureDraft, submitWarehouseApplication, navigate])
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ghra-slate)' }}>Loading...</div>
-
-  if (submitted) {
+  if (loading) {
     return (
-      <div className="wh-container">
-        <div className="wh-card" style={{ padding: 60, textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
-          <h2 style={{ color: '#27ae60', marginBottom: 12 }}>Application Submitted</h2>
-          <p style={{ color: 'var(--ghra-muted)', fontSize: 14 }}>
-            Your warehouse account application has been submitted. Redirecting to your dashboard...
-          </p>
+      <div className="gf-container">
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--ghra-slate)' }}>
+          Loading...
         </div>
       </div>
     )
   }
 
-  const sectionProps = { fd: formData, set }
+  if (submitted) {
+    return (
+      <div className="gf-container">
+        <div className="gf-success-card">
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
+          <h2>Application Submitted</h2>
+          <p>Your warehouse account application has been submitted. Redirecting to your dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const sectionProps = { fd: formData, set, errors, clearError }
+
+  const nav = readOnly
+    ? (
+      <div className="gf-nav-right">
+        <button type="button" className="nav-button cancel-button"
+          onClick={() => navigate('/dashboard')}>
+          Back to Dashboard
+        </button>
+      </div>
+    )
+    : (
+      <>
+        <div>
+          {currentStep > 1 && (
+            <button
+              type="button"
+              className="nav-button prev-button"
+              onClick={handlePrev}
+              disabled={saving}
+            >
+              Previous
+            </button>
+          )}
+        </div>
+
+        <div className="gf-nav-right">
+          {saveError && <span className="error-text">{saveError}</span>}
+          {saving && <span className="gf-saving-text">Saving...</span>}
+          <div className="gf-nav-actions">
+            <button type="button" className="nav-button cancel-button"
+              onClick={() => navigate('/dashboard')} disabled={saving || submitting}>
+              Save &amp; Exit
+            </button>
+            {currentStep < STEPS.length ? (
+              <button
+                type="button"
+                className="nav-button next-button"
+                onClick={handleSave}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save & Continue'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="nav-button next-button"
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? 'Submitting...' : 'Submit Application'}
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    )
 
   return (
-    <div className="wh-container">
-      <div className="wh-header">
-        <h1>Warehouse Account Application</h1>
-        <p>Logged in as {currentUser?.email}</p>
-      </div>
-
-      <StepBar currentStep={currentStep} />
-
-      <div className="wh-card">
-        <div className="wh-section-body">
+    <>
+      {toast && (
+        <div className="validation-toast">
+          <span>{toast}</span>
+          <button className="validation-toast-close" onClick={() => setToast('')}>✕</button>
+        </div>
+      )}
+      <FormShell
+        title="GHRA Warehouse Account Application"
+        steps={STEPS}
+        currentStep={currentStep}
+        email={currentUser?.email}
+        nav={nav}
+        onStepClick={handleStepClick}
+      >
+        {readOnly && appStatus && (
+          <div className={`gf-status-banner gf-status-banner--${appStatus}`}>
+            <p className="gf-status-banner__title">
+              {appStatus === 'submitted' && 'This application has been submitted and is awaiting review.'}
+              {appStatus === 'approved'  && 'This application has been approved.'}
+              {appStatus === 'rejected'  && 'This application has been rejected.'}
+            </p>
+            <p className="gf-status-banner__body">
+              {appSubmittedAt && <>Submitted: {new Date(appSubmittedAt).toLocaleDateString()}</>}
+              {appNotes && <><br />Reviewer notes: {appNotes}</>}
+            </p>
+          </div>
+        )}
+        <div className={readOnly ? 'gf-readonly-content' : ''}>
           {currentStep === 1 && <Section1 {...sectionProps} />}
           {currentStep === 2 && (
             <Section2
@@ -667,58 +962,34 @@ function WarehouseApplicationForm() {
               setOwner={setOwner}
               addOwner={addOwner}
               removeOwner={removeOwner}
-              appId={appId}
-              uploadWarehouseDocument={uploadWarehouseDocument}
+              uploadDocument={uploadDocumentFn}
+              handleDocFilesChange={handleDocFilesChange}
+              applicationId={appId}
+              openDocument={openDocument}
+              downloadCombinedPdf={downloadCombinedPdf}
+              errors={errors}
+              clearError={clearError}
             />
           )}
           {currentStep === 3 && (
             <Section3
               fd={formData}
               set={set}
-              appId={appId}
-              uploadWarehouseDocument={uploadWarehouseDocument}
+              uploadDocument={uploadDocumentFn}
+              handleDocFilesChange={handleDocFilesChange}
+              applicationId={appId}
+              openDocument={openDocument}
+              downloadCombinedPdf={downloadCombinedPdf}
+              errors={errors}
+              clearError={clearError}
             />
           )}
           {currentStep === 4 && <Section4 {...sectionProps} />}
           {currentStep === 5 && <Section5 {...sectionProps} />}
           {currentStep === 6 && <Section6 {...sectionProps} />}
-
-          {stepError && <p className="wh-error-msg">{stepError}</p>}
-          {submitError && <p className="wh-error-msg">{submitError}</p>}
         </div>
-
-        <div className="wh-nav">
-          <button
-            type="button"
-            className="wh-btn wh-btn-secondary"
-            onClick={handlePrev}
-            disabled={currentStep === 1 || saving}
-          >
-            Previous
-          </button>
-
-          {currentStep < STEPS.length ? (
-            <button
-              type="button"
-              className="wh-btn wh-btn-primary"
-              onClick={handleSave}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Save & Continue'}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="wh-btn wh-btn-primary"
-              onClick={handleSubmit}
-              disabled={submitting}
-            >
-              {submitting ? 'Submitting...' : 'Submit Application'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+      </FormShell>
+    </>
   )
 }
 
