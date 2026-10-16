@@ -3,7 +3,7 @@ import { logClientError } from '../utils/logClientError'
 
 export const AuthContext = createContext()
 
-const API_ORIGIN =  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
+const API_ORIGIN = 'http://localhost:3001'// import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001'
 const API = `${API_ORIGIN}/api`
 const SESSION_EXPIRED_MSG = 'Your session has expired. Please sign in again — your progress has been saved.'
 
@@ -619,6 +619,39 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token, authFetch])
 
+  // Open an archived cancelled-references PDF in a new tab (employee-only; server enforces).
+  const openReferencesArchive = useCallback(async (appId, filename) => {
+    if (!token || !appId || !filename) return
+    try {
+      const res = await authFetch(`${API}/applications/${appId}/references-archive/${encodeURIComponent(filename)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      window.open(blobUrl, '_blank', 'noopener,noreferrer')
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000)
+    } catch {}
+  }, [token, authFetch])
+
+  // Cancel the existing DS references request and send a fresh one with updated reference details.
+  // reference1 / reference2 shape: { repName, company, ghraNumber, email }
+  const resendReferencesRequest = useCallback(async (appId, reference1, reference2) => {
+    if (!token) return { success: false, error: 'Not authenticated' }
+    try {
+      const res = await authFetch(`${API}/applications/${appId}/resend-references`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ reference1, reference2 })
+      })
+      const data = await res.json()
+      if (!res.ok) return { success: false, error: data.error || 'Request failed', recoverable: data.recoverable }
+      return { success: true, message: data.message, newRequestId: data.newRequestId, archivedFile: data.archivedFile }
+    } catch {
+      return { success: false, error: 'Unable to connect to server' }
+    }
+  }, [token, authFetch])
+
   const getDsEvents = useCallback(async (appId) => {
     if (!token) return { events: [] }
     try {
@@ -923,6 +956,8 @@ export const AuthProvider = ({ children }) => {
       getSignatureStatus,
       resendSignature,
       sendReferencesRequest,
+      resendReferencesRequest,
+      openReferencesArchive,
       getDsEvents,
       getAuditLog,
       changePassword,

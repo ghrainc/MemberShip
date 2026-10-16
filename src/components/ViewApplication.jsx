@@ -96,7 +96,7 @@ function formatReviewerName(email) {
 function ViewApplication() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog, getClientErrorLogs } = useContext(AuthContext)
+  const { currentUser, getApplicationById, updateApplicationStatus, getLastBoardSigners, openDocument, updateGhraNumber, downloadAllDocuments, fetchDocumentBlobUrl, downloadCombinedPdf, unarchiveApplications, getDsEvents, getAuditLog, getClientErrorLogs, openReferencesArchive } = useContext(AuthContext)
   const isEmployee = currentUser?.role === 'employee'
 
   const [application, setApplication]   = useState(null)
@@ -134,6 +134,8 @@ function ViewApplication() {
   const [clientErrEntries, setClientErrEntries] = useState(null)
   const [clientErrLoading, setClientErrLoading] = useState(false)
   const [expandedClientErr, setExpandedClientErr] = useState(null)
+
+  const [refResendOpen, setRefResendOpen] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -1134,6 +1136,68 @@ function ViewApplication() {
           )}
         </div>
       )}
+
+      {isEmployee && (() => {
+        let refHistory = []
+        try { refHistory = JSON.parse(application?.ReferencesResendHistory || '[]') } catch {}
+        if (!refHistory.length) return null
+        return (
+          <div className="ds-activity-panel">
+            <button className="ds-activity-toggle" onClick={() => setRefResendOpen(o => !o)}>
+              <span>References Resend History ({refHistory.length})</span>
+              <span className="ds-activity-chevron">{refResendOpen ? '▲' : '▼'}</span>
+            </button>
+            {refResendOpen && (
+              <div className="ds-activity-body">
+                <table className="ds-activity-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>By</th>
+                      <th>Reference 1 (old → new)</th>
+                      <th>Reference 2 (old → new)</th>
+                      <th>Prev DS request</th>
+                      <th>Archived</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {refHistory.slice().reverse().map((h, i) => {
+                      const fmtRef = (r) => r ? [r.repName, r.company, r.ghraNumber, r.email].filter(Boolean).join(' · ') : '—'
+                      return (
+                        <tr key={i} className={`ds-ev-row ${h.error ? 'ds-ev-fail' : 'ds-ev-ok'}`}>
+                          <td className="ds-ev-time">{h.resentAt ? new Date(h.resentAt).toLocaleString() : ''}</td>
+                          <td className="ds-ev-dir" style={{ fontSize: 11 }}>{h.resentBy || ''}</td>
+                          <td className="ds-ev-dir" style={{ fontSize: 11 }}>
+                            <div><em>Old:</em> {fmtRef(h.previousRef1)}</div>
+                            <div><em>New:</em> {fmtRef(h.newRef1)}</div>
+                          </td>
+                          <td className="ds-ev-dir" style={{ fontSize: 11 }}>
+                            <div><em>Old:</em> {fmtRef(h.previousRef2)}</div>
+                            <div><em>New:</em> {fmtRef(h.newRef2)}</div>
+                          </td>
+                          <td className="ds-ev-dir" style={{ fontSize: 11, fontFamily: 'monospace' }}>
+                            {h.previousRequestId ? `${h.previousRequestId.slice(0, 10)}…` : ''}
+                            {h.error && <div style={{ color: 'var(--ghra-red)' }}>send failed: {h.error}</div>}
+                          </td>
+                          <td className="ds-ev-actions">
+                            {h.archivedFile ? (
+                              <button className="ds-ev-expand" onClick={() => openReferencesArchive(application.Id, h.archivedFile)}>
+                                Open PDF
+                              </button>
+                            ) : (
+                              <span style={{ color: 'var(--ghra-muted)', fontSize: 11 }}>—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {isEmployee && (
         <div className="ds-activity-panel">

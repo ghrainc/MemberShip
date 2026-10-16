@@ -186,6 +186,40 @@ const DROPBOX_SIGN_TEMPLATE_ID            = process.env.DS_TEMPLATE_ID
 const DROPBOX_SIGN_SIGNER_ROLE            = 'Authorized Rep'
 const DROPBOX_SIGN_REFERENCES_TEMPLATE_ID = process.env.DROPBOX_SIGN_REFERENCES_TEMPLATE_ID
 
+// DS limits (surfaced by the API reference; the SDK does not enforce them client-side).
+const DS_SUBJECT_MAX = 255
+const DS_TITLE_MAX   = 255
+const DS_MESSAGE_MAX = 5000
+
+function dsTruncate(s, max) {
+  if (typeof s !== 'string') return ''
+  return s.length <= max ? s : s.slice(0, max - 1) + '…'
+}
+
+// Resolves human-readable identifiers for the recipient-facing subject/title/message.
+// Matches the StoreName definition used elsewhere (dbaName → memberName → `Application #<id>`),
+// so what signers see matches what employees see in dashboards and the DS custom-field mapping.
+function buildSendIdentity(formData, appId) {
+  const owners  = formData.owners || []
+  const owner1  = owners[0] || {}
+  const dba     = (formData.dbaName    || '').trim()
+  const member  = (formData.memberName || '').trim()
+  const storeName = dba || member || (appId ? `Application #${appId}` : 'GHRA Membership Application')
+
+  const authRepFirst = (formData.authorizedRepFirstName || owner1.firstName || '').trim()
+  const authRepLast  = (formData.authorizedRepLastName  || owner1.lastName  || '').trim()
+  const authRepName  = [authRepFirst, authRepLast].filter(Boolean).join(' ')
+
+  const addressParts = [
+    (formData.storeAddress || '').trim(),
+    (formData.storeCity    || '').trim(),
+    [(formData.storeState || '').trim(), (formData.storeZip || '').trim()].filter(Boolean).join(' '),
+  ].filter(Boolean)
+  const addressLine = addressParts.join(', ')
+
+  return { storeName, memberName: member, authRepName, addressLine }
+}
+
 // boardSigners = { verification: { firstName, lastName, email }, approved: { firstName, lastName, email }, membershipAdmin: { firstName, lastName, email } }
 // reviewerEmail = employee who approved the application (used in the signing request message)
 // staffFirstName / staffLastName = approving employee's name pre-filled into the document
@@ -452,9 +486,22 @@ async function sendSignatureRequest(formData, userEmail, boardSigners, reviewerE
   request.signers      = [signer, verificationSigner, approvedSigner, adminSigner]
   request.customFields = customFields
   request.testMode     = process.env.DS_TEST_MODE === 'true'
-  if (reviewerEmail) {
-    request.subject = 'GHRA Membership Application — Signature Required'
-    request.message = `Your signature is required for the GHRA Membership Application. This request was sent by ${reviewerEmail}.`
+  {
+    const id = buildSendIdentity(formData, appId)
+    const subject = id.memberName && id.memberName !== id.storeName
+      ? `GHRA Membership Application — ${id.storeName} (${id.memberName})`
+      : `GHRA Membership Application — ${id.storeName}`
+    const idLines = [
+      `Store: ${id.storeName}`,
+      id.memberName  ? `Member: ${id.memberName}`             : null,
+      id.authRepName ? `Authorized Rep: ${id.authRepName}`    : null,
+      id.addressLine ? `Address: ${id.addressLine}`           : null,
+    ].filter(Boolean).join('\n')
+    const sentBy = reviewerEmail ? `\n\nThis request was sent by ${reviewerEmail}.` : ''
+    const message = `Your signature is required for the GHRA Membership Application for the following business.\n\n${idLines}${sentBy}`
+    request.subject = dsTruncate(subject, DS_SUBJECT_MAX)
+    request.title   = dsTruncate(subject, DS_TITLE_MAX)
+    request.message = dsTruncate(message, DS_MESSAGE_MAX)
   }
 
   const response = await dsCall(db, {
@@ -515,6 +562,20 @@ async function sendReferencesRequest(formData, db = null, performedBy = null, ap
   request.signers      = [signer1, signer2]
   request.customFields = buildReferenceCustomFields(formData)
   request.testMode     = process.env.DS_TEST_MODE === 'true'
+  {
+    const id = buildSendIdentity(formData, appId)
+    // References are outside parties — identify the applicant, but omit the store address.
+    const subject = `GHRA Membership Reference — ${id.storeName}`
+    const idLines = [
+      `Store: ${id.storeName}`,
+      id.memberName  ? `Member: ${id.memberName}`          : null,
+      id.authRepName ? `Authorized Rep: ${id.authRepName}` : null,
+    ].filter(Boolean).join('\n')
+    const message = `You have been named as a reference on a GHRA Membership Application for the following business. Please review and complete the attached signing form.\n\n${idLines}`
+    request.subject = dsTruncate(subject, DS_SUBJECT_MAX)
+    request.title   = dsTruncate(subject, DS_TITLE_MAX)
+    request.message = dsTruncate(message, DS_MESSAGE_MAX)
+  }
 
   const response = await dsCall(db, {
     appId, operation: 'signatureRequestSendWithTemplate[refs]', performedBy,
@@ -770,6 +831,13 @@ async function ensureSchema() {
         WHERE object_id = OBJECT_ID('Applications') AND name = 'Ref2SignatureStatus'
       )
         ALTER TABLE Applications ADD Ref2SignatureStatus NVARCHAR(50) NULL
+    `)
+    await db.request().query(`
+      IF NOT EXISTS (
+        SELECT 1 FROM sys.columns
+        WHERE object_id = OBJECT_ID('Applications') AND name = 'ReferencesResendHistory'
+      )
+        ALTER TABLE Applications ADD ReferencesResendHistory NVARCHAR(MAX) NULL
     `)
     // Board signer columns (on the main membership signature request)
     const boardCols = [
@@ -1994,6 +2062,259 @@ app.post('/api/applications/:id/send-references', authMiddleware, async (req, re
   }
 })
 
+// POST /api/applications/:id/resend-references  — cancel the existing references request and send a fresh one
+// Used when the member's named references need to be CHANGED after the request has already gone out.
+// Body: { reference1: { firstName?, lastName?, repName?, company, ghraNumber, email },
+//         reference2: { ... same shape ... } }
+// Guards: 404 missing, 409 if no existing references request (use send-references instead),
+//         409 if ReferencesSignatureStatus === 'signed' (nothing to resend).
+// If a reference has already signed, their signed PDF is archived to
+// server/UploadedDocuments/<appId>/_archived/ before the cancel call so the record is preserved
+// even if DS stops serving the file post-cancel.
+app.post('/api/applications/:id/resend-references', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const body = req.body || {}
+  const r1 = body.reference1 || {}
+  const r2 = body.reference2 || {}
+
+  // Validate — same rules as step 5: email, company, GHRA number, rep name required for BOTH references.
+  function fieldErr(ref, label) {
+    const email  = (ref.email      || '').trim()
+    const comp   = (ref.company    || '').trim()
+    const ghra   = (ref.ghraNumber || '').trim()
+    const name   = (ref.repName    || '').trim()
+    if (!email)             return `${label}: email is required`
+    if (!emailRe.test(email)) return `${label}: email is not a valid address`
+    if (!comp)              return `${label}: company is required`
+    if (!ghra)              return `${label}: GHRA number is required`
+    if (!name)              return `${label}: rep name is required`
+    return null
+  }
+  const err1 = fieldErr(r1, 'Reference 1')
+  if (err1) return res.status(400).json({ error: err1 })
+  const err2 = fieldErr(r2, 'Reference 2')
+  if (err2) return res.status(400).json({ error: err2 })
+
+  try {
+    const db = await getPool()
+    const look = await db.request()
+      .input('id', sql.Int, appId)
+      .query(`SELECT ReferencesSignatureRequestId, ReferencesSignatureStatus, FormData, ReferencesResendHistory
+              FROM Applications WHERE Id = @id`)
+    if (!look.recordset.length) return res.status(404).json({ error: 'Not found' })
+
+    const row = look.recordset[0]
+    const oldReqId = row.ReferencesSignatureRequestId
+    if (!oldReqId) {
+      return res.status(409).json({ error: 'No references signature request exists yet. Use Send References instead.' })
+    }
+    if (row.ReferencesSignatureStatus === 'signed') {
+      return res.status(409).json({ error: 'This references request is already fully signed; there is nothing to resend.' })
+    }
+
+    let fd = {}
+    try { fd = JSON.parse(row.FormData || '{}') } catch {}
+
+    const previousRef1 = {
+      email:      fd.reference1Email      || '',
+      company:    fd.reference1Company    || '',
+      ghraNumber: fd.reference1GhraNumber || '',
+      repName:    fd.reference1RepName    || '',
+    }
+    const previousRef2 = {
+      email:      fd.reference2Email      || '',
+      company:    fd.reference2Company    || '',
+      ghraNumber: fd.reference2GhraNumber || '',
+      repName:    fd.reference2RepName    || '',
+    }
+
+    const api = new SignatureRequestApi()
+    api.authentications['api_key'].username = process.env.DROPBOX_SIGN_API_KEY
+
+    // Step 1: live DS status so we know whether either signer has signed.
+    let anySigned = false
+    try {
+      const live = await dsCall(db, {
+        appId, operation: 'signatureRequestGet[refs]', performedBy: req.user.email,
+        signatureRequestId: oldReqId, requestSummary: { signatureRequestId: oldReqId },
+      }, () => api.signatureRequestGet(oldReqId), r => ({
+        signatureRequestId: r.body.signatureRequest.signatureRequestId,
+        signatures: (r.body.signatureRequest.signatures || []).map(s => ({
+          role: s.signerRole, status: s.statusCode, email: s.signerEmailAddress,
+        })),
+      }))
+      const sigs = live.body.signatureRequest.signatures || []
+      anySigned = sigs.some(s => s.statusCode === 'signed')
+    } catch (getErr) {
+      console.warn(`[resend-references] app ${appId}: could not read live DS status before cancel — proceeding without archive attempt (${getErr.message})`)
+    }
+
+    // Step 2: archive the partially-signed PDF before cancel if applicable.
+    // Best-effort — a failure here does not block the resend.
+    let archivedFile = null
+    if (anySigned) {
+      try {
+        const pdfRes = await dsCall(db, {
+          appId, operation: 'signatureRequestFiles[refs]', performedBy: req.user.email,
+          signatureRequestId: oldReqId, requestSummary: { signatureRequestId: oldReqId, fileType: 'pdf' },
+        }, () => api.signatureRequestFiles(oldReqId, 'pdf'), r => ({
+          byteLength: Buffer.isBuffer(r.body) ? r.body.length : null,
+        }))
+        const buf = Buffer.isBuffer(pdfRes.body) ? pdfRes.body : Buffer.from(pdfRes.body)
+        if (buf.length > 0) {
+          const archiveDir = path.join(__dirname, 'UploadedDocuments', String(appId), '_archived')
+          fs.mkdirSync(archiveDir, { recursive: true })
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+          const safeOld = String(oldReqId).replace(/[^a-zA-Z0-9_-]/g, '')
+          const fname = `references-cancelled-${safeOld}-${stamp}.pdf`
+          fs.writeFileSync(path.join(archiveDir, fname), buf)
+          archivedFile = fname
+        }
+      } catch (archErr) {
+        console.warn(`[resend-references] app ${appId}: archive of signed references PDF failed — proceeding with cancel (${archErr.message})`)
+      }
+    }
+
+    // Step 3: cancel the old DS request.
+    try {
+      await dsCall(db, {
+        appId, operation: 'signatureRequestCancel[refs]', performedBy: req.user.email,
+        signatureRequestId: oldReqId, requestSummary: { signatureRequestId: oldReqId },
+      }, () => api.signatureRequestCancel(oldReqId), () => ({ signatureRequestId: oldReqId, cancelled: true }))
+    } catch (cancelErr) {
+      const detail = cancelErr.body?.error?.errorMsg || cancelErr.message || 'Cancel failed'
+      console.error(`[resend-references] app ${appId}: cancel of ${oldReqId} failed — DB untouched (${detail})`)
+      return res.status(502).json({ error: `Could not cancel the existing Dropbox Sign request: ${detail}` })
+    }
+
+    // Step 4: write updated reference fields into FormData. Email addresses are normalised
+    // to lowercase — DS uses them as routing keys and SMTP localpart case-sensitivity is
+    // implementation-defined; lowercasing avoids duplicate-signer and reminder-redirect
+    // confusion when the employee types "Example@gmail.com" and DS already holds "example@gmail.com".
+    const newFd = {
+      ...fd,
+      reference1Email:      r1.email.trim().toLowerCase(),
+      reference1Company:    r1.company.trim(),
+      reference1GhraNumber: r1.ghraNumber.trim(),
+      reference1RepName:    r1.repName.trim(),
+      reference2Email:      r2.email.trim().toLowerCase(),
+      reference2Company:    r2.company.trim(),
+      reference2GhraNumber: r2.ghraNumber.trim(),
+      reference2RepName:    r2.repName.trim(),
+    }
+    const newRef1 = { email: newFd.reference1Email, company: newFd.reference1Company, ghraNumber: newFd.reference1GhraNumber, repName: newFd.reference1RepName }
+    const newRef2 = { email: newFd.reference2Email, company: newFd.reference2Company, ghraNumber: newFd.reference2GhraNumber, repName: newFd.reference2RepName }
+
+    // Step 5: send the new DS references request (reuses the existing mapping + send code path).
+    let newSigId, newRef1SigId, newRef2SigId
+    try {
+      const sendResult = await sendReferencesRequest(newFd, db, req.user.email, appId)
+      newSigId     = sendResult.signatureRequestId
+      newRef1SigId = sendResult.ref1SignatureId || null
+      newRef2SigId = sendResult.ref2SignatureId || null
+    } catch (sendErr) {
+      // Partial failure: the old request IS cancelled but the new one did not go out.
+      // Null the request-id columns and persist the updated reference fields so the row ends up
+      // in the "first-time send" state — the existing POST /send-references endpoint can recover it.
+      const detail = sendErr.body?.error?.errorMsg || sendErr.message || 'Send failed'
+      console.error(`[resend-references] app ${appId}: NEW references send FAILED after cancelling ${oldReqId} — ${detail}`)
+      const failHistory = JSON.parse(row.ReferencesResendHistory || '[]')
+      failHistory.push({
+        resentBy: req.user.email, resentAt: new Date().toISOString(),
+        previousRequestId: oldReqId, previousRef1, previousRef2,
+        newRef1, newRef2, newRequestId: null,
+        archivedFile, error: detail,
+      })
+      await db.request()
+        .input('fd',       sql.NVarChar(sql.MAX), JSON.stringify(newFd))
+        .input('history',  sql.NVarChar(sql.MAX), JSON.stringify(failHistory))
+        .input('id2',      sql.Int, appId)
+        .query(`UPDATE Applications
+                SET ReferencesSignatureRequestId = NULL,
+                    Ref1SignatureId              = NULL,
+                    Ref2SignatureId              = NULL,
+                    Ref1SignatureStatus          = NULL,
+                    Ref2SignatureStatus          = NULL,
+                    ReferencesSignatureStatus    = NULL,
+                    ReferencesSignedAt           = NULL,
+                    FormData                     = @fd,
+                    ReferencesResendHistory      = @history
+                WHERE Id = @id2`)
+      try {
+        await logApplicationAction(db, {
+          appId, action: 'references_resent', performedBy: req.user.email, performedByRole: req.user.role,
+          details: { previousRequestId: oldReqId, newRequestId: null, archivedFile, error: detail, recoverable: true },
+          ipAddress: req.ip,
+        })
+      } catch {}
+      return res.status(502).json({
+        error: `The old Dropbox Sign request was cancelled but the new one could not be sent (${detail}). The reference details have been saved. Use Send References to retry.`,
+        recoverable: true,
+      })
+    }
+
+    // Step 6: commit the happy-path update — new request IDs, reset statuses, append history.
+    const history = JSON.parse(row.ReferencesResendHistory || '[]')
+    history.push({
+      resentBy: req.user.email, resentAt: new Date().toISOString(),
+      previousRequestId: oldReqId, previousRef1, previousRef2,
+      newRef1, newRef2, newRequestId: newSigId,
+      archivedFile,
+    })
+
+    await db.request()
+      .input('newSigId',  sql.NVarChar, newSigId)
+      .input('newR1',     sql.NVarChar, newRef1SigId)
+      .input('newR2',     sql.NVarChar, newRef2SigId)
+      .input('fd',        sql.NVarChar(sql.MAX), JSON.stringify(newFd))
+      .input('history',   sql.NVarChar(sql.MAX), JSON.stringify(history))
+      .input('id2',       sql.Int, appId)
+      .query(`UPDATE Applications
+              SET ReferencesSignatureRequestId = @newSigId,
+                  ReferencesSignatureStatus    = 'sent',
+                  ReferencesSignedAt           = NULL,
+                  Ref1SignatureId              = @newR1,
+                  Ref2SignatureId              = @newR2,
+                  Ref1SignatureStatus          = 'awaiting_signature',
+                  Ref2SignatureStatus          = 'awaiting_signature',
+                  FormData                     = @fd,
+                  ReferencesResendHistory      = @history
+              WHERE Id = @id2`)
+
+    try {
+      await logApplicationAction(db, {
+        appId, action: 'references_resent', performedBy: req.user.email, performedByRole: req.user.role,
+        details: { previousRequestId: oldReqId, newRequestId: newSigId, archivedFile,
+                   ref1EmailChanged: previousRef1.email !== newRef1.email,
+                   ref2EmailChanged: previousRef2.email !== newRef2.email },
+        ipAddress: req.ip,
+      })
+    } catch {}
+
+    res.json({ message: 'References request cancelled and resent.', newRequestId: newSigId, archivedFile })
+  } catch (err) {
+    const detail = err.body?.error?.errorMsg || err.message || 'Failed to resend references request'
+    res.status(500).json({ error: detail })
+  }
+})
+
+// GET /api/applications/:id/references-archive/:filename  — employee-only download of a cancelled-signature PDF
+app.get('/api/applications/:id/references-archive/:filename', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'employee') return res.status(403).json({ error: 'Forbidden' })
+  const appId = parseInt(req.params.id, 10)
+  if (isNaN(appId)) return res.status(400).json({ error: 'Invalid applicationId' })
+  const safeName = path.basename(String(req.params.filename))
+  const filePath = path.join(__dirname, 'UploadedDocuments', String(appId), '_archived', safeName)
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Archived file not found' })
+  res.setHeader('Content-Type', 'application/pdf')
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`)
+  fs.createReadStream(filePath).pipe(res)
+})
+
 // POST /api/applications/:id/resend/:target  — resend or redirect a DS signing email
 // target: member | reference1 | reference2 ; body: { email? }
 app.post('/api/applications/:id/resend/:target', authMiddleware, async (req, res) => {
@@ -2884,7 +3205,11 @@ app.get('/api/documents/:applicationId/download-all', authMiddleware, async (req
       return res.status(404).json({ error: 'No documents found for this application' })
     }
 
-    const files = fs.readdirSync(dir).filter(f => !f.startsWith('.'))
+    // Skip hidden files and the `_archived` subfolder (holds cancelled-signature PDFs
+    // retained for the audit trail — must never appear in the member's docs zip).
+    const files = fs.readdirSync(dir, { withFileTypes: true })
+      .filter(d => d.isFile() && !d.name.startsWith('.') && !d.name.startsWith('_'))
+      .map(d => d.name)
     if (!files.length) {
       return res.status(404).json({ error: 'No documents found for this application' })
     }
