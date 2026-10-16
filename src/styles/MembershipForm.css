@@ -1137,3 +1137,51 @@
     font-size: 13px;
   }
 }
+
+/* ── Session expiry warning banner ───────────────────────────────── */
+.session-warning-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff3cd;
+  color: #856404;
+  border-bottom: 2px solid #ffc107;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: -40px -20px 20px;
+}
+
+.session-warning-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.session-warning-signin {
+  background: #856404;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.session-warning-signin:hover {
+  background: #6a5003;
+}
+
+.session-warning-dismiss {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #856404;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}

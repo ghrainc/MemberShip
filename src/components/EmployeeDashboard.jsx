@@ -9,6 +9,7 @@ import EmailSettings from './settings/EmailSettings'
 import ManagerSettings from './settings/ManagerSettings'
 import { isEmployeePasswordValid } from '../utils/passwordValidation'
 import EmployeeAppGrid from './EmployeeAppGrid'
+import ErrorLogTab from './ErrorLogTab'
 import '../styles/EmployeeDashboard.css'
 
 function getBoardVerifyState(app) {
@@ -199,7 +200,8 @@ function EmployeeDashboard() {
     sessionWarning, dismissSessionWarning,
     getEmployeeRoles, assignEmployeeRole, removeEmployeeRole,
     getAllWarehouseApplications, updateWarehouseStatus,
-    getAllFuelsApplications, updateFuelsStatus
+    getAllFuelsApplications, updateFuelsStatus,
+    getClientErrorLogs,
   } = useContext(AuthContext)
   const navigate = useNavigate()
 
@@ -850,7 +852,7 @@ function EmployeeDashboard() {
     <div className="employee-dashboard-container">
       {sessionWarning && (
         <div className="session-warning-banner" role="alert">
-          <span>Your session will expire in 5 minutes. Please save your work and sign in again to continue.</span>
+          <span>Your session will expire in 15 minutes. Please save your work and sign in again to continue.</span>
           <button type="button" className="session-warning-dismiss" onClick={dismissSessionWarning} aria-label="Dismiss">✕</button>
         </div>
       )}
@@ -910,6 +912,14 @@ function EmployeeDashboard() {
             onClick={() => setActiveTab('achHistory')}
           >
             ACH History
+          </button>
+        )}
+        {isAdminAccount && (
+          <button
+            className={`tab-button${activeTab === 'errorLog' ? ' tab-button--active' : ''}`}
+            onClick={() => setActiveTab('errorLog')}
+          >
+            Error Log
           </button>
         )}
         {hasWarehouseTab && (
@@ -1731,6 +1741,11 @@ function EmployeeDashboard() {
             </div>
           )}
           </>}
+
+          {/* ── Error Log tab ─────────────────────────────────────────────── */}
+          {activeTab === 'errorLog' && (
+            <ErrorLogTab getClientErrorLogs={getClientErrorLogs} />
+          )}
 
         </div>
       </main>

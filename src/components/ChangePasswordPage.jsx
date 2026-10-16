@@ -42,11 +42,11 @@ function ChangePasswordPage() {
     const result = await changePassword(newPassword)
     setLoading(false)
 
-    if (result === true) {
-      navigate(currentUser?.role === 'employee' ? '/employee' : '/dashboard')
-    } else {
+    if (result !== true) {
       setError(result || 'Failed to change password. Please try again.')
     }
+    // On success: changePassword() sets mustChangePassword=false in state.
+    // ChangePasswordRoute detects this and redirects to the dashboard automatically.
   }
 
   const handleLogout = () => {
